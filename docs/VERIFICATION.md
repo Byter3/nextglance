@@ -14,7 +14,7 @@ node --test tests/<changed-feature>.test.mjs
 node --test android/tests/<changed-service>.test.mjs
 ```
 
-All three vector consumers load the exact same `specs/TEST_VECTORS.json` and exercise production pure rules. Add focused protocol/service/UI regressions for changed behavior; vector success alone does not verify host wiring or touch interaction. Check native Java changes with `:app:compileDebugJavaWithJavac` and targeted `:app:testDebugUnitTest --tests "<fully-qualified-test>"` from `android/android/`, using the provisioned JDK/SDK.
+All three vector consumers load the exact same `specs/TEST_VECTORS.json` and exercise production pure rules. Add focused protocol/service/UI regressions for changed behavior; vector success alone does not verify host wiring or touch interaction. On a clean checkout, prepare Android's generated plugin configuration with `pnpm --filter @nextspace/android native:prepare` as described in [Android setup](../android/README.md#clean-checkout-setup). Check native Java changes with `:app:compileDebugJavaWithJavac` and targeted `:app:testDebugUnitTest --tests "<fully-qualified-test>"` from `android/android/`, using the provisioned JDK/SDK.
 
 Browser and Electron fixture tests use isolated profiles, fictional records and loopback servers. Keep screenshots/logs under ignored `artifacts/` or `.runtime/`; never copy an account or private source data into fixtures. Some UI scripts start a development server but must not invoke an asset build during iterations. Read a script before running it.
 

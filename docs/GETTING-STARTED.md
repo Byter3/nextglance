@@ -1,59 +1,52 @@
-# NextGlance: organize a useful view
+# NextGlance: a practical guide
 
-The three illustrations below use fictional data. They show the effect of your choices, rather than every button in the interface.
+Updated for **0.6.17**, 17 November 2026. Screenshots show the actual interface with generated, fictional test data—no personal accounts or calendars.
 
-## Start with My overview
+## Start here
 
-Connect your Nextcloud account through **Settings & connection**. On Android, **Continue with Nextcloud Files** uses an account from the installed Nextcloud app; browser sign-in is also available.
+On **Windows or Android**, open **Settings & connection** and connect your Nextcloud account. Android offers **Continue with Nextcloud Files** or browser sign-in. The **Nextcloud Web app** uses your existing Nextcloud login and needs a connection; there is no separate sign-in or offline mode.
 
-**My overview** combines accessible work from your sources. Its filters still apply: check source visibility, Deck assignments and **Show completed and cancelled** if something seems missing. Creating a Space never changes My overview’s organization.
+**My overview** brings your accessible sources together. Its filters still apply. If an item seems missing, check source visibility, assignments and status filters. To organize this overview without making a Space, use **My overview → ⋯ → Group sources**.
 
-To group this view, open **My overview → ⋯ → Group sources**. Combine sources or narrow by native tags, just as within a Space. These groups belong only to My overview, sync to your other clients, and leave unmatched items visible. No Space is required.
+## 1. Space: choose which sources belong together
 
-## 1. Create a Space to choose the sources
+Open navigation, choose **+ beside Spaces**, name the Space **Work**, and select Work tasks, Work Deck and Work calendar.
 
-Imagine you have Work tasks, Work Deck, Work calendar and Home tasks. Open navigation, choose **+ beside Spaces**, name the Space **Work**, and select the three Work sources.
+![Work Space shows its selected work sources; Home tasks remain outside it.](images/guide/01-space-view.png)
 
-![Before: My overview includes Work and Home. After: Work Space contains only the selected Work sources.](images/guide/01-space-view.svg)
+Work now contains those sources across all five pages. Home tasks remain in My overview. Nothing is copied or moved in Nextcloud. Use Work’s **⋯ menu** to change sources or **Delete Space**; deleting a Space keeps the original items.
 
-Now select **Work** in navigation. Timeline shows work from those sources; Calendar shows their dates and bookings; Board shows their tasks and cards. Home tasks remain accessible in My overview. Nothing is copied or moved in Nextcloud.
+## 2. Source group: combine related sources under one heading
 
-Use the **three-dot menu beside Work** for source assignments, grouping, Space management or **Delete Space**. Deleting a Space removes its organization, not its Nextcloud items. Another Space can reuse these same sources with a different organization.
+Within Work, open **Group sources**, create **Delivery**, and assign the three Work sources.
 
-## 2. Add a source group to bring related sources together
+![Delivery combines tasks and Deck cards under a single group in Timeline.](images/guide/02-source-group-view.png)
 
-Within Work, open **Group sources**, create **Delivery**, and assign Work tasks, Work Deck and Work calendar to it. Suggested groups are optional starting points.
+Timeline and Overview now group their rows under Delivery. Select Delivery in navigation to focus on those sources. Each item keeps its source color and permissions. This grouping affects Work only—not another Space or My overview. **Narrow by tags** can include just part of a source.
 
-![Before: tasks and cards have separate source headings. After: Delivery holds the same rows, with the calendar still aligned below.](images/guide/02-source-group-view.svg)
+## 3. Project: focus on a particular outcome
 
-In Work’s Timeline and Overview, the related work now sits together under Delivery. Select Delivery in navigation to focus the other views on its sources too. Each item keeps its original source color, native status and permissions.
+Choose **Add project** from Work’s menu. Name it **Project A**, select its sources and choose its native project tag under **Narrow by tags**.
 
-A group belongs to this Space. Changing Delivery does not regroup My overview or a different Space. **Narrow by tags** can include only tagged items from those sources. Groups are separate from Board status columns.
+![Project A shows matching tagged cards from a Deck board shared with Project B.](images/guide/03-project-view.png)
 
-## 3. Create a project for a particular outcome
+Project A and Project B can share a calendar or Deck board while showing different tagged items, including future matches. Several selected tags mean **any** matching tag. You can also add individual items from their details. Projects remain inside their Space and can sit within a source group.
 
-Choose **Add project** from Work’s menu. Name it **Project A**, select its sources, then choose its native project tag under **Narrow by tags**. The matching-item count previews the selection.
+## Everyday planning
 
-![Before: Work Board includes unrelated work. After: Project A contains its selected items while preserving the same status columns.](images/guide/03-project-view.svg)
+- **Choose a page:** Overview combines a work timeline and calendar; Calendar offers **Day / Week / Month**; Timeline shows work ranges and dependencies; Board uses status columns; List gives a compact item list. On phones, tap the current page name to switch.
+- **Unscheduled work:** open **Not scheduled** on Overview, Calendar or Timeline. Hide the sidebar with its header button or drag its left edge to resize. On Timeline, **Hide unscheduled items in timeline** controls chart rows independently of the sidebar. Calendar and Overview’s dated panes already omit undated work.
+- **Dates and bookings:** **Edit dates** changes a task/card’s work range. On Windows/Android, **Schedule in calendar** creates a linked booking with an editable title, description, location and reminder (15 minutes before by default). On Web, create the event first, then **Link existing event**. Moving a booking does not automatically move the work deadline.
+- **Events:** open an event to edit its details or use **Delete event**. Supported invitations offer attendee controls or Accept/Tentative/Decline. Restricted recurring/delegated edits open in Nextcloud.
+- **Dependencies:** **Waits for** lists prerequisites; **Needed by** lists dependent work. In a Deck card, **Link task**, **Create task** and **From checklist** connect native tasks. Checklist conversion reuses existing matches and saved retries; the original checklist and task completion remain separate.
+- **Board stacks:** enable **Group linked tasks** to show tasks around their Deck card. Completed Deck cards stay visible; archived cards are hidden. Completed tasks linked to a visible card remain visible even when other completed tasks are hidden. On touch, hold a card before dragging it; the card follows your finger and highlights the destination.
+- **Statuses and filters:** **Map statuses** customizes the current Space; **Use default** restores inheritance. **Filters → Unified statuses** limits the current page. Each page has independent filters, synchronized across devices—including My overview.
+- **Find linked work:** use **Jump to** beside a linked task or event. Board/List offer Calendar or Timeline as the destination.
 
-A project can include whole sources, tag-matched items, and individual items added from their details. For example, Project A and Project B can use the same Deck board with different tags: each shows only its matching items, including future ones. Multiple selected tags mean **any** matching tag within the selected sources. Projects stay inside their Space and may sit within a group.
+## Sync and troubleshooting
 
-Switch between Overview, Calendar, Timeline, Board and List while Project A remains selected. **Map statuses** customizes the owning Space; **Use default** restores inheritance. Each page remembers its own search and filters. **Filters → Unified statuses** limits that page without changing native statuses.
+Spaces, groups, projects, status maps, custom ordering and saved filters sync through Nextcloud. Open pages, dates, scroll positions and panel sizes stay local. Android’s **Background sync** settings control intervals and Wi-Fi preference; Android determines when background jobs actually run.
 
-## Plan, link and adjust
+Tap the **cloud icon** for source/planner status and retry options. For a slow refresh, use **Settings & connection → Performance diagnostics → Start recording**, reproduce it, then stop and **Copy log** or **Save log**. Diagnostics contain timings and counts, not item content.
 
-Open an item to edit its dates. **Schedule in calendar** creates a linked booking with an editable title, linked-work description, location and reminders (15 minutes before by default). **Link existing event** connects one already there. A work deadline and a booking are separate: changing one does not automatically move the other.
-
-Open an event for **Edit event**, reminders, location and guests. On your own calendar, invitations use Nextcloud’s native delivery; received invitations offer Accept, Tentative or Decline. **Delete event** asks for confirmation and keeps linked work. Restricted operations explain why; recurring or delegated events open in Nextcloud.
-
-**Waits for** means prerequisites; **Needed by** means dependent work. Dependency choices use the current Space’s sources. Board’s **Group linked tasks** shows these tasks around their Deck card, without changing status columns. Done Deck cards remain visible; archived cards stay hidden. **Show completed/cancelled tasks** controls finished tasks, while completed tasks directly linked to a visible Deck card remain visible. Attach notes through **Attachments → Attach**.
-
-Inside a Deck card’s **Dependencies**, **Link task** connects a task, **Create task** makes a new native task, and **From checklist** previews its checkbox rows for conversion. Tasks and cards share the same incoming/outgoing columns. Choose a task list and the rows you want. Existing matches are reused; retries keep the same task identity. Checking a task and checking the original card checklist remain separate actions. Enable **Group linked tasks** on Board to see the stack.
-
-Use **Jump to** beside a linked task or event to reveal it in the current date view. From Board or List, choose Calendar or Timeline. If filters or the Space hide it, the app explains what needs adjusting.
-
-Drag a row or card’s body to rearrange it within its group or column; a short click opens the item. On touch, hold before dragging: the Board card floats under your finger, and the destination highlights before you release. Focused rows/cards support Alt + Up/Down. Dragging Timeline bars still edits dates. Moving between Board columns follows the native status rules; reordering within a column leaves status unchanged.
-
-Spaces, groups, projects, status maps, custom order and each page's saved filters sync through Nextcloud, including My overview. Open pages, dates, scroll positions and panel sizes stay on each device. For a slow Android refresh: **Settings & connection → Performance diagnostics → Start recording**, reproduce it, then **Stop recording → Copy log** or **Save log**. The report contains timings and counts, not item content.
-
-Tap the cloud icon to check source and planner sync, including retryable warnings. Sign-in, conflicts and unsaved-edit problems still show an actionable message.
+For Web installation, use the [manual deployment guide](../web/DEPLOYMENT.md). Current platform limits and unverified device/server behavior are recorded in the [parity ledger](../specs/FEATURE_PARITY.md).

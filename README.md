@@ -34,7 +34,7 @@ pnpm typecheck
 pnpm --filter @nextspace/android typecheck
 ```
 
-The Windows browser preview is a presentation surface; native account operations require its host. For Android's browser preview, run `Start-NextGlance-Android-Preview.cmd` from the repository root, keep its terminal open and visit `http://127.0.0.1:5174`. The launcher also supports the provisioned Node runtime. Native Android primarily uses the installed Nextcloud Files account flow; browser authorization is an alternative. The local preview is not the future Web client.
+The Windows browser preview is a presentation surface; native account operations require its host. For Android's browser preview, run `Start-NextGlance-Android-Preview.cmd` from the repository root, keep its terminal open and visit `http://127.0.0.1:5174`. The launcher also supports the provisioned Node runtime. Native Android primarily uses the installed Nextcloud Files account flow; browser authorization is an alternative. The local preview is separate from the Nextcloud-installed Web client.
 
 Full UI/app builds are forbidden during coding iterations. Only after an explicitly requested playable milestone and source freeze:
 

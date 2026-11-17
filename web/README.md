@@ -2,6 +2,8 @@
 
 NextGlance is an app in Nextcloud's own navigation, using the account already signed in. It shares the Windows/Android planner views, rules and metadata. It is **online-only**, with no second login, offline content store or pending-write queue.
 
+**Using the planner:** start with the [short illustrated user guide](../docs/GETTING-STARTED.md), including Spaces, source groups, projects and platform differences.
+
 **To test on your server:** follow the [manual installation, update and rollback guide](DEPLOYMENT.md). Implementation is underway under WEB-01; target versions are Nextcloud 34.x (including 34.0.5) and 35.x. Real-server acceptance is still required on both majors. No deployment or App Store publication has taken place.
 
 ## Architecture

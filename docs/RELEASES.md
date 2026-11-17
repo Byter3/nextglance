@@ -1,5 +1,7 @@
 # Local release evidence
 
+These are dated records of local builds, not public download links. Artifact paths below exist only on the build machine; packages are excluded from Git. Later source changes do not retroactively change these binaries or their recorded checksums.
+
 Packages remain private development artifacts. Outputs stay in `win/release/`, `android/release/` and `web/release/`, outside source control. Application/account/storage identities remain unchanged. No repository or App Store publication is authorized.
 
 ## 0.6.17 — build 19
@@ -8,9 +10,9 @@ Built and verified on **2026-11-17** for BRAND-01 / RELEASE-17. Windows file ver
 
 | Package | Size | SHA-256 |
 | --- | ---: | --- |
-| [Windows portable](../win/release/NextGlance-0.6.17-Windows.exe) | 101,238,527 bytes | `1e194565a3455ef5b29365acd5e5eb056bccbd8d74c7ed04ed6903e2e2a6875f` |
-| [Android development APK](../android/release/NextGlance-0.6.17-Android-debug.apk) | 13,116,493 bytes | `138d456104e2e58f8ad88fdf229191b1b853492247bb75aac38e4e7de231f170` |
-| [Nextcloud app archive](../web/release/NextGlance-0.6.17-Nextcloud.tar.gz) | 1,903,568 bytes | `7176397c22a8ccbecbc11491e5e8c8e661baebe2caa32aed5ff1613042a3ee68` |
+| `win/release/NextGlance-0.6.17-Windows.exe` | 101,238,527 bytes | `1e194565a3455ef5b29365acd5e5eb056bccbd8d74c7ed04ed6903e2e2a6875f` |
+| `android/release/NextGlance-0.6.17-Android-debug.apk` | 13,116,493 bytes | `138d456104e2e58f8ad88fdf229191b1b853492247bb75aac38e4e7de231f170` |
+| `web/release/NextGlance-0.6.17-Nextcloud.tar.gz` | 1,903,568 bytes | `7176397c22a8ccbecbc11491e5e8c8e661baebe2caa32aed5ff1613042a3ee68` |
 
 These packages incorporate the [approved project icon](BRANDING.md): blue/white launchers and favicons, Android adaptive/themed/splash variants, host-appropriate Nextcloud navigation artwork and the shared in-app mark. Existing planner behavior and stored data formats are unchanged.
 
@@ -24,9 +26,9 @@ Built and verified on **2026-11-17** after VIEW-16 fast checks and source freeze
 
 | Package | Size | SHA-256 |
 | --- | ---: | --- |
-| [Windows portable](../win/release/NextGlance-0.6.16-Windows.exe) | 101,208,148 bytes | `cde91c371670cdeba0e251ca8d54bc1fa87a0b04f530f51282414d1f526a1b7f` |
-| [Android development APK](../android/release/NextGlance-0.6.16-Android-debug.apk) | 13,139,389 bytes | `8cc3f2e16159392c5b123f2f1963533c86be63451989821ce94829f2c8b3c7c5` |
-| [Nextcloud app archive](../web/release/NextGlance-0.6.16-Nextcloud.tar.gz) | 1,810,485 bytes | `0fab554045fb3d4e33ce8e7052814b3be8da92644b7675abea7eedcc6df38126` |
+| `win/release/NextGlance-0.6.16-Windows.exe` | 101,208,148 bytes | `cde91c371670cdeba0e251ca8d54bc1fa87a0b04f530f51282414d1f526a1b7f` |
+| `android/release/NextGlance-0.6.16-Android-debug.apk` | 13,139,389 bytes | `8cc3f2e16159392c5b123f2f1963533c86be63451989821ce94829f2c8b3c7c5` |
+| `web/release/NextGlance-0.6.16-Nextcloud.tar.gz` | 1,810,485 bytes | `0fab554045fb3d4e33ce8e7052814b3be8da92644b7675abea7eedcc6df38126` |
 
 The Timeline Unscheduled sidebar now opens beside the chart on wide layouts and as a bounded side overlay on narrow layouts. **Hide unscheduled items in timeline** controls only chart rows; opening or closing the sidebar does not change that choice. Existing saved visibility, width and row-placement choices remain compatible. Calendar and Overview retain their existing dated-pane behavior.
 
@@ -40,9 +42,9 @@ Built and independently verified on **2026-11-17**. Windows file version is `0.6
 
 | Package | Size | SHA-256 |
 | --- | ---: | --- |
-| [Windows portable](../win/release/NextGlance-0.6.15-Windows.exe) | 101,208,510 bytes | `7f0ad3e724fb183dc7bb134a318803394624141e792e1065ff50a0d477a01de9` |
-| [Android development APK](../android/release/NextGlance-0.6.15-Android-debug.apk) | 13,139,117 bytes | `dbe0baa8a5275b22271611387f4523ce98ba5596505dc16e22f6a749f28b7659` |
-| [Nextcloud app archive](../web/release/NextGlance-0.6.15-Nextcloud.tar.gz) | 1,805,639 bytes | `852ef3c264a3827647bdc412645177370f8d61da8fd68841980947a4df3fbfa9` |
+| `win/release/NextGlance-0.6.15-Windows.exe` | 101,208,510 bytes | `7f0ad3e724fb183dc7bb134a318803394624141e792e1065ff50a0d477a01de9` |
+| `android/release/NextGlance-0.6.15-Android-debug.apk` | 13,139,117 bytes | `dbe0baa8a5275b22271611387f4523ce98ba5596505dc16e22f6a749f28b7659` |
+| `web/release/NextGlance-0.6.15-Nextcloud.tar.gz` | 1,805,639 bytes | `852ef3c264a3827647bdc412645177370f8d61da8fd68841980947a4df3fbfa9` |
 
 This release reduces repeated synchronization and rendering work. Android uses revision-aware caches, prioritized edits, metadata/token background checks and a guarded shared-core projector that refreshes usable saved data without an Activity or WebView. Unsupported JavaScript providers retain an explicit raw-cache-only fallback. Capable transports use DAV deltas and batched resource reads; Files SSO retains its supported request fallback. The link picker renders a bounded list, and checklist task creation uses one cloud reservation plus one final publication while saving each successful receipt durably.
 
@@ -62,9 +64,9 @@ Built and independently verified on **2026-11-14**. Windows file version is `0.6
 
 | Package | Size | SHA-256 |
 | --- | ---: | --- |
-| [Windows portable](../win/release/NextGlance-0.6.14-Windows.exe) | 101,193,697 bytes | `5b8c5db6f9ffb8972f1505d798a82820975b17829f8ee3d8b585d1f9be25acad` |
-| [Android development APK](../android/release/NextGlance-0.6.14-Android-debug.apk) | 11,672,654 bytes | `d09730db57ad5d8e2168056870abaf1dd922dbaa22e83960522706b670781c8e` |
-| [Nextcloud app archive](../web/release/NextGlance-0.6.14-Nextcloud.tar.gz) | 1,760,760 bytes | `3f892bd50fba61f05e49853cbe4dae7d583b5a054e6e29d17f61faec47851076` |
+| `win/release/NextGlance-0.6.14-Windows.exe` | 101,193,697 bytes | `5b8c5db6f9ffb8972f1505d798a82820975b17829f8ee3d8b585d1f9be25acad` |
+| `android/release/NextGlance-0.6.14-Android-debug.apk` | 11,672,654 bytes | `d09730db57ad5d8e2168056870abaf1dd922dbaa22e83960522706b670781c8e` |
+| `web/release/NextGlance-0.6.14-Nextcloud.tar.gz` | 1,760,760 bytes | `3f892bd50fba61f05e49853cbe4dae7d583b5a054e6e29d17f61faec47851076` |
 
 Deck status changes now address the destination stack in the native reorder request, then read back the saved card. The adopted stack, snapshot and revision stay together for subsequent edits. Genuine concurrent changes still require review. Board dragging displays a floating card at the original grab offset, subdues its original position and highlights the eligible destination. Tasks and cards now share one incoming/outgoing Dependencies grid; **Link task**, **Create task**, **From checklist** and **Jump to** remain available.
 
@@ -80,9 +82,9 @@ Built and independently verified on **2026-11-14**. Windows file version is `0.6
 
 | Package | Size | SHA-256 |
 | --- | ---: | --- |
-| [Windows portable](../win/release/NextGlance-0.6.13-Windows.exe) | 101,190,217 bytes | `d2771a2f9641b974b8790f8f046d8d6a148ad866ea1c5b99f454ba81f7070341` |
-| [Android development APK](../android/release/NextGlance-0.6.13-Android-debug.apk) | 11,671,726 bytes | `8dfa24ce65dfa2f21301f22a2bc771483266cd2b0b0e05e91d4a4f3e77e10f1f` |
-| [Nextcloud app archive](../web/release/NextGlance-0.6.13-Nextcloud.tar.gz) | 1,749,317 bytes | `34bab03ae5c1a8af3a289be7fd330de98e073d0043fa8c16a8185978a1886643` |
+| `win/release/NextGlance-0.6.13-Windows.exe` | 101,190,217 bytes | `d2771a2f9641b974b8790f8f046d8d6a148ad866ea1c5b99f454ba81f7070341` |
+| `android/release/NextGlance-0.6.13-Android-debug.apk` | 11,671,726 bytes | `8dfa24ce65dfa2f21301f22a2bc771483266cd2b0b0e05e91d4a4f3e77e10f1f` |
+| `web/release/NextGlance-0.6.13-Nextcloud.tar.gz` | 1,749,317 bytes | `34bab03ae5c1a8af3a289be7fd330de98e073d0043fa8c16a8185978a1886643` |
 
 Deck cards now have an explicit Tasks section for linking, native task creation and checklist conversion. Conversion previews existing matches and uses synchronized creation receipts plus native request identities to avoid duplicates after retries. Checked checklist rows create completed tasks; the original card checklist remains independent. Jump controls reveal linked work/events in the current date view, or offer Calendar/Timeline from Board and List.
 
@@ -98,8 +100,8 @@ Built and independently verified on **2026-11-14**. Both clients use version **0
 
 | Package | Size | SHA-256 |
 | --- | ---: | --- |
-| [Windows portable](../win/release/NextGlance-0.6.12-Windows.exe) | 101,179,929 bytes | `3a9497a010b9b401298f764498b168ad1880302065074ede177afad8550c4af6` |
-| [Android development APK](../android/release/NextGlance-0.6.12-Android-debug.apk) | 11,869,428 bytes | `b1445742cdabf9b5206ae607fae38e78878d55f645a055018325ba0995fffa5b` |
+| `win/release/NextGlance-0.6.12-Windows.exe` | 101,179,929 bytes | `3a9497a010b9b401298f764498b168ad1880302065074ede177afad8550c4af6` |
+| `android/release/NextGlance-0.6.12-Android-debug.apk` | 11,869,428 bytes | `b1445742cdabf9b5206ae607fae38e78878d55f645a055018325ba0995fffa5b` |
 
 Mobile dependency removal now uses the native Deck operation in both directions, with failed removals retained and retried inside the inspector. The audit also completed Android native stack/status moves, item colors/tags, Deck label creation, related-resource/Collective-image reads and planner metadata export. File export waits for the user's save/cancel action instead of expiring on a network timeout. Native authentication, source ownership and cloud formats are unchanged.
 
