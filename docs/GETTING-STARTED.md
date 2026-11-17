@@ -20,9 +20,11 @@ Work now contains those sources across all five pages. Home tasks remain in My o
 
 Within Work, open **Group sources**, create **Delivery**, and assign the three Work sources.
 
-![Delivery combines tasks and Deck cards under a single group in Timeline.](images/guide/02-source-group-view.png)
+![Delivery combines one-day tasks and longer Deck card ranges; connectors show which work depends on which task.](images/guide/02-source-group-view.png)
 
 Timeline and Overview now group their rows under Delivery. Select Delivery in navigation to focus on those sources. Each item keeps its source color and permissions. This grouping affects Work only—not another Space or My overview. **Narrow by tags** can include just part of a source.
+
+In these examples, each task takes one day; Deck cards represent the larger assignment. The Timeline connectors show task-to-card dependencies. Use **Dependencies → Link task** on a card to connect your own tasks.
 
 ## 3. Project: focus on a particular outcome
 
@@ -32,6 +34,20 @@ Choose **Add project** from Work’s menu. Name it **Project A**, select its sou
 
 Project A and Project B can share a calendar or Deck board while showing different tagged items, including future matches. Several selected tags mean **any** matching tag. You can also add individual items from their details. Projects remain inside their Space and can sit within a source group.
 
+## Overview: work and bookings together
+
+![Overview aligns the work timeline above the calendar, with linked tasks, a Deck card and its review booking highlighted.](images/guide/04-overview.png)
+
+**Overview** puts task/card dates above calendar bookings on the same date axis. Select or hover an item to highlight linked work across the panes. Here, one-day tasks support a longer Deck card, and its linked review is an actual calendar booking. Work dates and booked time remain separate.
+
+## Board: keep linked tasks with their card
+
+Enable **Group linked tasks** in the Board toolbar (or its menu on smaller screens). Tasks the card waits for appear above it, such as **Gather reference images**; tasks that need the card appear below it, such as **Share design summary**.
+
+![Board shows linked tasks stacked around Deck cards, including an expanded stack and a clearly crossed-out completed task.](images/guide/05-board-linked-tasks.png)
+
+Tasks peek out from behind the card until you hover or select it; the stack then expands so you can read them. Completed tasks are crossed out. Completed Deck cards stay visible; archived cards are hidden. Completed tasks linked to a visible card remain visible even when other completed tasks are hidden. On touch, hold the card before dragging it—the card follows your finger and highlights its destination.
+
 ## Everyday planning
 
 - **Choose a page:** Overview combines a work timeline and calendar; Calendar offers **Day / Week / Month**; Timeline shows work ranges and dependencies; Board uses status columns; List gives a compact item list. On phones, tap the current page name to switch.
@@ -39,7 +55,6 @@ Project A and Project B can share a calendar or Deck board while showing differe
 - **Dates and bookings:** **Edit dates** changes a task/card’s work range. On Windows/Android, **Schedule in calendar** creates a linked booking with an editable title, description, location and reminder (15 minutes before by default). On Web, create the event first, then **Link existing event**. Moving a booking does not automatically move the work deadline.
 - **Events:** open an event to edit its details or use **Delete event**. Supported invitations offer attendee controls or Accept/Tentative/Decline. Restricted recurring/delegated edits open in Nextcloud.
 - **Dependencies:** **Waits for** lists prerequisites; **Needed by** lists dependent work. In a Deck card, **Link task**, **Create task** and **From checklist** connect native tasks. Checklist conversion reuses existing matches and saved retries; the original checklist and task completion remain separate.
-- **Board stacks:** enable **Group linked tasks** to show tasks around their Deck card. Completed Deck cards stay visible; archived cards are hidden. Completed tasks linked to a visible card remain visible even when other completed tasks are hidden. On touch, hold a card before dragging it; the card follows your finger and highlights the destination.
 - **Statuses and filters:** **Map statuses** customizes the current Space; **Use default** restores inheritance. **Filters → Unified statuses** limits the current page. Each page has independent filters, synchronized across devices—including My overview.
 - **Find linked work:** use **Jump to** beside a linked task or event. Board/List offer Calendar or Timeline as the destination.
 

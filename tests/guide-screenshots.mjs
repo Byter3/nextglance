@@ -24,18 +24,29 @@ function fixture(stage){
  ]
  const tag=name=>({id:name==='Project A'?'tag-a':'tag-b',title:name,color:name==='Project A'?'#228c76':'#b76d21'})
  const card=(id,title,status,start,due,project,body)=>({id,title,status,stackId:{'To do':'todo','In progress':'progress',Review:'review'}[status],start:date(start),due:date(due),source:'deck',kind:'card',collectionId:'work-deck',collectionTitle:'Work Deck',assigneeIds:['sample-user'],assignmentCount:1,assignmentKnown:true,completed:false,readonly:false,tags:[project],tagDetails:[tag(project)],body})
- const task=(id,title,start,due,home=false)=>({id,title,start:date(start),due:date(due),source:'tasks',kind:'task',collectionId:home?'home-tasks':'work-tasks',collectionTitle:home?'Home tasks':'Work tasks',status:'NEEDS-ACTION',completed:false,readonly:false,etag:'fictional-task-v1'})
+ const task=(id,title,day,{home=false,completed=false}={})=>({id,title,start:date(day),due:date(day),source:'tasks',kind:'task',collectionId:home?'home-tasks':'work-tasks',collectionTitle:home?'Home tasks':'Work tasks',status:completed?'COMPLETED':'NEEDS-ACTION',completed,readonly:false,etag:'fictional-task-v1'})
  state.records=[
   card('card-a-design','Design landing page','To do',0,2,'Project A','- [ ] Sketch the layout\n- [ ] Choose typography\n- [ ] Prepare mobile version'),
   card('card-a-form','Build sign-up form','In progress',1,3,'Project A','- [x] Add form fields\n- [ ] Validate input\n- [ ] Show success message'),
   card('card-a-review','Review accessibility','Review',3,4,'Project A','- [x] Check contrast\n- [x] Test keyboard navigation\n- [ ] Review labels'),
   card('card-b-help','Update help center','To do',0,3,'Project B','- [ ] Draft help articles\n- [ ] Review examples'),
   card('card-b-release','Prepare release notes','In progress',2,5,'Project B','- [x] Collect changes\n- [ ] Write release summary'),
-  task('task-references','Gather reference images',0,1),task('task-agenda','Confirm review agenda',2,3),
-  task('task-home','Book bicycle service',1,3,true),
-  {id:'event-design',kind:'event',source:'calendar',title:'Design review',collectionId:'work-calendar',collectionTitle:'Work calendar',start:date(2)+'T14:00:00Z',end:date(2)+'T15:00:00Z',readonly:false,etag:'fictional-event-v1'},
+  task('task-references','Gather reference images',0),task('task-summary','Share design summary',3),
+  task('task-colors','Confirm brand colors',0,{completed:true}),task('task-requirements','Check form requirements',1),
+  task('task-home','Book bicycle service',1,{home:true}),
+  {id:'event-design',kind:'event',source:'calendar',title:'Design review',collectionId:'work-calendar',collectionTitle:'Work calendar',start:date(0)+'T09:00:00Z',end:date(0)+'T10:00:00Z',readonly:false,etag:'fictional-event-v1'},
   {id:'event-release',kind:'event',source:'calendar',title:'Release planning',collectionId:'work-calendar',collectionTitle:'Work calendar',start:date(4)+'T10:00:00Z',end:date(4)+'T11:00:00Z',readonly:false,etag:'fictional-event-v1'},
  ]
+ // depends_on is stored dependent -> prerequisite. Inputs precede the card;
+ // outputs follow it. A calendar association is separate from dependencies.
+ state.workspace.relations=[
+  {id:'dependency-design-reference',type:'depends_on',fromId:'card-a-design',toId:'task-references'},
+  {id:'dependency-design-colors',type:'depends_on',fromId:'card-a-design',toId:'task-colors'},
+  {id:'dependency-design-summary',type:'depends_on',fromId:'task-summary',toId:'card-a-design'},
+  {id:'dependency-form-requirements',type:'depends_on',fromId:'card-a-form',toId:'task-requirements'},
+  {id:'association-design-review',type:'for_event',fromId:'card-a-design',toId:'event-design',role:'during'},
+ ]
+ for(const record of state.records.filter(record=>record.kind==='task'))assert.equal(record.start,record.due,'Guide tasks occupy a single date')
  state.workspace.name='Example planner';state.workspace.updatedAt=now.toISOString();state.workspace.appearance.mode='light'
  state.workspace.spaces=[{id:'space-work',name:'Work',color:'#3975ce',collectionIds:['work-calendar','work-tasks','work-deck'],defaultCalendarId:'work-calendar',defaultTaskListId:'work-tasks',defaultBoardId:'work-deck'},{id:'space-home',name:'Home',color:'#3d966f',collectionIds:['home-tasks']}]
  const mapping=defaultStatusMapping(state.collections);mapping.columns.splice(2,0,{id:'review',title:'Review',color:'#b18231'})
@@ -54,8 +65,8 @@ await server.listen();const origin=`http://127.0.0.1:${server.httpServer.address
 let browser
 try{
  browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})})
- for(const stage of [1,2,3]){
-  const context=await browser.newContext({viewport:{width:1400,height:stage===1?870:stage===2?680:520},deviceScaleFactor:1,locale:'en-GB',timezoneId:'UTC',colorScheme:'light'})
+ for(const stage of [1,2,3,4,5]){
+  const context=await browser.newContext({viewport:{width:1400,height:({1:870,2:730,3:520,4:860,5:790})[stage]},deviceScaleFactor:1,locale:'en-GB',timezoneId:'UTC',colorScheme:'light'})
   await context.route('**/*',route=>route.request().url().startsWith(origin)||route.request().url().startsWith('data:')?route.continue():route.abort())
   await context.addInitScript(initial=>{
    let state=structuredClone(initial),preferences={format:'nextspace-view-preferences',version:1,scopes:{}}
@@ -67,9 +78,9 @@ try{
   },fixture(stage))
   const page=await context.newPage(),errors=[];page.setDefaultTimeout(15000);page.on('pageerror',error=>errors.push(error.message))
   await page.clock.setFixedTime(now);await page.goto(origin);await page.locator('.topbar-scope').waitFor()
-  await page.getByRole('tab',{name:stage===2?'Timeline':'Board',exact:true}).click()
+  await page.getByRole('tab',{name:stage===2?'Timeline':stage===4?'Overview':'Board',exact:true}).click()
   await page.evaluate(()=>document.fonts.ready)
-  if(stage!==2)await page.getByRole('combobox',{name:'Board source',exact:true}).selectOption(stage===3?'work-deck':'')
+  if([1,3,5].includes(stage))await page.getByRole('combobox',{name:'Board source',exact:true}).selectOption(stage===1?'':'work-deck')
   if(stage===1){
    await page.getByRole('button',{name:'Open navigation',exact:true}).click()
    await page.getByRole('button',{name:'Space actions for Work',exact:true}).click()
@@ -82,18 +93,51 @@ try{
    await page.locator('.timeline-scroll').waitFor();await page.getByRole('combobox',{name:'Timeline range',exact:true}).selectOption('7')
    await page.getByText('Delivery',{exact:true}).filter({visible:true}).first().waitFor()
    assert.equal(await page.locator('.timeline-row-label[data-record-id="task-home"]').count(),0)
-   assert.equal(await page.locator('.timeline-row-label[data-record-id]').count(),7)
+   assert.equal(await page.locator('.timeline-row-label[data-record-id]').count(),8)
+   for(const id of ['dependency-design-reference','dependency-design-summary','dependency-form-requirements'])assert.equal(await page.locator(`.dependency-path[data-relation-id="${id}"]`).count(),1)
    assert.equal(await page.getByText('Unmapped',{exact:true}).count(),0)
    await page.screenshot({path:path.join(output,'02-source-group-view.png'),animations:'disabled'})
-  }else{
+  }else if(stage===3){
    await page.locator('.board-card[data-record-id="card-a-design"]').waitFor()
    for(const id of ['card-a-design','card-a-form','card-a-review'])assert.equal(await page.locator(`.board-card[data-record-id="${id}"]`).count(),1)
    for(const id of ['card-b-help','card-b-release','task-home','task-references'])assert.equal(await page.locator(`.board-card[data-record-id="${id}"]`).count(),0)
    assert.match(await page.locator('.topbar-scope').innerText(),/Project A/)
    assert.equal(await page.getByRole('combobox',{name:'Board source',exact:true}).inputValue(),'work-deck')
    await page.screenshot({path:path.join(output,'03-project-view.png'),animations:'disabled'})
+  }else if(stage===4){
+   await page.locator('#overview-work-pane .timeline-scroll').waitFor()
+   await page.locator('#overview-calendar-pane .calendar-event[data-record-id="event-design"]').waitFor()
+   await page.locator('.calendar-times-scroll').evaluate(element=>{element.scrollTop=8*48})
+   await page.locator('#overview-work-pane .timeline-row-label[data-record-id="card-a-design"]').hover()
+   assert.equal(await page.locator('#overview-work-pane .dependency-path[data-relation-id="dependency-design-reference"]').count(),1)
+   assert.equal(await page.locator('#overview-calendar-pane .calendar-event[data-record-id="event-design"].hover-linked').count(),1)
+   assert.equal(await page.getByRole('separator',{name:'Resize timeline and calendar',exact:true}).isVisible(),true)
+   await page.screenshot({path:path.join(output,'04-overview.png'),animations:'disabled'})
+  }else if(stage===5){
+   const grouping=page.getByRole('checkbox',{name:'Group linked tasks',exact:true});await grouping.check();assert.equal(await grouping.isChecked(),true)
+   const design=page.locator('.board-stack[data-order-id="card-a-design"]'),form=page.locator('.board-stack[data-order-id="card-a-form"]')
+   await design.locator('.board-card-main').hover()
+   await page.locator('.board-columns').evaluate(element=>{for(let parent=element;parent;parent=parent.parentElement)parent.scrollTop=0})
+   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))
+   const parentBox=await design.locator('.board-card-main').boundingBox()
+   await page.mouse.move(parentBox.x+parentBox.width/2,parentBox.y+24)
+   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))
+   assert.equal(await design.locator('.incoming [data-task-id]').count(),2)
+   assert.equal(await design.locator('.outgoing [data-task-id="task-summary"]').count(),1)
+   assert.equal(await design.locator('.board-task-layer.completed[data-task-id="task-colors"] strong').evaluate(element=>getComputedStyle(element).textDecorationLine),'line-through')
+   assert.match(await design.getAttribute('class'),/expanded/)
+   assert.doesNotMatch(await form.getAttribute('class'),/expanded/)
+   assert.equal(await form.locator('.incoming [data-task-id="task-requirements"]').count(),1)
+   const [inputBox,cardBox,outputBox]=await Promise.all([design.locator('[data-task-id="task-references"]').boundingBox(),design.locator('.board-card').boundingBox(),design.locator('[data-task-id="task-summary"]').boundingBox()])
+   assert.ok(inputBox.y<cardBox.y&&cardBox.y<outputBox.y,'Input task above the Deck card; output task below')
+   assert.ok(inputBox.y>110&&outputBox.y+outputBox.height<790,`Entire expanded stack fits in the screenshot: ${JSON.stringify({inputBox,cardBox,outputBox})}`)
+   for(const locator of [design.locator('[data-task-id="task-colors"]'),...['To do','In progress','Review'].map(name=>page.getByRole('heading',{name,exact:true}))]){
+    const box=await locator.boundingBox();assert.ok(box.y>110&&box.y+box.height<790,'Completion and status headings are visibly inside the capture')
+   }
+   assert.equal(await design.locator('.board-card.primary').count(),1)
+   await page.screenshot({path:path.join(output,'05-board-linked-tasks.png'),animations:'disabled'})
   }
   assert.deepEqual(errors,[]);await context.close()
  }
- console.log('PASS: three actual UI guide screenshots; fictional Work/Home sources, Delivery source group, Project A tag filter; no live requests or renderer errors.')
+ console.log('PASS: five actual UI guide screenshots; fictional sources/group/project, single-day tasks, Timeline dependencies, linked Overview panes, expanded/overlapped Board stacks and completed-task strike-through; no live requests or renderer errors.')
 }finally{await browser?.close();await server.close()}
