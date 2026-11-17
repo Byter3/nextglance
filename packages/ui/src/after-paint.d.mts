@@ -1,0 +1,1 @@
+export function createAfterPaint(ports:{afterRender:(callback:()=>void)=>void;requestFrame:(callback:()=>void)=>unknown;cancelFrame:(id:unknown)=>void;schedule:(callback:()=>void)=>unknown;cancelScheduled:(id:unknown)=>void}):{run:(work:()=>void)=>void;cancel:()=>void;dispose:()=>void}

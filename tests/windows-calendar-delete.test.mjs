@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {WorkspaceStore,accountScope} from '@nextspace/nextcloud-node/workspace.mjs';
+import {createPlannerWorkspace} from '@nextspace/core/planner.mjs';
+import deletion from '../win/electron/calendar-delete.cjs';
+import security from '../win/electron/security.cjs';
+const {createCalendarDeleteHandler}=deletion;
+const {reconcileRefreshedCache}=security;
+const record={id:'event',source:'calendar',kind:'event',title:'Planning',collectionId:'work',identity:{source:'calendar',key:'event-native'},remote:{uid:'native'}};
+const linked={id:'task',source:'tasks',kind:'task',title:'Prepare',collectionId:'tasks',identity:{source:'tasks',key:'task-native'}};
+const cache={records:[record,linked],collections:[{id:'work',source:'calendar',title:'Work'},{id:'tasks',source:'tasks',title:'Tasks'}],statuses:[{source:'calendar',state:'connected',count:1},{source:'tasks',state:'connected',count:1}]};
+
+test('deleting through the host preserves linked work/graph and removes primary and backup recovery rows',async t=>{
+  const directory=await mkdtemp(join(tmpdir(),'nextglance-delete-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const options={dataDir:directory,scope:accountScope('https://cloud.example.test','alex'),initialState:{workspace:createPlannerWorkspace(),...cache}};
+  const store=await WorkspaceStore.open(options);await store.updateCache(cache);
+  const event=store.snapshot().cache.records.find(item=>item.source==='calendar'), task=store.snapshot().cache.records.find(item=>item.source==='tasks');
+  const workspace=store.snapshot().workspace;
+  workspace.relations=[{id:'link',fromId:task.id,toId:event.id,type:'for_event'}];
+  await store.saveWorkspace(workspace,store.snapshot().revision);
+  const before=store.cacheSnapshot(), baseline=store.snapshot().workspace;
+  const handler=createCalendarDeleteHandler({getContext:id=>({store,record:store.recordSnapshot(id,'calendar'),collection:cache.collections[0],client:{deleteEvent:async(input,row)=>{assert.equal(input.id,event.id);assert.equal(row.remote.uid,'native');return{deleted:true}}}}),state:()=>store.snapshot()});
+  const result=await handler({id:event.id});
+  assert.deepEqual(result.workspace.relations,baseline.relations);assert.deepEqual(result.workspace.identities,baseline.identities);
+  assert.deepEqual(result.cache.records.map(item=>item.id),[task.id]);assert.equal(result.cache.statuses[0].count,0);
+  const late=reconcileRefreshedCache(before,store.cacheSnapshot(),{...before,records:before.records.map(item=>({...item,id:'new-'+item.id}))},['calendar','tasks']);
+  assert.equal(late.cache.records.some(item=>item.source==='calendar'),false);
+  await store.updateCache(late.cache);
+  await writeFile(store.path,'broken newest archive');
+  const restored=await WorkspaceStore.open(options);
+  assert.equal(restored.snapshot().cache.records.some(item=>item.source==='calendar'),false);
+  assert.deepEqual(restored.snapshot().workspace.relations,baseline.relations);
+});
+test('host accepts only IDs and never removes local data after failure or missing acknowledgement',async()=>{
+  let commits=0, calls=0;
+  const context={record,collection:cache.collections[0],store:{updateCache:async()=>commits++},client:{deleteEvent:async()=>{calls++;return{}}}};
+  const handler=createCalendarDeleteHandler({getContext:()=>context,state:()=>({})});
+  for(const input of [null,[],{id:'event',href:'unsafe'},{id:''},{id:'event\0'}])await assert.rejects(handler(input));
+  assert.equal(calls,0);await assert.rejects(handler({id:'event'}),/confirm/);assert.equal(commits,0);
+  context.client.deleteEvent=async()=>{throw Object.assign(Error('Changed'),{code:'CONFLICT'})};await assert.rejects(handler({id:'event'}),{code:'CONFLICT'});assert.equal(commits,0);
+});

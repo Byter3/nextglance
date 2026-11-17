@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NextGlance development review</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:#0d1117;color:#e8eef6}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid #303943}header strong{font-size:16px}header span{color:#abb6c5}label{display:flex;align-items:center;gap:6px}select,button{font:inherit;color:inherit;background:#1b2430;border:1px solid #405166;border-radius:7px;padding:7px 9px}button{cursor:pointer}main{padding:18px;overflow:auto;min-height:calc(100vh - 68px)}iframe{display:block;border:1px solid #405166;border-radius:14px;margin:auto;background:#121212;box-shadow:0 12px 45px #0007}a{color:#8bc8ff}
+</style></head><body>
+<header><strong>NextGlance · Development review</strong><span>Example data · No Nextcloud connection · Changes reset on reload</span>
+<label>Size <select id="size"><option value="phone">Phone</option><option value="tablet">Tablet</option><option value="desktop">Desktop</option></select></label>
+<label>State <select id="scenario"><option value="healthy">Synced</option><option value="source">Calendar incomplete</option><option value="planner">Planner sync error</option><option value="refreshing">Refreshing</option></select></label>
+<label><input id="large" type="checkbox">2,200 records</label><button id="reload">Reset demo</button><a id="direct" href="/app.html" target="_blank">Open full size</a></header>
+<main><iframe id="app" title="NextGlance development app"></iframe></main>
+<script type="module">
+const sizes={phone:[390,844],tablet:[1024,820],desktop:[1440,900]};const frame=document.querySelector('#app');
+function update(){const [width,height]=sizes[document.querySelector('#size').value];frame.width=width;frame.height=height;const url='/app.html?scenario='+document.querySelector('#scenario').value+'&large='+document.querySelector('#large').checked;frame.src=url;document.querySelector('#direct').href=url}
+for(const control of document.querySelectorAll('select,input,button'))control.addEventListener(control.tagName==='BUTTON'?'click':'change',update);update();
+</script></body></html>

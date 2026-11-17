@@ -1,0 +1,1 @@
+export function createLatestPublication<T>(input:{schedule:(run:()=>void)=>unknown;cancelScheduled:(id:unknown)=>void;canAdopt?:()=>boolean;adopt:(value:T)=>void|Promise<void>;onError?:(reason:unknown)=>void}):{offer:(value:T)=>void;hasPending:()=>boolean;resume:()=>void;clear:()=>void;dispose:()=>void}

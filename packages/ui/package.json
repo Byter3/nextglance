@@ -1,0 +1,43 @@
+{
+  "name": "@nextspace/ui",
+  "version": "0.6.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "description": "Shared Vue planner components; the host supplies WorkspaceApi",
+  "exports": {
+    ".": "./src/index.ts",
+    "./components/*": "./src/*",
+    "./style.css": "./src/style.css",
+    "./nextcloud.css": "./src/nextcloud.css",
+    "./approved-layout.css": "./src/approved-layout.css"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tiptap/extension-table": "^3.32.2",
+    "@tiptap/extension-task-item": "^3.32.2",
+    "@tiptap/extension-task-list": "^3.32.2",
+    "@tiptap/markdown": "^3.32.2",
+    "@tiptap/starter-kit": "^3.32.2",
+    "@tiptap/vue-3": "^3.32.2",
+    "dompurify": "^3.4.16",
+    "markdown-it": "^15.0.2",
+    "lucide-vue-next": "^0.468.0",
+    "@nextspace/core": "workspace:*",
+    "@nextspace/contracts": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "vue": "^3.5.0",
+    "typescript": "^5.9.0",
+    "vue-tsc": "^3.1.0",
+    "@types/markdown-it": "^14.2.0"
+  }
+}

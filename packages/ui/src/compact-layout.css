@@ -1,0 +1,202 @@
+/* One scope header and one responsive control surface for every shared client. */
+.planner-app,.planner-app.inspector-open{--app-header-height:calc(52px + env(safe-area-inset-top,0px));padding-top:var(--app-header-height)}
+.planner-app .app-topbar{height:var(--app-header-height);min-height:var(--app-header-height);padding:env(safe-area-inset-top,0px) var(--workspace-inset,12px) 0;gap:10px;display:flex;flex-wrap:nowrap}
+.app-topbar>.icon-button{flex:none;width:40px;min-width:40px;min-height:40px}
+.topbar-brand{flex:none;gap:8px;font-size:17px}
+.topbar-scope{display:flex;align-items:center;gap:8px;flex:0 1 230px;min-width:72px;margin:0;padding:0 8px;border-left:1px solid #ffffff30;color:var(--cloud-foreground);font-size:19px;font-weight:650;line-height:1.2}
+.topbar-scope>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-scope .heading-color{width:11px;height:11px;flex:none}
+.header-view-controls{display:flex;align-items:center;justify-content:center;gap:4px;flex:1 0 auto;min-width:0}
+.app-topbar .view-tabs{min-height:40px;gap:2px;align-self:auto;overflow:visible}
+.planner-app .app-topbar .view-tabs button,.inspector-open .app-topbar .view-tabs button{min-height:40px;margin:0;border:0;padding:6px 9px;color:color-mix(in srgb,var(--cloud-foreground) 78%,transparent);border-radius:20px;font-size:12px;white-space:nowrap}
+.planner-app .app-topbar .view-tabs button:hover,.planner-app .app-topbar .view-tabs button.active{color:var(--cloud-foreground);background:#ffffff18}
+.app-topbar .view-tabs button.active{box-shadow:inset 0 0 0 1px #ffffff20}
+.app-topbar .view-tabs button svg,.inspector-open .app-topbar .view-tabs button svg{display:block;width:15px;height:15px}
+.topbar-actions{margin-left:auto;gap:2px}
+.app-topbar .topbar-actions .icon-button{width:40px;min-width:40px;min-height:40px}
+.app-topbar .sync-button{display:inline-flex}
+.page-options-toggle,.page-options-heading,.page-control-label{display:none}
+.app-sidebar,.planner-app .inspector{top:var(--app-header-height);height:calc(100dvh - var(--app-header-height) - var(--workspace-inset,12px))}
+.sidebar-scrim{top:var(--app-header-height);z-index:76}
+
+/* Keep card drag/highlight layers within page content, below the sibling
+   inspector. Toolbars and teleported dialogs retain their shell-level layers. */
+.planner-app .workspace-body{position:relative;isolation:isolate;z-index:0}
+/* Header controls remain legible when a glass inspector overlays page controls. */
+.planner-app .inspector-header>.icon-button{background:var(--content-surface,var(--surface))}
+
+/* Scope management lives with the scope, including when it is not selected. */
+.app-sidebar{padding:var(--shell-inset,8px);z-index:77}
+.app-sidebar .brand,.app-sidebar .sidebar-main,.app-sidebar .sidebar-section-title,.app-sidebar .sidebar-bottom{background:var(--surface)}
+.app-sidebar .brand{margin:0;min-height:40px;height:40px;border-radius:8px 8px 0 0}
+.app-sidebar .sidebar-main{border-radius:0 0 8px 8px;min-height:40px}
+.app-sidebar .sidebar-main.active{background:color-mix(in srgb,var(--primary) 12%,var(--surface))}
+.app-sidebar .sidebar-section-title{margin-top:var(--shell-inset,8px);padding:5px 8px;border-radius:8px 8px 0 0;letter-spacing:1px}
+.app-sidebar .spaces-nav{padding:2px 4px;border-radius:0 0 8px 8px}
+.app-sidebar .space-nav-group{margin-bottom:4px}
+.nav-scope-row{display:flex;align-items:center;min-width:0;border-radius:8px}
+.nav-scope-row.active{background:color-mix(in srgb,var(--primary) 12%,var(--surface));color:var(--primary-soft-text)}
+.nav-scope-row .space-nav,.nav-scope-row .project-nav{flex:1;min-width:0;width:auto;min-height:40px;padding-top:6px;padding-bottom:6px}
+.nav-scope-row .space-nav.active,.nav-scope-row .project-nav.active{background:transparent}
+.nav-scope-row .nav-actions-toggle{width:40px;min-width:40px;min-height:40px;color:var(--muted)}
+.nav-actions-toggle[aria-expanded="true"]{background:var(--hover);color:var(--text)}
+.nav-actions-panel{padding:4px;margin:0 3px 5px 14px;border:1px solid var(--border);border-radius:9px;background:var(--surface);box-shadow:0 4px 12px #0002}
+.nav-actions-panel>button{display:flex;align-items:center;gap:9px;min-height:40px;width:100%;padding:7px 9px;text-align:left;border-radius:6px;font-size:12px}
+.nav-actions-panel>button:hover,.nav-actions-panel>button:focus-visible{background:var(--hover)}
+.nav-actions-panel>button>svg{flex:none;color:var(--muted)}
+.nav-actions-panel small{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
+.app-sidebar .project-nav.category-nav{min-height:40px;padding-top:6px;padding-bottom:6px}
+.app-sidebar .sidebar-bottom{margin-top:auto;padding-top:4px;border-radius:8px}
+.app-sidebar .source-summary{padding:8px}
+.app-sidebar .sidebar-settings{min-height:40px;padding:7px 8px}
+.app-sidebar .sidebar-save{padding:7px 8px}
+
+/* Search stays left, dates stay centered, page actions stay right. */
+.planner-app .filter-bar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;margin:0 var(--workspace-inset,12px);padding:5px 0;min-height:50px;gap:8px;flex:none}
+.page-controls{display:contents}
+.inline-page-search{display:none}
+.page-controls .search-control{grid-column:1;grid-row:1;justify-self:start;max-width:220px;min-width:0;width:100%}
+.page-actions{grid-column:3;grid-row:1;display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.undated-toolbar .page-actions{grid-column:2/-1}
+.page-controls .active-filter-caption{display:none}
+.board-controls-host{display:contents}
+.planner-app .board-controls-host>.board-toolbar{order:1;display:flex;flex-direction:row;align-items:center;gap:6px;flex:none;padding:0;margin:0}
+.board-controls-host .board-toolbar>label{width:auto;min-width:0;max-width:260px;min-height:38px;padding-left:8px}
+.board-controls-host .board-toolbar select{min-height:36px;max-width:240px;font-size:12px;padding-top:5px;padding-bottom:5px}
+.board-controls-host .mapping-open-button{min-height:40px;padding:5px 7px;font-size:12px}
+.board-controls-host .board-help{margin:0}
+.board-controls-host .board-help>summary{display:flex;align-items:center;justify-content:center;min-width:36px;min-height:40px;list-style:none}
+.board-controls-host .board-help>summary::-webkit-details-marker{display:none}
+.board-controls-host .board-help>p{right:0;top:100%;z-index:45}
+.page-actions>.filter-button{order:3;min-height:40px;flex:none}
+.page-actions>.timeline-zoom{order:1;margin:0}
+.page-actions>.timeline-zoom select{min-height:38px;font-size:12px}
+.page-actions>.calendar-period-select{order:1;margin:0;min-width:0}
+.page-actions>.calendar-period-select select{min-height:38px;font-size:12px}
+.list-page-controls{display:flex;align-items:center;gap:6px;order:1}
+.list-page-controls select{min-height:38px;font-size:12px}
+.page-actions>.filter-popover{top:100%;right:0;max-height:calc(100dvh - var(--app-header-height) - 64px)}
+.planner-app .date-navigation{grid-column:2;grid-row:1;justify-self:center;justify-content:center;margin:0;min-width:0;width:auto;gap:0;flex:none}
+.planner-app .date-navigation .icon-button{width:40px;min-width:40px;min-height:40px}
+.planner-app .date-today{min-height:40px}
+.planner-app .week-label{margin-left:5px}
+.inline-page-options{display:none}
+.global-actions-group,.global-action-items{display:contents}
+.global-actions-toggle,.global-action-label,.view-switcher{display:none}
+.topbar-actions .find-event-matches{order:0}
+.topbar-actions .refresh-sources-button{order:1}
+.topbar-actions .sync-button{order:2}
+.topbar-actions .capture-button{order:3}
+
+@media(max-width:1200px){
+  .topbar-brand strong{display:none}
+  .topbar-scope{flex-basis:170px;font-size:18px}
+  .planner-app .app-topbar{gap:5px}
+  .planner-app .app-topbar .view-tabs button,.inspector-open .app-topbar .view-tabs button{gap:5px;padding:6px 7px}
+}
+@media(min-width:761px) and (max-width:960px){
+  .app-topbar .view-tabs button svg,.inspector-open .app-topbar .view-tabs button svg{display:none}
+  .topbar-scope{flex-basis:120px;min-width:68px;font-size:16px}
+  .topbar-actions .button.primary{font-size:0;padding:0;width:40px;min-height:40px;gap:0}
+}
+
+/* The same controls collapse for tablets or a workspace narrowed by details. */
+.planner-app.compact-page-controls .filter-bar{grid-template-columns:44px minmax(0,1fr) 44px;margin:0 var(--workspace-inset,4px);padding:2px 0;min-height:44px;gap:4px}
+.planner-app.compact-page-controls .page-controls{display:none}
+.planner-app.compact-page-controls .page-controls.open{display:flex;position:fixed;z-index:78;top:calc(var(--app-header-height) + 4px);right:max(var(--workspace-inset,4px),env(safe-area-inset-right,0px));width:min(420px,calc(100vw - 2 * var(--workspace-inset,4px)));max-height:calc(100dvh - var(--app-header-height) - max(12px,env(safe-area-inset-bottom,0px)));overflow-y:auto;flex-direction:column;align-items:stretch;gap:8px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow)}
+.planner-app.compact-page-controls .page-actions{display:contents}
+.compact-page-controls .page-options-heading{display:flex;align-items:center;justify-content:space-between;order:-1;min-height:40px;font-size:14px}
+.compact-page-controls .page-control-label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
+.compact-page-controls .page-controls .search-control,.compact-page-controls .page-controls .search-control.expanded{display:flex;order:0;max-width:none;flex:none;min-width:0;width:100%}
+.compact-page-controls .page-controls .search-control .planner-search{display:flex;width:100%;max-width:none;height:40px;min-height:40px}
+.compact-page-controls .page-controls .search-toggle,.compact-page-controls .page-controls .search-close{display:none}
+.compact-page-controls .page-controls .planner-search input{min-width:0;flex:1;width:100%;font-size:14px}
+.planner-app.compact-page-controls .page-actions>.filter-button{align-self:stretch;font-size:13px;gap:7px;padding:6px 9px;min-height:40px}
+.planner-app.compact-page-controls .page-actions>.filter-button>svg:last-child{display:block;margin-left:auto}
+.compact-page-controls .page-controls .filter-button .filter-active-dot{position:static}
+.planner-app.compact-page-controls .board-controls-host>.board-toolbar{display:flex;order:1;flex-direction:row;flex-wrap:wrap;margin:0;gap:4px;width:100%}
+.compact-page-controls .board-controls-host .board-toolbar>label{flex:1 1 100%;max-width:none;width:100%;min-height:40px}
+.compact-page-controls .board-controls-host .board-toolbar select{width:100%;max-width:none;min-height:40px}
+.compact-page-controls .board-controls-host .board-help>p{position:static;width:auto;margin:4px 0 0;font-size:12px}
+.compact-page-controls .board-controls-host .board-help[open]{flex:1 1 100%}
+.compact-page-controls .board-controls-host .board-help[open]>summary{justify-content:flex-start}
+.planner-app.compact-page-controls .page-actions>.timeline-zoom{order:2;margin:0;width:100%}
+.planner-app.compact-page-controls .page-actions>.calendar-period-select{order:2;margin:0;width:100%}
+.compact-page-controls .calendar-period-select select{width:100%;min-height:40px}
+.compact-page-controls .page-controls .timeline-zoom select,.compact-page-controls .list-page-controls select{width:100%;min-height:40px}
+.compact-page-controls .page-controls .list-page-controls{flex-direction:column;align-items:stretch;width:100%;order:2}
+.planner-app.compact-page-controls .page-actions>.filter-popover{position:static;width:100%;max-height:none;overflow:visible;padding:8px;border-radius:8px;box-shadow:none;order:6}
+.planner-app.compact-page-controls .date-navigation{grid-column:2;grid-row:1;justify-self:stretch;width:100%;max-width:100%;flex:none;min-width:0;margin:0;justify-content:center;padding:0;min-height:40px}
+.planner-app.compact-page-controls .date-navigation .icon-button,.planner-app.compact-page-controls .date-today{flex:none}
+.planner-app.compact-page-controls .date-navigation .week-label{min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.compact-page-controls .inline-page-options{display:flex;grid-column:3;grid-row:1;justify-content:flex-end;min-width:0}
+.planner-app.compact-page-controls .page-options-toggle{display:inline-flex;position:relative;width:44px;min-width:44px;height:40px;min-height:40px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+.planner-app.compact-page-controls .page-options-toggle.active{background:var(--primary-soft);border-color:var(--primary)}
+.compact-page-controls .page-options-toggle .filter-active-dot{position:absolute;right:5px;top:5px}
+
+/* A narrow desktop retains search; compact views share one toolbar row. */
+.planner-app.narrow-desktop-controls .filter-bar,
+.planner-app.narrow-desktop-controls .filter-bar.undated-toolbar{display:grid;grid-template-columns:minmax(100px,1fr) auto 44px;min-height:46px;height:auto;padding:3px 0;margin:0 var(--workspace-inset,12px)}
+.narrow-desktop-controls .inline-page-search{display:block;grid-column:1;grid-row:1;min-width:0;max-width:220px}
+.narrow-desktop-controls .inline-page-search .search-control,.narrow-desktop-controls .inline-page-search .planner-search{display:flex;min-width:0;width:100%;max-width:100%}
+.narrow-desktop-controls .inline-page-search input{width:100%;min-width:0}
+.narrow-desktop-controls .inline-page-search .search-toggle,.narrow-desktop-controls .inline-page-search .search-close{display:none}
+.timeline-page-settings{position:relative;order:2;margin:0;flex:none}
+.timeline-page-settings>summary{min-height:40px;padding:9px 8px;font-size:12px;white-space:nowrap;cursor:pointer}
+.timeline-settings-content{position:absolute;right:0;top:100%;min-width:230px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);z-index:46}
+.timeline-settings-content .check-label{min-height:40px}.timeline-settings-content>.text-button{display:flex;gap:6px;align-items:center;min-height:40px}
+.compact-page-controls .timeline-page-settings{order:4;width:100%}
+.compact-page-controls .timeline-page-settings>summary{padding:5px 0;min-height:30px;color:var(--muted)}
+.compact-page-controls .timeline-settings-content{position:static;min-width:0;padding:0;border:0;box-shadow:none;background:transparent}
+
+/* One phone header: scope label above the current-page picker, no tab row. */
+@media(max-width:760px){
+  .planner-app .app-topbar{display:grid;grid-template-columns:40px minmax(100px,1fr) auto;grid-template-rows:48px;column-gap:3px;padding:calc(env(safe-area-inset-top,0px) + 2px) var(--workspace-inset,4px) 2px;z-index:79}
+  .planner-app .app-topbar>.icon-button{grid-column:1;grid-row:1}
+  .topbar-brand{display:none}
+  .topbar-scope{display:none;grid-column:2;grid-row:1;align-self:start;z-index:1;pointer-events:none;min-width:0;max-width:none;gap:4px;border:0;padding:0;margin:5px 24px 0 8px;font-size:10px;line-height:14px;font-weight:500}
+  .topbar-scope .heading-color{width:6px;height:6px;border-radius:2px}
+  .header-view-controls{grid-column:2;grid-row:1;display:block;min-width:0;max-width:none;width:100%;height:48px}
+  .planner-app .app-topbar .view-tabs{display:none}
+  .view-switcher{position:relative;display:block;margin:2px 0;width:100%;min-width:100px;height:44px}
+  .topbar-actions{grid-column:3;grid-row:1;gap:2px;margin:0;align-items:center}
+  .planner-app .topbar-actions .global-actions-group{display:block;order:0}
+  .app-topbar .topbar-actions .global-actions-toggle{display:inline-flex;width:40px;min-width:40px;min-height:40px}
+  .planner-app .global-action-items{display:none}
+  .planner-app .global-action-items.open{position:fixed;z-index:79;top:calc(var(--app-header-height) + 4px);right:var(--workspace-inset,4px);display:flex;flex-direction:column;align-items:stretch;gap:4px;width:min(250px,calc(100vw - 16px));padding:6px;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:var(--shadow)}
+  .app-topbar .topbar-actions .global-action-items .icon-button,.app-topbar .topbar-actions .global-action-items .button.primary{display:flex;justify-content:flex-start;gap:8px;width:100%;min-height:40px;height:auto;padding:8px;font-size:13px;white-space:normal;text-align:left;border-radius:6px;color:var(--text)}
+  .app-topbar .topbar-actions .global-action-items .button.primary{background:var(--primary-soft);color:var(--primary-soft-text)}
+  .global-action-items .global-action-label,.find-event-matches>.global-action-label{display:inline}
+  .topbar-actions .sync-button{order:1}
+  .planner-app.compact-page-controls .filter-bar{gap:2px}
+  .planner-app .week-label{font-size:11px;margin-left:4px}
+  .planner-app .filter-bar:has(.timeline-zoom) .date-navigation{flex-basis:auto}
+  .app-sidebar{left:var(--workspace-inset,4px);width:min(300px,calc(100vw - 2 * var(--workspace-inset,4px)))}
+  .planner-app[data-mobile-host] .inspector{top:var(--app-header-height);height:calc(100dvh - var(--app-header-height));bottom:0}
+}
+.sync-progress{display:grid;gap:4px;padding:10px 0;font-size:13px}.sync-progress small{color:var(--muted)}
+
+/* Short touch landscape: reclaim shell space, never cutouts or touch targets. */
+@media (pointer:coarse) and (orientation:landscape) and (max-height:600px){
+  .planner-app,.planner-app.inspector-open{
+    --app-header-height:calc(44px + env(safe-area-inset-top,0px));
+    --workspace-inset:2px;--content-inset:8px;--content-gap:6px;--shell-inset:2px;--control-size:44px;
+    --landscape-left:calc(2px + env(safe-area-inset-left,0px));
+    --landscape-right:calc(2px + env(safe-area-inset-right,0px));
+    --landscape-bottom:calc(2px + env(safe-area-inset-bottom,0px));
+    padding-left:var(--landscape-left);padding-right:var(--landscape-right);padding-bottom:var(--landscape-bottom)
+  }
+  .planner-app .app-topbar{left:var(--landscape-left);right:var(--landscape-right);padding:env(safe-area-inset-top,0px) 0 0;gap:2px;grid-template-rows:44px}
+  .planner-app .app-topbar .header-view-controls,.planner-app .view-switcher{height:44px;margin-block:0}
+  .planner-app .app-topbar :is(.icon-button,.button,.view-tabs button){height:44px;min-height:44px;min-width:44px;padding-block:0}
+  .planner-app .app-main{height:calc(100dvh - var(--app-header-height) - var(--landscape-bottom));border-radius:8px}
+  .planner-app .workspace-body{padding:0 2px 2px}
+  .planner-app .filter-bar{margin-inline:2px;padding-block:0;min-height:44px;gap:2px}
+  .planner-app .filter-bar :is(.icon-button,.date-today,.page-options-toggle){min-width:44px;min-height:44px;height:44px}
+  .planner-app .app-sidebar{left:var(--landscape-left);height:calc(100dvh - var(--app-header-height) - var(--landscape-bottom));width:min(300px,calc(100vw - var(--landscape-left) - var(--landscape-right)))}
+  .planner-app .inspector,.planner-app[data-mobile-host] .inspector{right:var(--landscape-right);top:var(--app-header-height);height:calc(100dvh - var(--app-header-height) - var(--landscape-bottom));bottom:var(--landscape-bottom);max-width:calc(100vw - var(--landscape-left) - var(--landscape-right));border-radius:8px}
+  .planner-app .inspector-header{height:44px;min-height:44px;padding:0 var(--content-inset)}
+  .planner-app .inspector-actions{padding-block:2px}
+  .planner-app .modal-backdrop{padding:calc(2px + env(safe-area-inset-top,0px)) var(--landscape-right) var(--landscape-bottom) var(--landscape-left)}
+  .planner-app .modal{max-height:calc(100dvh - 4px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
+}

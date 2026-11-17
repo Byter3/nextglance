@@ -1,0 +1,15 @@
+<!--
+NextGlance modified artwork: composed calendar/timeline shapes, transformed and
+scaled the Tasks tick, and flattened paths for vector/raster platform exports.
+Tick origin: Google Material Symbols (Apache-2.0), via Nextcloud Tasks:
+https://github.com/nextcloud/tasks/commit/e6d669a830b229c50019c57b51510a7dd54f8e8e
+See repository NOTICE.md and LICENSES/Apache-2.0.txt for attribution and license.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1254 1254"><title>NextGlance approved editable master — BRAND-01</title><defs><linearGradient id="badge-gradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#55A4EF"/><stop offset="1" stop-color="#2F80D5"/></linearGradient><g id="original-tasks-tick" fill="currentColor"><path d="m9.55 18-5.7-5.7 1.425-1.425L9.55 15.15l9.175-9.175L20.15 7.4 9.55 18Z" style="fill:currentColor;fill-rule:nonzero" transform="translate(-4.614 -4.564) scale(1.71779)"/></g><mask id="tick-clearance" maskUnits="userSpaceOnUse" x="0" y="0" width="1254" height="1254" style="mask-type:luminance"><rect width="1254" height="1254" fill="white"/><use href="#original-tasks-tick" transform="translate(362.286 427.5) scale(22.857143)" color="black" stroke="black" stroke-width=".7" stroke-linejoin="round"/></mask></defs><circle id="badge-background" cx="627" cy="627" r="580" fill="#0082C9"/><g color="#FFFFFF" mask="url(#tick-clearance)"><g id="selected-calendar-layout" fill="currentColor">
+  <path id="rear-card" d="M375 293C386 266 408 249 436 249H951C993 249 1028 285 1028 332V638C1028 666 1012 687 985 697V345C985 316 963 293 934 293Z"/>
+  <rect id="calendar-tab-left" x="391" y="330" width="78" height="100" rx="14"/>
+  <rect id="calendar-tab-right" x="727" y="330" width="78" height="100" rx="14"/>
+  <path id="calendar-frame" fill-rule="evenodd" d="M320 385H866A94 94 0 0 1 960 479V890A94 94 0 0 1 866 984H320A94 94 0 0 1 226 890V479A94 94 0 0 1 320 385ZM274 549V881A50 50 0 0 0 324 931H863A50 50 0 0 0 913 881V549Z"/>
+  <rect id="timeline-upper" x="459" y="654" width="244" height="66" rx="25"/>
+  <rect id="timeline-lower" x="516" y="770" width="360" height="65" rx="24"/>
+</g></g><use id="foreground-tick" href="#original-tasks-tick" transform="translate(362.286 427.5) scale(22.857143)" color="#FFFFFF"/></svg>

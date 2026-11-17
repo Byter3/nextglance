@@ -1,0 +1,6 @@
+.modal.note-editor-modal{width:min(1040px,95vw);max-width:1040px;max-height:94vh}
+.inspector-header .inspector-back{margin-right:2px;flex:none}
+.note-row-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.note-row-tags>span{padding:2px 7px;background:var(--primary-soft);color:var(--primary-soft-text,var(--primary));border:1px solid color-mix(in srgb,var(--primary) 35%,transparent);border-radius:5px;font-size:11px;line-height:1.6}
+.description-section>header>h3{flex:1}
+.inspector-status-field .status-select{min-width:0;flex:1}

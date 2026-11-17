@@ -1,0 +1,4 @@
+/* Shared calendar date-label density; interactive controls retain their own targets. */
+.calendar-view,.scheduling-week{--calendar-date-header:44px;--calendar-date-number:16px;--calendar-date-weekday:10px;--calendar-date-padding:3px}
+@media(max-width:1280px),(pointer:coarse){.calendar-view,.scheduling-week{--calendar-date-header:40px;--calendar-date-number:15px;--calendar-date-padding:2px}}
+@media(max-width:760px){.calendar-view,.scheduling-week{--calendar-date-header:32px;--calendar-date-number:14px;--calendar-date-weekday:9px;--calendar-date-padding:1px}}

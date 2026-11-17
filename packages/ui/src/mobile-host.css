@@ -1,0 +1,69 @@
+/* The shared planner adapts to the mobile host without a separate screen tree. */
+.files-account-login{margin:10px 0 0 10px}
+[data-mobile-host] .button,[data-mobile-host] .icon-button,[data-mobile-host] .view-tabs button{min-height:40px}
+[data-mobile-host] .app-sidebar button{min-height:42px}
+[data-mobile-host] .app-sidebar{padding-bottom:max(12px,env(safe-area-inset-bottom))}
+[data-mobile-host] .board-columns,[data-mobile-host] .timeline-scroll,[data-mobile-host] .calendar-times-scroll{overscroll-behavior-x:contain}
+[data-mobile-host] .overview-split .timeline-scroll,[data-mobile-host] .overview-split .calendar-times-scroll{overflow-x:hidden;overflow-y:auto}
+@media(max-width:760px){
+  [data-mobile-host] .inspector{top:52px;right:0;bottom:0;width:100%;max-width:none;height:calc(100dvh - 52px);border-radius:0;border-left:0;z-index:75}
+  [data-mobile-host] .inspector-resize-handle{display:none}
+  [data-mobile-host] .inspector-header{padding:10px 14px;min-height:56px}
+  [data-mobile-host] .inspector-actions{padding-bottom:max(14px,env(safe-area-inset-bottom))}
+  [data-mobile-host] .view-tabs{width:100%;gap:0;overflow-x:auto}
+  [data-mobile-host] .view-tabs button{flex:1;padding:8px 6px;white-space:nowrap}
+  [data-mobile-host] .filter-bar{margin:0 8px}
+  [data-mobile-host] .workspace-heading{padding-left:12px;padding-right:12px}
+  [data-mobile-host] .app-topbar .icon-button{min-width:36px}
+  [data-mobile-host] .welcome-panel{padding:16px 8px;margin:14px auto}
+  [data-mobile-host] .welcome-panel h2{font-size:25px}
+  [data-mobile-host] .welcome-features{gap:8px}
+  [data-mobile-host] .welcome-features>span{min-width:0}
+  [data-mobile-host] .modal-backdrop{padding:10px}
+  [data-mobile-host] .modal{max-height:calc(100dvh - 20px);padding:24px 18px}
+  [data-mobile-host] .source-statuses>div{flex-wrap:wrap}
+  [data-mobile-host] .files-account-login{display:flex;margin:10px 0 0}
+}
+
+/* One shared compact toolbar; only its expansion is temporary local UI state. */
+.search-control{display:flex;min-width:0;max-width:210px;flex:1 1 140px}
+.search-control .planner-search{width:100%;max-width:none;flex:1}
+.search-toggle,.search-close,.compact-date-range{display:none}
+.filter-button{position:relative}
+.filter-active-dot{width:6px;height:6px;border-radius:50%;background:var(--primary);flex:none}
+.sync-notice{gap:10px;align-items:center;flex-shrink:0}
+.sync-notice>svg{flex:none}
+.sync-notice>span{min-width:0;flex:1;line-height:1.45}
+.sync-notice-actions{display:flex;gap:6px;align-items:center;flex:none}
+.sync-notice-actions .text-button{min-height:36px;padding:5px 8px;white-space:nowrap}
+.sync-diagnostic{font-size:11px;color:var(--muted);line-height:1.5;margin-top:8px;overflow-wrap:anywhere}
+
+@media(max-width:760px){
+  .planner-app .workspace-heading{padding-top:9px;gap:6px}
+  .planner-app .workspace-heading h1{font-size:21px}
+  .planner-app .view-tabs{min-height:40px;gap:0}
+  .planner-app .view-tabs button{min-height:40px}
+  .planner-app .filter-bar{gap:4px;padding-top:0;padding-bottom:6px;min-height:46px}
+  .search-control{flex:0 0 40px;max-width:none}
+  .search-control .planner-search{display:none;height:40px}
+  .search-toggle,.search-close{display:inline-flex;min-width:40px;min-height:40px}
+  .search-control.expanded{flex:1 1 calc(100% - 50px)}
+  .search-control.expanded .planner-search{display:flex}
+  .search-control.expanded .search-toggle{display:none}
+  .planner-app .filter-button{min-width:40px;min-height:40px;padding:8px;font-size:0;gap:0}
+  .planner-app .filter-button>svg:last-child{display:none}
+  .filter-active-dot{position:absolute;top:5px;right:5px}
+  .planner-app .date-navigation{width:auto;min-width:0;flex:1 1 230px;flex-wrap:nowrap;justify-content:flex-end;margin:0;gap:0}
+  .planner-app .filter-bar:has(.timeline-zoom) .date-navigation{flex-basis:100%}
+  .planner-app .date-navigation .icon-button{width:36px;min-width:36px;min-height:40px}
+  .planner-app .date-today{font-size:12px;min-height:40px;padding:5px 6px}
+  .planner-app .week-label{font-size:11px;min-width:0;gap:3px}
+  .full-date-range{display:none}
+  .compact-date-range{display:inline}
+  .planner-app .timeline-zoom{margin-right:auto}
+  .planner-app .timeline-zoom select{min-height:36px;font-size:12px}
+  .planner-app .filter-popover{top:100%;max-height:calc(100dvh - 180px)}
+  .planner-app .sync-notice{display:grid;grid-template-columns:17px minmax(0,1fr) auto;gap:7px;margin:8px 8px 0;padding:6px 9px;font-size:12px}
+  .sync-notice-actions{gap:0}
+  .sync-notice-actions .text-button{font-size:12px;padding:4px 6px;min-height:40px}
+}

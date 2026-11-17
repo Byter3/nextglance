@@ -1,0 +1,16 @@
+{
+  "name": "@nextspace/core",
+  "version": "0.6.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "description": "Portable planning, identity, date, relationship and metadata rules shared by Nextspace clients",
+  "files": ["src"],
+  "exports": {
+    "./*.mjs": "./src/*.mjs"
+  },
+  "dependencies": {
+    "@nextspace/contracts": "workspace:*",
+    "markdown-it": "^15.0.2"
+  }
+}

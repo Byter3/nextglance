@@ -1,0 +1,7 @@
+{
+  "appId": "com.nextspace.app",
+  "appName": "NextGlance",
+  "webDir": "dist",
+  "android": { "allowMixedContent": false },
+  "server": { "androidScheme": "https" }
+}

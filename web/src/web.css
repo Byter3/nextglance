@@ -1,0 +1,36 @@
+/* WEB-01: Nextcloud owns document, header, wallpaper and theme. Every imported
+   shared rule is prefixed by the web-only PostCSS plugin. */
+#nextglance-root {
+  position:relative;isolation:isolate;width:100%;height:100%;min-height:0;overflow:hidden;
+  font-family:inherit;font-size:var(--default-font-size,15px);color:var(--color-main-text,#222);color-scheme:inherit;
+  --surface:var(--color-main-background,#fff);--canvas:var(--surface);--sidebar:var(--surface);
+  --text:var(--color-main-text,#222);--heading:var(--text);--muted:var(--color-text-maxcontrast,#666);--subtle:var(--muted);
+  --hover:var(--color-background-hover,#eee);--border:var(--color-border,#ddd);--border-strong:var(--color-border-dark,#aaa);
+  --primary:var(--color-primary-element,#0082c9);--primary-hover:var(--color-primary-element-hover,#006aa6);--on-primary:var(--color-primary-element-text,#fff);
+  --primary-soft:var(--color-primary-element-light,#e5f3fb);--primary-soft-text:var(--color-primary-element-light-text,#005c90);
+  --cloud-background:var(--surface);--cloud-foreground:var(--text);--cloud-wallpaper:none;
+  --glass-shell:var(--color-main-background-translucent,var(--surface));--glass-lane:var(--glass-shell);--glass-header:var(--glass-shell);--glass-edge:var(--border);--content-surface:var(--surface);
+  background:none;margin:0;
+}
+#nextglance-root .nextglance-content{height:100%;min-height:0}
+#nextglance-root .planner-app,#nextglance-root .planner-app.inspector-open{position:relative;height:100%;min-height:0;padding:0;--workspace-inset:6px;--app-header-height:48px;--timeline-viewport-height:calc(100dvh - var(--header-height,50px) - 160px)}
+#nextglance-root .planner-app::before{display:none}
+#nextglance-root .planner-app .app-main{height:100%;min-height:0;border-radius:0;background:var(--glass-shell)}
+#nextglance-root .planner-app .app-topbar{position:relative;inset:auto;width:100%;height:48px;min-height:48px;padding:0 6px;flex-shrink:0;z-index:45;background:var(--glass-shell);color:var(--text);border-bottom:1px solid var(--border)}
+#nextglance-root .topbar-scope{border-left:0}
+#nextglance-root .app-topbar .view-tabs button:hover,#nextglance-root .app-topbar .view-tabs button.active{background:var(--primary-soft);color:var(--primary-soft-text)}
+#nextglance-root .planner-app .inspector{position:relative;top:auto;right:auto;bottom:auto;height:100%;border-radius:0}
+#nextglance-root .planner-app .app-sidebar{position:absolute;left:0;top:0;height:100%;max-width:100%;border-radius:0 10px 10px 0}
+#nextglance-root .planner-app .sidebar-scrim{position:absolute;inset:0}
+#nextglance-root .planner-app .page-controls.open,#nextglance-root .planner-app .global-action-items.open{position:absolute;top:50px;right:6px;max-height:calc(100% - 56px)}
+#nextglance-root .planner-app .modal-backdrop,#nextglance-root .board-status-choice-backdrop{position:absolute;inset:0;padding:12px;z-index:100}
+#nextglance-root .planner-app .modal{max-height:100%;max-width:min(100%,1100px)}
+#nextglance-root .planner-app .toast{position:absolute}
+#nextglance-root .nextglance-session-gate{margin:24px;max-width:600px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--border-radius-large,12px)}
+#nextglance-root .nextglance-session-gate h2{font-size:20px;margin:0 0 12px;color:var(--text)}
+#nextglance-root .nextglance-session-gate p{margin:0 0 18px;line-height:1.5}
+#nextglance-root .nextglance-session-gate button,#nextglance-root .nextglance-session-gate a{display:inline-flex;align-items:center;min-height:44px;padding:8px 16px;border-radius:var(--border-radius-pill,22px);background:var(--primary);color:var(--on-primary);margin-right:8px}
+@media(max-width:1100px){#nextglance-root .planner-app .inspector{position:absolute;top:48px;right:0;height:calc(100% - 48px);max-width:100%;z-index:70}}
+@media(max-width:760px){#nextglance-root .planner-app .app-topbar{grid-template-rows:44px}#nextglance-root .planner-app .inspector{width:100%}#nextglance-root .planner-app .modal-backdrop{padding:4px}}
+
+#nextglance-root .nextglance-offline{position:absolute;bottom:8px;left:8px;z-index:90;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:12px}

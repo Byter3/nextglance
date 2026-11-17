@@ -1,0 +1,11 @@
+packages:
+  - win
+  - android
+  - web
+  - packages/*
+
+allowBuilds:
+  agent-browser: true
+  electron: true
+  esbuild: true
+  electron-winstaller: false

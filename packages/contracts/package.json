@@ -1,0 +1,15 @@
+{
+  "name": "@nextspace/contracts",
+  "version": "0.6.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "description": "Shared Nextspace records and platform bridge TypeScript contracts",
+  "files": ["src"],
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts"
+    }
+  }
+}

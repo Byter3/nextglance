@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" role="img" aria-label="2. A source group changes the headings">
+<title>2. A source group changes the headings</title>
+<desc>Inside Work, assign Work tasks, Work Deck and Work calendar to Delivery.</desc>
+<rect x="0" y="0" width="1200" height="620" rx="0" fill="#0d1923" stroke="none"/>
+<text x="28" y="45" font-family="Arial, sans-serif" font-size="29" font-weight="700" fill="#ffffff">2. A source group changes the headings</text>
+<text x="28" y="78" font-family="Arial, sans-serif" font-size="18" font-weight="400" fill="#b6c8d5">Inside Work, assign Work tasks, Work Deck and Work calendar to Delivery.</text>
+<rect x="26" y="112" width="548" height="432" rx="12" fill="#152733" stroke="#344957"/>
+<rect x="26" y="112" width="548" height="44" rx="10" fill="#245374" stroke="#344957"/>
+<text x="44" y="141" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#ffffff">Before: separate sources</text>
+<text x="44" y="184" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#8bd1ff">Work · Overview</text>
+<line x1="26" y1="198" x2="574" y2="198" stroke="#344957"/>
+<line x1="306" y1="198" x2="306" y2="526" stroke="#344957"/>
+<text x="329" y="222" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#b6c8d5">Mon</text>
+<line x1="318" y1="232" x2="318" y2="526" stroke="#243d4d"/>
+<text x="407" y="222" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#b6c8d5">Tue</text>
+<line x1="396" y1="232" x2="396" y2="526" stroke="#243d4d"/>
+<text x="485" y="222" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#b6c8d5">Wed</text>
+<line x1="474" y1="232" x2="474" y2="526" stroke="#243d4d"/>
+<rect x="626" y="112" width="548" height="432" rx="12" fill="#152733" stroke="#344957"/>
+<rect x="626" y="112" width="548" height="44" rx="10" fill="#245374" stroke="#344957"/>
+<text x="644" y="141" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#ffffff">After: Delivery group</text>
+<text x="644" y="184" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#8bd1ff">Work · Overview</text>
+<line x1="626" y1="198" x2="1174" y2="198" stroke="#344957"/>
+<line x1="906" y1="198" x2="906" y2="526" stroke="#344957"/>
+<text x="929" y="222" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#b6c8d5">Mon</text>
+<line x1="918" y1="232" x2="918" y2="526" stroke="#243d4d"/>
+<text x="1007" y="222" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#b6c8d5">Tue</text>
+<line x1="996" y1="232" x2="996" y2="526" stroke="#243d4d"/>
+<text x="1085" y="222" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#b6c8d5">Wed</text>
+<line x1="1074" y1="232" x2="1074" y2="526" stroke="#243d4d"/>
+<text x="44" y="252" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#bfd0dc">Work tasks</text>
+<rect x="42" y="268" width="250" height="35" rx="5" fill="#111820" stroke="#223440"/>
+<rect x="42" y="268" width="4" height="35" rx="0" fill="#48a882" stroke="#48a882"/>
+<text x="56" y="292" font-family="Arial, sans-serif" font-size="18" font-weight="400" fill="#eaf2f8">Prepare outline</text>
+<rect x="330" y="278" width="100" height="15" rx="4" fill="#48a882" stroke="#48a882"/>
+<text x="44" y="333" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#bfd0dc">Work Deck</text>
+<rect x="42" y="349" width="250" height="35" rx="5" fill="#111820" stroke="#223440"/>
+<rect x="42" y="349" width="4" height="35" rx="0" fill="#be87d3" stroke="#be87d3"/>
+<text x="56" y="373" font-family="Arial, sans-serif" font-size="18" font-weight="400" fill="#eaf2f8">Draft layout</text>
+<rect x="408" y="359" width="100" height="15" rx="4" fill="#be87d3" stroke="#be87d3"/>
+<text x="644" y="252" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#eaf2f8">Delivery</text>
+<rect x="642" y="268" width="250" height="35" rx="5" fill="#111820" stroke="#223440"/>
+<rect x="642" y="268" width="4" height="35" rx="0" fill="#48a882" stroke="#48a882"/>
+<text x="656" y="292" font-family="Arial, sans-serif" font-size="18" font-weight="400" fill="#eaf2f8">Prepare outline</text>
+<rect x="930" y="278" width="100" height="15" rx="4" fill="#48a882" stroke="#48a882"/>
+<rect x="642" y="315" width="250" height="35" rx="5" fill="#111820" stroke="#223440"/>
+<rect x="642" y="315" width="4" height="35" rx="0" fill="#be87d3" stroke="#be87d3"/>
+<text x="656" y="339" font-family="Arial, sans-serif" font-size="18" font-weight="400" fill="#eaf2f8">Draft layout</text>
+<rect x="1008" y="325" width="100" height="15" rx="4" fill="#be87d3" stroke="#be87d3"/>
+<line x1="36" y1="418" x2="564" y2="418" stroke="#344957"/>
+<text x="44" y="450" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#bfd0dc">Calendar</text>
+<text x="44" y="482" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#93aebb">Work calendar</text>
+<rect x="406" y="444" width="70" height="58" rx="5" fill="#142c3f" stroke="#67b2ea"/>
+<rect x="406" y="444" width="4" height="58" rx="0" fill="#67b2ea" stroke="#67b2ea"/>
+<text x="418" y="467" font-family="Arial, sans-serif" font-size="17" font-weight="400" fill="#eaf2f8">Review</text>
+<text x="418" y="489" font-family="Arial, sans-serif" font-size="14" font-weight="400" fill="#b6c8d5">10–11</text>
+<line x1="636" y1="418" x2="1164" y2="418" stroke="#344957"/>
+<text x="644" y="450" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#bfd0dc">Calendar</text>
+<text x="644" y="482" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#93aebb">Work calendar</text>
+<rect x="1006" y="444" width="70" height="58" rx="5" fill="#142c3f" stroke="#67b2ea"/>
+<rect x="1006" y="444" width="4" height="58" rx="0" fill="#67b2ea" stroke="#67b2ea"/>
+<text x="1018" y="467" font-family="Arial, sans-serif" font-size="17" font-weight="400" fill="#eaf2f8">Review</text>
+<text x="1018" y="489" font-family="Arial, sans-serif" font-size="14" font-weight="400" fill="#b6c8d5">10–11</text>
+<text x="28" y="564" font-family="Arial, sans-serif" font-size="19" font-weight="400" fill="#d3e8f4">Same work and dates; one heading. Calendar entries keep their native source color.</text>
+<text x="28" y="590" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#93aebb">Illustration · Fictional data · Simplified app views</text>
+</svg>

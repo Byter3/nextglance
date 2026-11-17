@@ -1,0 +1,10 @@
+<script setup lang="ts">
+import {Plus,X} from 'lucide-vue-next'
+const props=defineProps<{modelValue:number[];disabled?:boolean;unsupportedCount?:number}>()
+const emit=defineEmits<{'update:modelValue':[value:number[]]}>()
+function set(index:number,event:Event){if(props.disabled)return;const value=[...props.modelValue],text=(event.target as HTMLInputElement).value;value[index]=text===''?NaN:Number(text);emit('update:modelValue',value)}
+function remove(index:number){if(!props.disabled)emit('update:modelValue',props.modelValue.filter((_,i)=>i!==index))}
+function add(){if(!props.disabled&&props.modelValue.length<5)emit('update:modelValue',[...props.modelValue,[15,0,30,60,1440].find(value=>!props.modelValue.includes(value))!])}
+</script>
+<template><section class="event-reminders" aria-label="Event reminders"><header><strong>Reminders</strong><button type="button" class="text-button" :disabled="disabled||modelValue.length>=5" @click="add"><Plus :size="14"/>Add reminder</button></header><div v-for="(minutes,index) in modelValue" :key="index" class="reminder-row"><input :value="Number.isFinite(minutes)?minutes:''" type="number" min="0" max="40320" step="1" :disabled="disabled" :aria-label="`Reminder ${index+1}: minutes before start`" @input="set(index,$event)"/><span>minutes before start</span><button type="button" class="icon-button" :disabled="disabled" :aria-label="`Remove reminder ${index+1}`" @click="remove(index)"><X :size="16"/></button></div><p v-if="!modelValue.length" class="field-hint">No reminders</p><p v-if="unsupportedCount" class="field-hint">{{unsupportedCount}} other native {{unsupportedCount===1?'reminder is':'reminders are'}} preserved.</p></section></template>
+<style scoped>.event-reminders{margin:14px 0}.event-reminders header{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px}.reminder-row{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--muted)}.reminder-row input{width:100px}.reminder-row .icon-button{flex:none}.event-reminders .field-hint{margin-top:8px}</style>

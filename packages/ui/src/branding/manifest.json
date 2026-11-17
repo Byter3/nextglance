@@ -1,0 +1,77 @@
+{
+  "status": "approved",
+  "decision": "BRAND-01",
+  "approvedDate": "2026-11-17",
+  "symbol": "stacked-calendar-two-timeline-bars-foreground-tick",
+  "defaultBadge": "nextglance-icon.svg",
+  "monochromeLight": "nextglance-mark.svg",
+  "monochromeDark": "nextglance-mark-dark.svg",
+  "themeForeground": "nextglance-mark-current.svg",
+  "master": "nextglance-master.svg",
+  "geometryBounds": [
+    226,
+    249,
+    1047.9881591796875,
+    1029.9278564453125
+  ],
+  "sourceViewBox": [
+    0,
+    0,
+    1254,
+    1254
+  ],
+  "compactViewBox": [
+    167,
+    169,
+    940,
+    940
+  ],
+  "adaptiveViewBox": [
+    -300,
+    -300,
+    1854,
+    1854
+  ],
+  "assets": [
+    {
+      "filename": "nextglance-master.svg",
+      "sha256": "db3ededda04d05fea816648221f4c1cc7514a7fac97f4df2ff26b8c8491b9d1f"
+    },
+    {
+      "filename": "nextglance-icon.svg",
+      "sha256": "308ab290baf59228d99a872bed8e56f249beb2213ca67e7d6903f46c0f22c5c9"
+    },
+    {
+      "filename": "nextglance-mark.svg",
+      "sha256": "c780b531a303d483bd9fab463a396fc57728b92f2eeced8fb6edc78bfc356800"
+    },
+    {
+      "filename": "nextglance-mark-dark.svg",
+      "sha256": "6c97dea4869dfc7430c113be9e3751071b3a592c50037f30e5a7c88d4368c66c"
+    },
+    {
+      "filename": "nextglance-mark-current.svg",
+      "sha256": "da7938ae3e96484fb77da153a92ddd3c002684c1cc688b054a5c325d7743b3a4"
+    },
+    {
+      "filename": "nextglance-gradient-dark.svg",
+      "sha256": "c23358b0edf211a57ee2922d64dc3ea9242f932250eeca75fa9bebf57f4b5482"
+    },
+    {
+      "filename": "nextglance-gradient-white.svg",
+      "sha256": "3e170dff721c4b47594c1a42d75c25b5d23044d23ad9513aaa6452ac04ffbee3"
+    },
+    {
+      "filename": "nextglance-adaptive-foreground.svg",
+      "sha256": "506e32e440bd13b1a07585152b2e6ce41df8ad929be12d45d5cee80551fe6395"
+    },
+    {
+      "filename": "nextglance-icon.png",
+      "sha256": "4fcad92d860f1c431e7945a1e72cc7b8c2b9e64d2b67b02ba66efba679eff3df"
+    },
+    {
+      "filename": "nextglance-adaptive-foreground.png",
+      "sha256": "53529150001a12235ec12c708f8b2b196f228ec0d6cbbb322c5dcd094dc62ce9"
+    }
+  ]
+}

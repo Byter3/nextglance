@@ -1,0 +1,4 @@
+import type {ViewPreferences,ViewPreferencesInput,ViewPreferencesState} from '@nextspace/contracts'
+import type {ScopePreferenceStore} from './scope-preferences.mjs'
+export interface PreferenceJournal {version:1;base:ViewPreferences;preferences:ViewPreferences;etag:string|null;migration:boolean}
+export function createViewPreferenceSync(ports:{read:()=>Promise<ViewPreferencesState>;save:(value:ViewPreferencesInput)=>Promise<ViewPreferencesState>;publish:(value:ViewPreferences)=>void;persist?:(value:PreferenceJournal)=>void;status?:(value:{syncing:boolean;error:unknown})=>void;local:ScopePreferenceStore;initial?:unknown;retainPending?:boolean}):{snapshot:()=>PreferenceJournal;edit:(value:ViewPreferences)=>void;editPage:(scope:string,view:import('@nextspace/contracts').PlannerView,page:import('@nextspace/contracts').ViewPageFilters)=>void;refresh:()=>Promise<void>;resolve:(choice:'local'|'remote')=>Promise<void>;close:()=>void}

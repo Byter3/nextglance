@@ -1,0 +1,9 @@
+# Keep source diffs consistent across Windows and Unix checkouts.
+* text=auto eol=lf
+*.sh text eol=lf
+gradlew text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.ico binary
+*.jar binary

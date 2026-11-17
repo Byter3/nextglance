@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+    <id>nextglance</id>
+    <name>NextGlance</name>
+    <summary>Your Nextcloud planner in one view</summary>
+    <description>Bring native calendars, tasks, Deck cards and notes together using your existing Nextcloud session and planner organization.</description>
+    <version>0.6.17</version>
+    <licence>AGPL-3.0-or-later</licence>
+    <author>NextGlance contributors</author>
+    <namespace>Nextglance</namespace>
+    <category>organization</category>
+    <dependencies>
+        <php min-version="8.2" max-version="8.5"/>
+        <nextcloud min-version="34" max-version="35"/>
+    </dependencies>
+    <navigations>
+        <navigation>
+            <name>NextGlance</name>
+            <route>nextglance.page.index</route>
+            <order>30</order>
+        </navigation>
+    </navigations>
+</info>

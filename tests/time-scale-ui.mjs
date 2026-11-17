@@ -1,0 +1,86 @@
+import assert from 'node:assert/strict'
+import {mkdir} from 'node:fs/promises'
+import {chromium} from 'playwright'
+import {plannerFixture} from './fixtures.mjs'
+const fixture=plannerFixture(new Date(2026,10,2,9))
+fixture.workspace.planner.scopeId='all'
+await mkdir('artifacts',{recursive:true})
+const browser=await chromium.launch({headless:true,channel:'msedge'})
+const context=await browser.newContext({viewport:{width:1652,height:1050},timezoneId:'Europe/Budapest'})
+const page=await context.newPage(),errors=[],checks=[]
+page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(12000)
+await page.addInitScript(initial=>{
+ let state=structuredClone(initial);window.__nativeWrites=0
+ const read=async()=>structuredClone(state)
+ window.workspaceApi={getState:read,refresh:read,saveWorkspace:async(workspace)=>{state.workspace=structuredClone(workspace);state.revision++;return {workspace:state.workspace,revision:state.revision,storage:state.storage}},openExternal:async()=>{},readPage:async()=>({body:''})}
+},fixture)
+const split=page.locator('.overview-split')
+const date=page.getByLabel('Choose calendar date')
+const range=page.getByLabel('Timeline range')
+async function aligned(){await page.waitForFunction(()=>{const a=[...document.querySelectorAll('.overview-split .timeline-days>div')],b=[...document.querySelectorAll('.overview-split .calendar-day-track')];return a.length===b.length&&a.length>0&&a.every((el,i)=>{const x=el.getBoundingClientRect(),y=b[i].getBoundingClientRect();return Math.abs(x.left-y.left)<1.1&&Math.abs(x.width-y.width)<1.1})})}
+async function wheelAt(locator,delta){await page.waitForTimeout(80);const rect=await locator.boundingBox();assert.ok(rect);await page.mouse.move(rect.x+rect.width*.7,rect.y+Math.min(80,rect.height/2));await page.keyboard.down('Control');await page.mouse.wheel(0,delta);await page.keyboard.up('Control')}
+try{
+ await page.goto('http://127.0.0.1:5173');await split.waitFor();await date.fill('2026-11-02');await date.dispatchEvent('change');await aligned()
+ await wheelAt(split.locator('.overview-work-pane'),-120)
+ await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Timeline range"]').value)<7)
+ const zoomed=Number(await range.inputValue());await aligned()
+ assert.equal(await split.locator('.calendar-day-track').count(),zoomed)
+ await wheelAt(split.locator('.overview-work-pane'),160)
+ await page.waitForFunction(prior=>Number(document.querySelector('[aria-label="Timeline range"]').value)>prior,zoomed)
+ await aligned();checks.push('Timeline Ctrl+wheel changes the displayed date range and keeps calendar columns aligned')
+ const calendar=split.locator('.calendar-view'),hours=calendar.locator('.calendar-times-scroll')
+ const anchorBefore=await date.inputValue(),daysBefore=await range.inputValue()
+ await wheelAt(hours,-120)
+ await page.waitForFunction(()=>parseFloat(getComputedStyle(document.querySelector('.overview-split .calendar-hour-line')).height)>48)
+ assert.equal(await date.inputValue(),anchorBefore);assert.equal(await range.inputValue(),daysBefore)
+ const hourHeight=await calendar.locator('.calendar-hour-line').first().evaluate(el=>el.getBoundingClientRect().height)
+ const gridHeight=await calendar.locator('.calendar-time-grid').evaluate(el=>el.getBoundingClientRect().height)
+ assert.ok(Math.abs(gridHeight-hourHeight*24)<2)
+ await wheelAt(hours,120)
+ await page.waitForFunction(prior=>parseFloat(getComputedStyle(document.querySelector('.overview-split .calendar-hour-line')).height)<prior,hourHeight)
+ checks.push('Overview calendar Ctrl+wheel scales its vertical hours without changing shared dates; all 24 hours remain reachable')
+ await range.selectOption('7');await aligned()
+ const prior=await date.inputValue(),thumb=split.locator('.date-scroll-thumb'),box=await thumb.boundingBox()
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+48,box.y+box.height/2,{steps:8});await page.mouse.up()
+ await page.waitForFunction(value=>document.querySelector('[aria-label="Choose calendar date"]').value!==value,prior)
+ await aligned();checks.push('Horizontal date thumb pans the visible period even when its full range fits the screen')
+ // Exercise the minimum-width day columns, where the date range is wider than its viewport.
+ await split.evaluate(el=>{el.style.width='480px';el.style.maxWidth='480px';el.style.boxSizing='content-box'})
+ await range.selectOption('90');await date.fill('2026-11-02');await date.dispatchEvent('change');await aligned()
+ await page.waitForFunction(()=>Math.abs(document.querySelector('.overview-split .timeline-days>div').getBoundingClientRect().width-12)<.1)
+ const pointer=await split.evaluate(el=>{const day=el.querySelector('.timeline-days>div').getBoundingClientRect(),view=el.querySelector('.timeline-scroll'),bounds=view.getBoundingClientRect();const x=(day.left+bounds.left+view.clientWidth)/2;return {x,y:day.top+day.height/2,offset:(x-day.left)/day.width}})
+ const oldAnchor=await date.inputValue()
+ await page.mouse.move(pointer.x,pointer.y);await page.keyboard.down('Control');await page.mouse.wheel(0,-100);await page.keyboard.up('Control')
+ await page.waitForFunction(()=>document.querySelector('[aria-label="Timeline range"]').value==='60');await aligned()
+ const newOffset=await split.locator('.timeline-days>div').first().evaluate((el,x)=>(x-el.getBoundingClientRect().left)/el.getBoundingClientRect().width,pointer.x)
+ const anchorShift=(Date.parse(await date.inputValue())-Date.parse(oldAnchor))/86400000
+ assert.ok(Math.abs(anchorShift+newOffset-pointer.offset)<=.51,'Zoom must preserve the day under the pointer even when both ranges overflow')
+ checks.push('Narrow Overview 90-to-60-day zoom preserves the pointer date with 12px day columns')
+ // At this geometry floating-point multiplication used to yield a false 5.68e-14px overflow.
+ await split.evaluate(el=>{el.style.width='512px';el.style.maxWidth='512px'})
+ await range.selectOption('28');await aligned()
+ await page.waitForTimeout(80)
+ await wheelAt(split.locator('.overview-work-pane'),-97)
+ await page.waitForFunction(()=>document.querySelector('[aria-label="Timeline range"]').value==='19');await aligned()
+ const fittingPrior=await date.inputValue(),fittingThumb=await thumb.boundingBox()
+ assert.ok(fittingThumb)
+ await page.mouse.move(fittingThumb.x+fittingThumb.width/2,fittingThumb.y+fittingThumb.height/2);await page.mouse.down();await page.mouse.move(fittingThumb.x+fittingThumb.width/2+48,fittingThumb.y+fittingThumb.height/2,{steps:8});await page.mouse.up()
+ await page.waitForFunction(value=>document.querySelector('[aria-label="Choose calendar date"]').value!==value,fittingPrior)
+ await aligned();checks.push('512px Overview with 19 fitting days pans dates despite subpixel arithmetic residue')
+ await split.evaluate(el=>{el.style.removeProperty('width');el.style.removeProperty('max-width');el.style.removeProperty('box-sizing')})
+ await page.getByRole('tab',{name:'Calendar',exact:true}).click()
+ const standalone=page.getByRole('region',{name:'Week calendar'})
+ await wheelAt(standalone.locator('.calendar-times-scroll'),-120)
+ await page.waitForFunction(()=>parseFloat(getComputedStyle(document.querySelector('.calendar-view .calendar-hour-line')).height)>48)
+ await standalone.getByRole('button',{name:/Hour height/}).click()
+ await page.waitForFunction(()=>Math.abs(parseFloat(getComputedStyle(document.querySelector('.calendar-view .calendar-hour-line')).height)-48)<.1)
+ checks.push('Standalone Calendar scales hours and resets its hour height')
+ await page.getByRole('tab',{name:'Timeline',exact:true}).click()
+ const oldRange=Number(await range.inputValue())
+ await wheelAt(page.locator('.timeline-view'),-120)
+ await page.waitForFunction(old=>Number(document.querySelector('[aria-label="Timeline range"]').value)<old,oldRange)
+ checks.push('Standalone Timeline Ctrl+wheel changes the from/to date range')
+ assert.deepEqual(errors,[])
+ await page.screenshot({path:'artifacts/time-scale-timeline.png',fullPage:true})
+ console.log(JSON.stringify({result:'PASS',checks},null,2))
+}catch(error){console.error(JSON.stringify({result:'FAIL',checks,errors,error:String(error)},null,2));await page.screenshot({path:'artifacts/time-scale-failure.png',fullPage:true});throw error}finally{await context.close();await browser.close()}
