@@ -46,7 +46,18 @@ class LoginFlowRegistry {
 }
 
 function reconcileCache(before, incoming, sourceNames) {
-  const statuses = sourceNames.map(source => incoming.statuses.find(status => status.source === source) || { source, state: 'error', count: 0, message: 'This source did not return a status.' })
+  const statuses = sourceNames.map(source => {
+    const status = incoming.statuses.find(status => status.source === source) || { source, state: 'error', count: 0, message: 'This source did not return a status.' }
+    const previous = before.statuses?.find(status => status.source === source)
+    // A failed refresh is not a new success, but it must not erase the date of
+    // the last complete refresh. Current error/permission gates remain intact.
+    const retained = { ...status }
+    if (status.state !== 'connected') {
+      delete retained.lastSyncedAt
+      if (status.permissionDenied !== true && typeof previous?.lastSyncedAt === 'string' && Number.isFinite(Date.parse(previous.lastSyncedAt))) retained.lastSyncedAt = previous.lastSyncedAt
+    }
+    return retained
+  })
   const successful = new Set(statuses.filter(status => status.state === 'connected' && status.permissionDenied !== true).map(status => status.source))
   const denied = new Set(statuses.filter(status => status.permissionDenied === true).map(status => status.source))
   const revoked = new Set(statuses.flatMap(status => Array.isArray(status.revokedCollectionIds) ? status.revokedCollectionIds : []))

@@ -1388,7 +1388,10 @@ export class NextcloudClient {
   }
 
   async readDav(source, available, context = undefined) {
-    if (this.#davReadMode === 'propfind-get' || this.#resourceCache || available.some(calendar=>checkedDavToken(calendar.token))) return this.readMobileDav(source, available, context || mobileDavContext());
+    // Collection tokens do not opt a REPORT host into downloading its entire
+    // history. That scan needs a durable resource cache to resume across runs;
+    // otherwise keep the server-side event horizon and complete task query.
+    if (this.#davReadMode === 'propfind-get' || this.#resourceCache) return this.readMobileDav(source, available, context || mobileDavContext());
     const component = source === 'tasks' ? 'VTODO' : 'VEVENT';
     const calendars = available.filter(c => c.components.includes(component));
     const collections = calendars.map(c => ({ id: this.id(source, c.href), source, title: c.title, readonly: Boolean(c.readonly), ...(hexColor(c.color) ? { color: hexColor(c.color) } : {}), remote: { href: c.href },...calendarSchedulingFields(c,source) }));

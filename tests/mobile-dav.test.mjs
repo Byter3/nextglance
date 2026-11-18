@@ -344,10 +344,10 @@ test('projection record and byte safety bounds stay explicit even when the trans
   const {client} = fixture([{name: 'one.ics', body: task('one')}]);
   // Use the real scanner with a small deterministic projector to isolate the
   // separate limits on projected records from the per-resource download bound.
-  client.calendarRecordsCooperative = async () => Array.from({length: 10_001}, (_, index) => ({id: String(index), title: 'Task'}));
+  client.calendarRecordsCooperative = async () => Array.from({length: 10_001}, (_, index) => ({id: String(index), identity: {key: String(index)}, title: 'Task'}));
   const byCount = await client.readDav('tasks', [{...calendar, components: ['VTODO']}]);
   assert.equal(byCount.records.length, 10_000); assert.match(byCount.warning, /10,000 projected items/);
-  client.calendarRecordsCooperative = async () => Array.from({length: 33}, (_, index) => ({id: String(index), title: 'x'.repeat(1024 * 1024)}));
+  client.calendarRecordsCooperative = async () => Array.from({length: 33}, (_, index) => ({id: String(index), identity: {key: String(index)}, title: 'x'.repeat(1024 * 1024)}));
   const byBytes = await client.readDav('tasks', [{...calendar, components: ['VTODO']}]);
   assert.equal(byBytes.records.length, 31); assert.match(byBytes.warning, /32 MiB projected data/);
 });

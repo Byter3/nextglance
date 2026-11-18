@@ -11,7 +11,16 @@ const wrap=(rows,token='')=>`<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:par
 const ics=uid=>`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:${uid}\r\nSUMMARY:${uid}\r\nEND:VTODO\r\nEND:VCALENDAR\r\n`
 function world(){
   const state={items:new Map([['one.ics',{body:ics('one'),etag:'"1"'}],['gone.ics',{body:ics('gone'),etag:'"1"'}]]),token:'token:1',delta:null,deltaStatus:207,multigetStatus:207,calls:[],malformed:false}
-  const client=new NextcloudClient({serverUrl:SERVER,username:'tester'},{authentication:'delegated',accountKey:'fixture',now:()=>new Date('2026-11-17T12:00:00Z'),fetch:async(url,input)=>{
+  // REPORT delta/multiget scanning is an explicit cache-backed opt-in.
+  const entries=new Map(),resourceCache={
+    get:async({href})=>structuredClone(entries.get(href)||null),
+    put:async entry=>entries.set(entry.href,structuredClone(entry)),
+    remove:async({href})=>entries.delete(href),
+    prune:async({collection,hrefs})=>{for(const [href,entry] of entries)if(entry.collection===collection&&!hrefs.includes(href))entries.delete(href)},
+    retainCollections:async({collections})=>{for(const [href,entry] of entries)if(!collections.includes(entry.collection))entries.delete(href)},
+    clear:async()=>entries.clear(),
+  }
+  const client=new NextcloudClient({serverUrl:SERVER,username:'tester'},{authentication:'delegated',accountKey:'fixture',resourceCache,now:()=>new Date('2026-11-17T12:00:00Z'),fetch:async(url,input)=>{
     state.calls.push({url,...input})
     if(input.method==='PROPFIND')return new Response(wrap(row(ROOT,'<d:resourcetype><d:collection/></d:resourcetype>')+[...state.items].map(([name,value])=>row(ROOT+name,`<d:getetag>${escape(value.etag)}</d:getetag>`)).join('')),{status:207})
     if(input.method==='REPORT'&&input.body.includes('sync-collection'))return new Response(state.delta??wrap('',state.token),{status:state.deltaStatus})
