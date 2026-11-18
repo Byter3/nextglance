@@ -2,15 +2,18 @@
 
 ## Windows calendar refresh regression — SYNC-13
 
-Reported 2026-11-18 on Windows 0.6.17/build19. Source repair and fast checks only; no new package or live-account acceptance is claimed.
+Reported 2026-11-18 on Windows 0.6.17/build19. The owner subsequently requested RELEASE-18: a corrected Windows 0.6.18/build20 package and source push. Android/Web packages remain unchanged; live-account acceptance is separate.
 
 - [x] REPORT readers without a durable cache keep bounded calendar queries even when discovery returns collection tokens; task queries retain all native tasks.
 - [x] Durable-cache and PROPFIND/GET readers retain incremental scanning, cancellation and checkpoint safeguards.
 - [x] Windows retains the last successful source timestamp across transient/partial failures without fabricating fresh data or write eligibility.
 - [x] Targeted protocol/Windows regressions and relevant shared-vector checks pass.
-- [ ] Confirm successful refresh in the affected installed Windows client after a separately requested build.
+- [ ] Confirm successful refresh against the affected account using the new Windows build.
+- [x] Build and verify the Windows 0.6.18/build20 portable package, retaining the previous release.
 
 Fresh **2026-11-18** fixture evidence: both sync-token and ctag reproduced Tasks/Calendar TIMEOUT through the actual Windows Node wrapper with 512 fictional historical events and a simulated network clock. After the repair, each pass uses two component-filtered REPORT queries, preserves old completed and undated tasks, returns the current booking, and retains exact native raw documents/ETags. **163** targeted protocol checks, **60** Windows/core checks, **27** Android controller/Worker/headless checks, **43** Web session/controller/transport checks and **1,072** shared-vector assertions across all three clients passed. Root independently reran **22** relevant protocol/Windows checks; counts overlap. Delta fixtures now explicitly supply their cache port; a pre-existing projection-limit fixture supplies the identity required by the real projector, with the same expected limits. No account access, full build, new artifact, version increment or live-device acceptance was performed.
+
+Subsequent **RELEASE-18 packaging, 2026-11-18**: Windows **0.6.18/build20**, file version0.6.18.20, built after the explicit owner request. Actual portable extraction and all eight isolated startup checks passed; packaged protocol/security fixes, three legal notice files and all nine approved icon payloads match source. The 0.6.17 executable is unchanged. Android/Web were not rebuilt and no live account was accessed. [Artifact and checksum](../docs/RELEASES.md#0618--windows-build-20).
 
 Authority: [BEHAVIOR_SPEC.md](BEHAVIOR_SPEC.md). Baseline audited 2026-11-11; current all-client release milestone 0.6.17/build 19. Workspace schema 2; folder protocol 1. Web implementation is authorized under WEB-01; historical hold notes below describe earlier milestones.
 

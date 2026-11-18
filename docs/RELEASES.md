@@ -2,7 +2,19 @@
 
 These are dated records of local builds, not public download links. Artifact paths below exist only on the build machine; packages are excluded from Git. Later source changes do not retroactively change these binaries or their recorded checksums.
 
-Packages remain private development artifacts. Outputs stay in `win/release/`, `android/release/` and `web/release/`, outside source control. Application/account/storage identities remain unchanged. No repository or App Store publication is authorized.
+Packages listed here are local development artifacts. Outputs stay in `win/release/`, `android/release/` and `web/release/`, outside source control. The reviewed source is published in [Byter3/nextglance](https://github.com/Byter3/nextglance); source publication does not publish these binary packages. Application/account/storage identities remain unchanged.
+
+## 0.6.18 — Windows build 20
+
+Built on **2026-11-18** for SYNC-13 / RELEASE-18. Windows file version is `0.6.18.20`. Android and Nextcloud packages remain at 0.6.17/build19.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `win/release/NextGlance-0.6.18-Windows.exe` | 101,243,784 bytes | `88d7d33f2b62599b24238a40f1da977b2e21f1da4a4c346267d108a116037b85` |
+
+This fixes collection-token discovery incorrectly switching Windows into downloading the full historical calendar inventory. Windows retains server-filtered calendar queries and complete task queries, including old completed and undated tasks. Failed refreshes retain the previous successful timestamp without advancing it or granting edit access.
+
+The package version and exact packaged protocol/Windows security fixes were verified against source, including extraction of the actual portable wrapper. Its eight isolated startup checks passed: extraction/startup, product title, private test profile, empty disconnected state, schema 2, sandboxed renderer, navigation and no renderer errors. All three license/notice files and nine approved icon payloads match. The previous 0.6.17 executable retains its recorded checksum. Close the previous Windows app before opening this portable executable; the existing account/profile location is unchanged. Actual synchronization against the affected account remains user acceptance, separate from fixture and package checks.
 
 ## 0.6.17 — build 19
 

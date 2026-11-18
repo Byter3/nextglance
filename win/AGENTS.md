@@ -6,9 +6,9 @@ Visible branding is **NextGlance**. A display-name change must preserve the exis
 
 ## Stack and boundaries
 
-Current milestone RELEASE-17 targets 0.6.17/build19 with the approved BRAND-01 icon after fast checks and source freeze, superseding historical version references below. Use the canonical assets and treatments documented in `docs/BRANDING.md`; preserve native/package identities and previous releases. Native Deck moves use the target stack locator and fresh readback; shared UI owns floating Board drag feedback, unified dependency presentation and the independent Timeline Unscheduled sidebar.
+Current milestone RELEASE-18 targets Windows 0.6.18/build20 with the SYNC-13 bounded calendar refresh repair after fast checks and source freeze. The owner authorized this Windows package and a source push; Android and Web remain at 0.6.17/build19. Preserve native/package identities, the approved BRAND-01 icon and previous releases. Native Deck moves use the target stack locator and fresh readback; shared UI owns floating Board drag feedback, unified dependency presentation and the independent Timeline Unscheduled sidebar.
 
-Private pnpm workspace package `@nextspace/windows`, version 0.6.17, build 19. Electron 44, Vue 3.5, TypeScript 5.9, Vite 7, electron-builder 26. Shared UI uses Tiptap, Markdown-it, DOMPurify and Lucide. Use installed/locked versions; do not upgrade frameworks as incidental cleanup.
+Private pnpm workspace package `@nextspace/windows`, version 0.6.18, build 20. Electron 44, Vue 3.5, TypeScript 5.9, Vite 7, electron-builder 26. Shared UI uses Tiptap, Markdown-it, DOMPurify and Lucide. Use installed/locked versions; do not upgrade frameworks as incidental cleanup.
 
 `electron/main.cjs` owns host operations; the preload exposes the typed WorkspaceApi. The sandboxed renderer must not receive Node access, credentials or unrestricted IPC. The host owns secure credential storage, networking, account-local durable storage and scheduling recovery. Operation lanes coordinate background reads, native mutations and account changes.
 

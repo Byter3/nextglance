@@ -62,4 +62,4 @@ node scripts/check-repository.mjs --staged
 
 The source check inspects Git candidates (or the exact staged blobs), rejects common private/generated paths and secret formats, and reports locations without copying secret values. It complements manual review; it cannot recognize every personal title or credential. Changes to application behavior follow the shared spec and focused checks in [verification](docs/VERIFICATION.md).
 
-Public binary distribution additionally needs a complete dependency notice inventory, appropriate signing and live-platform acceptance. The current Android artifact is a development APK. No repository, support URL or public download location is assumed here.
+Public binary distribution additionally needs a complete dependency notice inventory, appropriate signing and live-platform acceptance. The current Android artifact is a development APK. Source is available at [Byter3/nextglance](https://github.com/Byter3/nextglance); the packages recorded in the release evidence remain local artifacts.

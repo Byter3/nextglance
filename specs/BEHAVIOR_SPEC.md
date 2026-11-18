@@ -1,12 +1,14 @@
 # NextGlance behavior specification
 
-Status: authoritative shared behavior baseline, established 2026-11-11 from the current reference implementation, regression tests and owner decisions. This is the single source of truth for all clients. Product 0.6.17; workspace schema 2; cloud folder protocol 1. These are separate version domains.
+Status: authoritative shared behavior baseline, established 2026-11-11 from the current reference implementation, regression tests and owner decisions. This is the single source of truth for all clients. Windows 0.6.18; Android/Web 0.6.17; workspace schema 2; cloud folder protocol 1. These are separate version domains.
 
 ## Product identity
 
 The owner-selected product name is **NextGlance**, with that exact capitalization. Use it in visible application names, headings, window titles and current product documentation. This is a display-name change, not a storage/account/protocol migration. Existing `@nextspace/*` package names, native application IDs, credential namespaces, local account-profile location, `/Workspace/Nextspace/`, serialized `nextspace-*` format markers and historical artifact names remain technical identifiers until a separately specified migration. Never silently create a new account profile or cloud metadata directory because the display name changed. Do not bump product/schema/protocol versions or publish as part of naming.
 
 ### SYNC-13. Windows bounded calendar refresh repair (2026-11-18)
+
+RELEASE-18: after the source repair and fast checks, the owner requests the final Windows **0.6.18/build20** package (file version0.6.18.20) and a source push to the existing GitHub repository. Preserve prior packages and application/account/storage identities. Android and Web packaging remain at 0.6.17/build19. Verify the new Windows executable and its packaged fix in an isolated profile. No store submission, server deployment or binary-release publication is included.
 
 This clarifies the existing SYNC-03 transport opt-in after a Windows timeout report. A REPORT-capable reader without an explicit durable `resourceCache` must retain the existing server-side calendar-query path: complete VTODO queries and VEVENT queries bounded to the existing projection horizon. Discovering a collection sync-token/ctag alone must not switch that reader to downloading every historical resource. Readers with the durable cache port, and PROPFIND/GET-only transports, retain their existing incremental scan/checkpoint behavior. Preserve recurrence, permission, cancellation, response limits and native edit baselines; do not raise the deadline or falsely certify a partial source to conceal the timeout.
 

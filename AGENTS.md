@@ -45,6 +45,8 @@ Use targeted unit tests and no-emit/syntax checks only during iterations. Exampl
 
 ## Current owner decisions
 
+- RELEASE-18 (2026-11-18): after SYNC-13 fast checks, the owner explicitly requested a corrected Windows build and GitHub push. Package Windows **0.6.18/build20** (file version0.6.18.20), preserve prior artifacts and technical identities, then push the reviewed source to `Byter3/nextglance`. Android and Web packages remain 0.6.17/build19. This authorizes the final Windows package and source push, not store submission, server deployment or publishing binary release assets.
+
 - RELEASE-17 (2026-11-17): rebuild all clients with the approved BRAND-01 project icon at 0.6.17/build19 after source freeze. Windows file version0.6.17.19, Android versionCode19, Web app0.6.17. Preserve prior artifacts and technical/signing/storage identities. No deployment/publication.
 
 - BRAND-01 (2026-11-17): the owner approved the stacked Calendar/rear-card, two timeline bars and foreground Tasks tick as the app icon. Canonical assets are in `packages/ui/src/branding/`; use the solid blue/white badge for launchers and appropriate monochrome glyphs for host/in-app surfaces. Gradient badges are approved alternatives. See `docs/BRANDING.md`. This authorizes source integration and fast checks, not a new release build or identity/version change.
