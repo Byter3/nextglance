@@ -8,11 +8,12 @@ import TimelineLegend from './TimelineLegend.vue'
 import TimelineFloatingEvents from './TimelineFloatingEvents.vue'
 import {sourceColor, recordTags} from '@nextspace/core/record-presentation.mjs'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import type { ComputedRef } from 'vue'
 import { ArrowRight, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Circle, Diamond, Folder, FolderKanban, Link2, Minus, Plus, RotateCcw, PanelLeftClose, PanelLeftOpen } from 'lucide-vue-next'
 import type { Category, Collection, OverviewAxis, PlanSession, Project, RecordTag, Relation, ScopeArrangement, Space, StatusMapping, WorkspaceRecord } from '@nextspace/contracts'
 import {unifiedStatus} from '@nextspace/core/status-mapping.mjs'
 import { clockTime, dateValue, dayKey, eventLabel, isOverdue, shortDate, sourceLabels } from './planner-ui'
-import { recordGrouping, timelineEvents, timelineGeometry, timelineGroups, timelineInterval, timelineOffset, timelineStatus } from '@nextspace/core/timeline.mjs'
+import { indexTimelineEvents, recordGrouping, timelineDayEvents, timelineEvents, timelineGeometry, timelineGroups, timelineInterval, timelineOffset, timelineStatus } from '@nextspace/core/timeline.mjs'
 import type { TimelineEvent, TimelineGroup, TimelineInterval } from '@nextspace/core/timeline.mjs'
 import { timelineDateEdit, timelinePlanEdit, zoomTimelineRange } from '@nextspace/core/timeline-edit.mjs'
 import type { TimelineDateEdit } from '@nextspace/core/timeline-edit.mjs'
@@ -25,7 +26,7 @@ import {usePlannerTouch} from './usePlannerTouch'
 import {useDateCanvas} from './useDateCanvas'
 import {orderTimelineRecords,orderTimelineGroups,reorderIds} from '@nextspace/core/planning-order.mjs'
 import {useListReorder,type ListReorderIntent} from './useListReorder'
-import {collapsedTimelineSpans,type CollapsedTimelineSpan} from '@nextspace/core/timeline-context.mjs'
+import {collapsedTimelineSpans,timelineBandRuns,type CollapsedTimelineSpan} from '@nextspace/core/timeline-context.mjs'
 import {usePinnedItemLabels} from './usePinnedItemLabels'
 import {useDateLabels} from './useDateLabels'
 
@@ -46,8 +47,15 @@ const unscheduledIds=computed(()=>new Set(unscheduledItems.value.map(record=>rec
 const rowRecords=computed(()=>timelineRowRecords(props.records,unscheduledIds.value,!props.axis&&!inlineUnscheduled.value))
 const contextIds=computed(()=>new Set(props.contextRecordIds||[]))
 const sourceTint=(record:WorkspaceRecord)=>props.sourceColorFor?.(record)||sourceColor(record,props.collections,props.colorFor(record))
-const tagsByRecord=computed(()=>new WeakMap(props.records.filter(record=>['card','task','event'].includes(record.kind)).map(record=>[record,props.tagsFor?.(record)||recordTags(record)] as const)))
-const itemTags=(record:WorkspaceRecord)=>tagsByRecord.value.get(record)||props.tagsFor?.(record)||recordTags(record)
+function recordProjection<T>(project:(record:WorkspaceRecord)=>T){
+  const projections=new WeakMap<WorkspaceRecord,ComputedRef<T>>()
+  return (record:WorkspaceRecord)=>{
+    let projection=projections.get(record)
+    if(!projection){projection=computed(()=>project(record));projections.set(record,projection)}
+    return projection.value
+  }
+}
+const itemTags=recordProjection(record=>props.tagsFor?.(record)||recordTags(record))
 const tagDescription=(record:WorkspaceRecord)=>{const tags=itemTags(record);return tags.length?` · Tags: ${tags.map(tag=>tag.title).join(', ')}`:''}
 const emit = defineEmits<{open:[record:WorkspaceRecord];hover:[id:string|null];horizontalScroll:[left:number];datePan:[delta:number];touchRangeChange:[range:{anchor:string;days:number;scrollLeft:number}];scrollbarWidth:[width:number];createEvent:[range:CreationRange];dateEdit:[edit:TimelineDateEdit];planEdit:[edit:{id:string;start:string;end:string}];link:[link:{fromId:string;toId:string}];rangeChange:[range:{anchor:string;days:number}];'update:allCalendarBands':[value:boolean];reorder:[intent:{kind:'timelineRows'|'timelineGroups';ids:string[]}];resetOrder:[];'update:listCollapsed':[value:boolean]}>()
 const collapsed = ref(new Set<string>()), limit = ref(180)
@@ -99,6 +107,7 @@ function measureListWidth(){
   ownLabelWidth.value=Math.min(configured,viewportWidth.value<600?Math.min(180,viewportWidth.value*.55):viewportWidth.value*.55)
 }
 const todayKey=ref(dayKey(new Date()))
+const timeZone=ref(Intl.DateTimeFormat().resolvedOptions().timeZone)
 let lastScrollbarWidth=-1
 function reportScrollbarWidth(){
   if(!props.axis||!scroller.value)return
@@ -123,7 +132,7 @@ function horizontalWheel(event:WheelEvent){
 watch(()=>[canvas.scrollLeft.value,canvas.anchor.value,ownDayWidth.value],()=>nextTick(syncHorizontalScroll),{flush:'post'})
 onMounted(()=>{
   pointerQuery=window.matchMedia('(pointer:coarse)');pointerDensity();pointerQuery.addEventListener('change',pointerDensity)
-  dayTimer=setInterval(()=>{todayKey.value=dayKey(new Date())},60000)
+  dayTimer=setInterval(()=>{todayKey.value=dayKey(new Date());timeZone.value=Intl.DateTimeFormat().resolvedOptions().timeZone},60000)
   observer=new ResizeObserver(entries=>{
     for(const entry of entries)if(entry.target===plot.value)plotWidth.value=entry.contentRect.width||840
     measureListWidth()
@@ -138,38 +147,47 @@ watch(()=>[props.axis?.scrollLeft,props.axis?.labelWidth,props.axis?.dayWidth,pr
 watch(()=>props.scopeId,()=>{limit.value=180;agendaDay.value='';if(eventPicker.value)eventPicker.value.open=false})
 watch(()=>props.focused,value=>{if(props.allCalendarBands===undefined)localAllBands.value=!value;limit.value=180})
 const dayCount = computed(()=>props.axis?.renderDays||canvas.renderDays.value)
-const days = computed(()=>Array.from({length:dayCount.value},(_,i)=>{const d=dateValue(renderAnchor.value);d.setDate(d.getDate()+i);d.setHours(0,0,0,0);return d}))
+const days = computed(()=>{
+  timeZone.value
+  return Array.from({length:dayCount.value},(_,i)=>{const d=dateValue(renderAnchor.value);d.setDate(d.getDate()+i);d.setHours(0,0,0,0);return d})
+})
 const dateLabels=useDateLabels(()=>days.value)
 const formattedDates=computed(()=>{
   todayKey.value
-  const labels=new Map<string,string>()
-  const add=(value?:string)=>{if(value&&!labels.has(value))labels.set(value,shortDate(value))}
-  for(const record of props.records){add(record.start);add(record.due);add(record.end)}
-  for(const plan of props.plans){add(plan.start);add(plan.end)}
-  for(const day of days.value)add(dayKey(day))
-  return labels
+  timeZone.value
+  return new Map<string,string>()
 })
-function dateLabel(value?:string){return value?formattedDates.value.get(value)||shortDate(value):'No date'}
-const overdueIds=computed(()=>{todayKey.value;return new Set(props.records.filter(isOverdue).map(record=>record.id))})
-const overdue=(record:WorkspaceRecord)=>overdueIds.value.has(record.id)
+function dateLabel(value?:string){
+  if(!value)return 'No date'
+  const labels=formattedDates.value
+  const label=labels.get(value)
+  if(label)return label
+  if(labels.size>=1024)labels.clear()
+  const formatted=shortDate(value)
+  labels.set(value,formatted)
+  return formatted
+}
+const overdue=recordProjection(record=>{todayKey.value;timeZone.value;return isOverdue(record)})
 const gridStyle = computed(()=>({
   '--day-count':dayCount.value,'--chart-min':`${dayCount.value*(props.axis?.dayWidth||ownDayWidth.value)}px`,'--event-header-height':`${calendarHeaderHeight.value}px`,
   width:`${labelWidth.value+dayCount.value*(props.axis?.dayWidth||ownDayWidth.value)}px`,minWidth:`${labelWidth.value+dayCount.value*(props.axis?.dayWidth||ownDayWidth.value)}px`,gridTemplateColumns:`${labelWidth.value}px ${dayCount.value*(props.axis?.dayWidth||ownDayWidth.value)}px`
 }))
-// Geometry belongs to data/range changes, not pointer or selection changes.
-// A drag preview is a separate object and deliberately bypasses this cache.
-const geometryByRecord=computed(()=>new WeakMap(props.records.map(record=>[record,timelineGeometry(record,days.value[0]!,dayCount.value)] as const)))
-const geometry = (record:WorkspaceRecord)=>geometryByRecord.value.get(record)||timelineGeometry(record,days.value[0]!,dayCount.value)
+// Compute geometry only for demanded work rows and previews when the range changes.
+const geometry=recordProjection(record=>timelineGeometry(record,days.value[0]!,dayCount.value))
 const rangesByPlan=computed(()=>new WeakMap(props.plans.map(plan=>[plan,timelineInterval(plan.start,plan.end,days.value[0]!,dayCount.value)] as const)))
 const sessionRange = (plan:PlanSession)=>rangesByPlan.value.has(plan)?rangesByPlan.value.get(plan)!:timelineInterval(plan.start,plan.end,days.value[0]!,dayCount.value)
 const sessions = computed(()=>{const map=new Map<string,PlanSession[]>();for(const plan of props.plans){const values=map.get(plan.recordId)||[];values.push(plan);map.set(plan.recordId,values)}return map})
-const eventLayout = computed(()=>timelineEvents(props.records,days.value[0]!,dayCount.value,plotWidth.value))
+const indexedEvents=computed(()=>{timeZone.value;return indexTimelineEvents(props.records)})
+const windowEvents=computed(()=>indexedEvents.value(days.value[0]!,dayCount.value))
+const eventLayout = computed(()=>timelineEvents(windowEvents.value,days.value[0]!,dayCount.value,plotWidth.value))
 const visibleEvents = computed(()=>eventLayout.value.entries)
 const headerEvents = computed(()=>visibleEvents.value.filter(event=>!event.overflow))
 const floatingEntries=computed(()=>headerEvents.value.map(event=>({id:event.record.id,start:event.range.start,end:event.range.end,left:event.labelLeft,width:event.labelWidth,lane:event.lane,overflow:event.overflow})))
 const calendarHeaderHeight = computed(()=>allBands.value?eventLayout.value.lanes*32+10:58)
-const outsideEventCount = computed(()=>props.records.filter(record=>record.kind==='event').length-visibleEvents.value.length)
+const eventCount=computed(()=>props.records.filter(record=>record.kind==='event').length)
+const outsideEventCount = computed(()=>eventCount.value-visibleEvents.value.length)
 const groupingOptions = computed(()=>({spaces:props.spaces,categories:props.categories,projects:props.projects,collections:props.collections,scopeId:props.scopeId}))
+const itemGrouping=recordProjection(record=>recordGrouping(record,groupingOptions.value))
 const groups = computed(()=>orderTimelineGroups(timelineGroups(rowRecords.value,groupingOptions.value),props.arrangement?.timelineGroups))
 const eventById = computed(()=>new Map(visibleEvents.value.map(event=>[event.record.id,event])))
 const linkedSessions = computed(()=>{
@@ -212,6 +230,7 @@ const allRows = computed(()=>{
   return result
 })
 const rows = computed(()=>allRows.value.slice(0,limit.value))
+const bandRuns=computed(()=>timelineBandRuns(rows.value.map(row=>row.group)))
 const closedGroupSpans=computed(()=>new Map(rows.value.filter(row=>!row.record&&collapsed.value.has(row.id)).map(row=>[row.id,collapsedTimelineSpans(row.group,days.value[0]!,dayCount.value)])))
 function groupSpanStyle(span:CollapsedTimelineSpan,groupId:string){
   const lanes=closedGroupSpans.value.get(groupId)?.lanes||1,step=(rowHeight.value-12)/lanes
@@ -285,15 +304,16 @@ function pointStyle(record:WorkspaceRecord){return {left:`${(geometry(record).po
 function bandStyle(event:TimelineEvent){return {...barStyle(event.range),'--record-color':props.colorFor(event.record),'--source-color':sourceTint(event.record)}}
 function eventForeground(record:WorkspaceRecord){const color=props.colorFor(record).replace('#','');const hex=color.length===3?color.split('').map(channel=>channel+channel).join(''):color;const rgb=[0,2,4].map(offset=>parseInt(hex.slice(offset,offset+2),16)/255).map(channel=>channel<=.04045?channel/12.92:((channel+.055)/1.055)**2.4);return rgb[0]!* .2126+rgb[1]!* .7152+rgb[2]!* .0722>.179?'#111111':'#ffffff'}
 function labelStyle(event:TimelineEvent){return {left:`${event.labelLeft}px`,width:`${event.labelWidth}px`,top:`${6+event.lane*32}px`,'--record-color':props.colorFor(event.record),'--source-color':sourceTint(event.record),'--event-foreground':eventForeground(event.record)}}
-const eventPresentation=computed(()=>new WeakMap(props.records.filter(record=>record.kind==='event').map(event=>{
-  const location=recordGrouping(event,groupingOptions.value),source=[location.category?.name,event.collectionTitle||'Calendar'].filter(Boolean).join(' · '),time=eventLabel(event)
-  return [event,{source,time,title:`${event.title} · ${dateLabel(event.start)} · ${time} · ${source}${tagDescription(event)}`} ] as const
-})))
-function eventSourceLabel(event:WorkspaceRecord){return (contextIds.value.has(event.id)?'Linked context · ':'')+(eventPresentation.value.get(event)?.source||event.collectionTitle||'Calendar')}
-function eventTime(event:WorkspaceRecord){return eventPresentation.value.get(event)?.time||eventLabel(event)}
-function eventTitle(event:WorkspaceRecord){return (contextIds.value.has(event.id)?'Linked context · ':'')+(eventPresentation.value.get(event)?.title||event.title)}
+const eventSource=recordProjection(event=>[itemGrouping(event).category?.name,event.collectionTitle||'Calendar'].filter(Boolean).join(' · '))
+const eventTime=recordProjection(event=>{timeZone.value;return eventLabel(event)})
+const eventDescription=recordProjection(event=>`${event.title} · ${dateLabel(event.start)} · ${eventTime(event)} · ${eventSource(event)}${tagDescription(event)}`)
+function eventSourceLabel(event:WorkspaceRecord){return (contextIds.value.has(event.id)?'Linked context · ':'')+eventSource(event)}
+function eventTitle(event:WorkspaceRecord){return (contextIds.value.has(event.id)?'Linked context · ':'')+eventDescription(event)}
 function openEvent(event:WorkspaceRecord){if(eventPicker.value)eventPicker.value.open=false;emit('open',event)}
-const eventsByDay=computed(()=>new Map(days.value.map((day,index)=>[dayKey(day),visibleEvents.value.filter(event=>event.range.start<index+1&&event.range.end>index)])))
+const eventsByDay=computed(()=>{
+  const groups=timelineDayEvents(visibleEvents.value,dayCount.value)
+  return new Map(days.value.map((day,index)=>[dayKey(day),groups[index]!]))
+})
 function eventsForDay(day:Date){return eventsByDay.value.get(dayKey(day))||[]}
 const agendaEvents = computed(()=>agendaDay.value?eventsByDay.value.get(agendaDay.value)||[]:visibleEvents.value)
 function openAgenda(day:Date){agendaDay.value=dayKey(day);if(eventPicker.value)eventPicker.value.open=true}
@@ -334,16 +354,9 @@ const activeEvents = computed(()=>props.taskOnly?[]:allBands.value?visibleEvents
 // Hover is a temporary full-column guide, including events outside the work's Space.
 const hoverEvents = computed(()=>hoveredRecordId.value?visibleEvents.value.filter(event=>hoverLinked(event.record.id)):[])
 const eventSegments = computed(()=>activeEvents.value.flatMap(event=>{
-  const selectedWork=props.records.find(record=>record.id===props.selectedId&&selectedEventIds.value.has(event.record.id))
-  const location=recordGrouping(selectedWork||event.record,groupingOptions.value)
-  const indices=rows.value.flatMap((row,index)=>{
-    const matches=location.category?row.group.categoryId===location.category.id:location.space?row.group.spaceId===location.space.id:true
-    return matches?[index]:[]
-  })
-  const segments:{event:TimelineEvent;start:number;end:number;key:string}[]=[]
-  for(const index of indices){const last=segments.at(-1);if(last&&last.end===index)last.end=index+1;else segments.push({event,start:index,end:index+1,key:`${event.record.id}:${index}`})}
-  if(!rows.value.length)segments.push({event,start:0,end:4,key:event.record.id})
-  return segments
+  const selectedWork=props.selectedId&&selectedEventIds.value.has(event.record.id)?recordsById.value.get(props.selectedId):undefined
+  const location=itemGrouping(selectedWork||event.record)
+  return bandRuns.value(location).map(run=>({...run,event,key:rows.value.length?`${event.record.id}:${run.start}`:event.record.id}))
 }))
 function segmentStyle(segment:{event:TimelineEvent;start:number;end:number}){return {...bandStyle(segment.event),top:`${segment.start*rowHeight.value}px`,height:`${(segment.end-segment.start)*rowHeight.value}px`,bottom:'auto'}}
 function point(record:WorkspaceRecord,finish=false){const shape=geometry(record);if(shape.bar)return finish?shape.bar.end:shape.bar.start;if(shape.point)return shape.point.offset;const plan=(sessions.value.get(record.id)||[]).map(sessionRange).find(Boolean);if(plan)return finish?plan.end:plan.start;const event=linkedSessions.value.get(record.id)?.[0];return event?(finish?event.range.end:event.range.start):null}

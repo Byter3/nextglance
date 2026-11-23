@@ -69,33 +69,44 @@ function sameReservation(a,b){const draft=value=>Object.fromEntries(Object.entri
 function account(state){return JSON.stringify([state.connection?.serverUrl,state.connection?.username])}
 
 /** All effects are injected. Cloud reservations precede native writes; native IDs survive uncertain responses. */
-export async function createCardTasks({api,cardId,entries,onState=()=>{},onProgress=()=>{}}){
+export async function createCardTasks({api,cardId,entries,deferLinkSync=false,onState=()=>{},onProgress=()=>{}}){
   if(!Array.isArray(entries)||!entries.length||entries.length>200||new Set(entries.map(e=>e.key)).size!==entries.length)throw new Error('Choose 1–200 different task rows.')
   for(const entry of entries)validateCardTaskReceipts({[entry.key]:entry.receipt})
   let state=await api.getState();const owner=account(state),card=state.records.find(item=>item.id===cardId&&item.kind==='card'),cardKey=card&&identity(state.workspace,card)
+  const {serverUrl,username}=state.connection||{},expectedAccount=deferLinkSync&&serverUrl&&username?{serverUrl,username}:undefined
+  if(!state.connection?.connected)throw new Error('Connect to Nextcloud before creating tasks.')
+  if(deferLinkSync&&!expectedAccount)throw new Error('Reconnect to Nextcloud before creating tasks.')
   if(!cardKey)throw new Error('Refresh this card before creating tasks.')
   for(const {key,receipt}of entries)if(receipt.checklist&&(key!==`checklist-${await hash(JSON.stringify([receipt.checklist.text,receipt.checklist.occurrence]))}`||receipt.requestId!==await cardTaskRequestId(cardKey,key)))throw new Error('This checklist request identity is invalid. Reopen the checklist before retrying.')
   function accept(next,publish=false){if(!next.connection?.connected||account(next)!==owner)throw new Error('The connected account changed. Reopen this card before retrying.');state=next;if(publish)onState(next);return next}
   async function fresh(){return accept(await api.getState())}
   async function synced(){const next=accept(await api.syncWorkspace(),true);if(next.storage.syncStatus!=='synced')throw new Error(next.storage.message||'Planner data is not synced. Retry before creating tasks.');return next}
   function currentCard(){const item=state.records.find(record=>record.kind==='card'&&identity(state.workspace,record)===cardKey);if(!item)throw new Error('The card is no longer available. Refresh before retrying.');return item}
-  async function save(workspace,synchronize=true){await api.saveWorkspace(workspace,state.revision);if(synchronize)await synced();else await fresh()}
+  async function save(workspace,synchronize=true){
+    const saved=await api.saveWorkspace(workspace,state.revision,expectedAccount,!synchronize&&deferLinkSync?{coalesceLaunch:true}:undefined)
+    if(synchronize)await synced()
+    else if(deferLinkSync)accept({...state,...saved})
+    else await fresh()
+  }
   cardId=currentCard().id
   let workspace=clone(state.workspace);workspace.properties[cardId]||={};const reserved=workspace.properties[cardId].cardTasks||={}
   for(const entry of entries){if(reserved[entry.key]&&!sameReservation(reserved[entry.key],entry.receipt))throw new Error('This task request changed on another device. Refresh and use its saved destination.');reserved[entry.key]||=clone(entry.receipt)}
-  validateCardTaskReceipts(reserved);await save(workspace)
-  let created=0,reused=0,linked=0
+  validateCardTaskReceipts(reserved)
+  onProgress({completed:0,total:entries.length,title:'',phase:'reserve'})
+  await save(workspace)
+  let created=0,reused=0,linked=0,linksSaved=0,publicationAttempted=false
   try{
     for(let index=0;index<entries.length;index++){
-      await fresh();cardId=currentCard().id
+      if(index>0)await fresh()
+      cardId=currentCard().id
       const entry=entries[index],receipt=receipts(state.workspace,cardId)[entry.key]
       if(!receipt||!sameReservation(receipt,entry.receipt))throw new Error('The saved task request changed. Refresh before retrying.')
-      onProgress({completed:index,total:entries.length,title:receipt.title})
+      onProgress({completed:index,total:entries.length,title:receipt.title,phase:'create'})
       if(receipt.taskIdentityKey){if(!state.records.some(item=>item.kind==='task'&&identity(state.workspace,item)===receipt.taskIdentityKey))throw new Error('This task was already created but is not loaded. Refresh Tasks and review it; it will not be recreated.');reused++;continue}
       const collection=state.collections.find(c=>c.id===receipt.collectionId&&c.source==='tasks'&&!c.readonly)
       if(!collection)throw new Error('The saved task list is unavailable or read-only. Restore access before retrying.')
       const {title,description,start,due,completed,requestId}=receipt
-      const next=await api.createTask({collectionId:collection.id,title,description,...(start?{start}:{}),...(due?{due}:{}),completed,requestId});accept(next)
+      const next=await api.createTask({collectionId:collection.id,title,description,...(start?{start}:{}),...(due?{due}:{}),...(expectedAccount?{expectedAccount}:{}),completed,requestId});accept(next)
       const task=state.records.find(record=>record.id===next.createdRecordId&&record.kind==='task'),taskKey=task&&identity(state.workspace,task)
       if(!taskKey)throw new Error('Task creation could not be verified. Retry the saved request; do not create another task.')
       created++;cardId=currentCard().id;workspace=clone(state.workspace)
@@ -105,15 +116,20 @@ export async function createCardTasks({api,cardId,entries,onState=()=>{},onProgr
       if(!has){const check=canAddRelation(relations,cardId,task.id,'depends_on',state.records);if(!check.ok)throw new Error(check.message);workspace.relations.push({id:`card-task-${requestId}`,type:'depends_on',fromId:cardId,toId:task.id});linked++}
       current.taskIdentityKey=taskKey
       await save(workspace,false)
+      linksSaved++
     }
-    if(created)await synced()
+    if(linksSaved&&!deferLinkSync){
+      onProgress({completed:entries.length,total:entries.length,title:'',phase:'publish'})
+      publicationAttempted=true
+      await synced()
+    }
   }catch(error){
     // Earlier rows are already durable. Publish their identities/links before
-    // reporting a later failure, without retrying any native creation here.
-    let pending=false
-    if(created)try{await synced()}catch{pending=true;onState(state)}
+    // reporting a later failure on a host that requires a foreground sync.
+    if(linksSaved&&!deferLinkSync&&!publicationAttempted)try{await synced()}catch{/* Keep the saved links for normal sync. */}
+    const pending=Boolean(linksSaved&&state.storage.syncStatus!=='synced')
+    if(linksSaved)onState(state)
     throw new Error(`${error.message}${created?` ${created} task(s) were created or recovered; ${pending?'their planner links are pending. ':''}retry will reuse their saved requests.`:''}`,{cause:error})
   }
-  onProgress({completed:entries.length,total:entries.length,title:''})
-  return {state,created,reused,linked}
+  return {state,created,reused,linked,linksPending:Boolean(linksSaved&&state.storage.syncStatus!=='synced')}
 }

@@ -35,7 +35,7 @@ import {buildScopeDraft} from '@nextspace/core/scope-editor.mjs'
 import {mergeWorkspaces} from '@nextspace/core/workspace-merge.mjs'
 import {canRefreshSources,sourceRefreshFeedback} from '@nextspace/core/source-refresh.mjs'
 import {checkCalendarQuery} from '@nextspace/nextcloud-client/dav-query-policy.mjs'
-import {canUseNativeOperation,canWriteNativeSource,completionOperation,eventDeleteOperation,eventEditOperation,eventRespondOperation,deckAttachmentOperation} from '@nextspace/core/native-operations.mjs'
+import {canUseNativeOperation,canWriteNativeSource,completionOperation,eventDeleteOperation,taskDeleteOperation,eventEditOperation,eventRespondOperation,deckAttachmentOperation} from '@nextspace/core/native-operations.mjs'
 import {shiftSchedulePreview} from '@nextspace/core/schedule-preview.mjs'
 import {connectionEntry, isConnectionAuthorized} from '@nextspace/core/auth-entry.mjs'
 import {normalizeTheme} from '@nextspace/core/theme-cache.mjs'
@@ -172,6 +172,7 @@ const operations = new Map([
   ['native.operationAllowed', {fields: ['method'], run: (state,input) => output(canUseNativeOperation({...state, operation:input.method}))}],
   ['native.completionOperation', {fields: [], run: state => output(completionOperation(state.record,state.collections))}],
   ['native.eventDeleteOperation', {fields: [], run: state => output(eventDeleteOperation(state.record,state.collections))}],
+  ['native.taskDeleteOperation', {fields: [], run: state => output(taskDeleteOperation(state.record,state.collections))}],
   ['native.deckAttachmentOperation', {fields: ['method'], run: (state,input) => output(deckAttachmentOperation(state.record,state.collections,input.method))}],
   ['schedule.shiftPreview', {fields: ['mode','deltaDays'], run: (state,input) => {
     // This synchronous adapter supplies the fixture's local time zone to the

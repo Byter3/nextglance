@@ -89,8 +89,16 @@ export interface DeviceSync {
   activity?:{sources:Source[];stage:'authorization'|'discovery'|'source-read'|'local-cache';startedAt:string;lastProgressAt:string;completed:number;total?:number;message:string}
   background?:{supported:boolean;scheduled:boolean;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;projection?:'pending'|'ready'|'unavailable'|'incomplete';readGenerationAt?:string;message?:string;sources?:{caldav:BackgroundSourceSync;deck:BackgroundSourceSync}}
 }
+export interface PlannerConflict {
+  revision: number
+  paths: string[]
+  organizationChoice?: boolean
+  dependencyChoice?: boolean
+}
+export type PlannerConflictChoice = 'local'|'remote'
 export interface State {
   calendarHistoryDays?: number | null
+  plannerConflict?: PlannerConflict
   deviceSync?:DeviceSync
   nativeOperations?: string[]
   /** Ephemeral verified source prerequisites; independent of bulk data freshness. Never restored as authority. */
@@ -131,11 +139,12 @@ export interface WorkspaceApi {
   startDiagnostics?():DiagnosticSummary;stopDiagnostics?():DiagnosticSummary;getDiagnostics?():DiagnosticSummary;clearDiagnostics?():DiagnosticSummary
   readDiagnostics?():string;recordDiagnostic?(event:DiagnosticInput):void;saveDiagnostics?():Promise<{saved:boolean;cancelled?:boolean;name?:string}>;copyDiagnostics?():Promise<{copied:boolean}>
   getState(): Promise<State>; refresh(): Promise<State>; retryConnection?(): Promise<State>
+  resolveWorkspaceConflict?(choice: PlannerConflictChoice, expectedRevision: number, expectedAccount: {serverUrl: string; username: string}): Promise<State>
   setSyncSettings?(settings:DeviceSyncSettings):Promise<State>
   resumeSync?(reason:'open'|'resume'|'timer'|'online'):Promise<State>
   setAppActive?(active:boolean):Promise<void>
   subscribeSync?(listener:(sync:DeviceSync)=>void):()=>void
-  saveWorkspace(workspace: Workspace, expectedRevision: number): Promise<{workspace: Workspace; revision: number; storage: State['storage']}>
+  saveWorkspace(workspace: Workspace, expectedRevision: number, expectedAccount?: {serverUrl: string; username: string}, options?: {coalesceLaunch?: boolean}): Promise<{workspace: Workspace; revision: number; storage: State['storage']}>
   beginLogin(serverUrl: string): Promise<{flowId: string; loginUrl: string}>
   pollLogin(flowId: string): Promise<{pending: true}|{pending: false; state: State}>
   cancelLogin(flowId: string): Promise<State>
@@ -158,7 +167,7 @@ export interface WorkspaceApi {
   updateRecordDates?(input: {id: string; start?: string; due?: string; end?: string; allDay?: boolean; etag?: string}): Promise<State>
   updateRecordAppearance?(input: {id: string; color?: string; tags?: string[]; tagIds?: string[]; etag?: string}): Promise<State>
   updateTaskStatus?(input: {id: string; status: string; etag?: string}): Promise<State>
-  createTask(input: {title: string; collectionId: string; start?: string; due?: string; description?: string; requestId?: string; completed?: boolean}): Promise<State>
+  createTask(input: {title: string; collectionId: string; start?: string; due?: string; description?: string; requestId?: string; completed?: boolean; expectedAccount?: {serverUrl: string; username: string}}): Promise<State>
   createCard?(input: {title: string; collectionId: string; stackId: string; start?: string; due?: string; description?: string; assignToMe?: boolean}): Promise<State>
   setTaskCompleted(input: {id: string; completed: boolean}): Promise<State>
   setTaskDue?(input: {id: string; due?: string}): Promise<State>
@@ -167,6 +176,7 @@ export interface WorkspaceApi {
   updateEvent?(input: {id: string; start?: string; end?: string; allDay?: boolean; title?: string; description?: string; location?: string; reminders?: number[]; attendees?: EventParticipantInput[]; etag?: string}): Promise<State>
   respondToEvent?(input: {id: string; etag: string; participation: 'ACCEPTED'|'TENTATIVE'|'DECLINED'}): Promise<State>
   deleteEvent?(input: {id: string}): Promise<State>
+  deleteTask?(input: {id: string; etag: string; expectedAccount: {serverUrl: string; username: string}}): Promise<State>
   setCardCompleted?(input: {id: string; completed: boolean}): Promise<State>
   moveCard?(input: {id: string; stackId: string}): Promise<State>
   setDeckDependency?(input: {fromId: string; toId: string; remove?: boolean}): Promise<State>

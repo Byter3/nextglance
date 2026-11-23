@@ -207,6 +207,180 @@ test('conditional write races retry the new remote version and retain independen
   assert.equal(remote.data().spaces[0].name, 'Phone'); assert.equal(remote.data().categories[1].name, 'Other PC')
 })
 
+test('lost upload acknowledgement recovers the exact cloud snapshot after restart', async () => {
+  const remote = await seed(cloud()), {store, storage} = await mobile(remote)
+  await store.sync()
+  await edit(store, value => { value.spaces[0].name = 'First local edit' })
+  const path = `${remote.manifest().generation}/organization.json`
+  remote.mutate(path, document => { document.value.categories[1].name = 'Independent cloud edit'; return document })
+  const originalWrites = remote.writes.length
+  remote.beforeRead = path => {
+    if (path === 'manifest.json' && remote.writes.length > originalWrites) throw Object.assign(Error('Readback disconnected'), {code: 'NETWORK'})
+  }
+  await store.sync()
+  assert.equal(store.getState().storage.errorCode, 'NETWORK')
+  assert.equal(remote.data().spaces[0].name, 'First local edit')
+  await edit(store, value => { value.spaces[0].name = 'Latest local edit' })
+  const restart = (await mobile(remote, storage)).store
+  remote.beforeRead = null
+  const result = await restart.sync()
+  assert.equal(result.storage.syncStatus, 'synced')
+  assert.equal(result.plannerConflict, undefined)
+  assert.equal(remote.data().spaces[0].name, 'Latest local edit')
+  assert.equal(remote.data().categories[1].name, 'Independent cloud edit')
+  assert.equal((await storage.cache().load(KEY)).publication, undefined)
+})
+
+test('a different cloud version after lost acknowledgement still needs review', async () => {
+  const remote = await seed(cloud()), {store, storage} = await mobile(remote)
+  await store.sync()
+  await edit(store, value => { value.spaces[0].name = 'First local edit' })
+  const originalWrites = remote.writes.length
+  remote.beforeRead = path => {
+    if (path === 'manifest.json' && remote.writes.length > originalWrites) throw Object.assign(Error('Readback disconnected'), {code: 'NETWORK'})
+  }
+  await store.sync()
+  await edit(store, value => { value.spaces[0].name = 'Latest local edit' })
+  const path = `${remote.manifest().generation}/organization.json`
+  remote.mutate(path, document => { document.value.spaces[0].name = 'New cloud edit'; return document })
+  remote.beforeRead = null
+  const restart = (await mobile(remote, storage)).store
+  const result = await restart.sync()
+  assert.equal(result.storage.errorCode, 'PLANNER_OVERLAP')
+  assert.deepEqual(result.plannerConflict, {revision: result.revision, paths: ['spaces[life].name']})
+  assert.equal(remote.writes.length, originalWrites + 1)
+})
+
+for (const doubleFailure of [false, true]) test(`a partial upload preserves exactly acknowledged documents through ${doubleFailure ? 'two interrupted attempts' : 'restart'}`, async () => {
+  const remote = await seed(cloud()), {store, storage} = await mobile(remote)
+  await store.sync()
+  await edit(store, value => { value.spaces[0].name = 'First device rename'; value.appearance.mode = 'dark' })
+  remote.beforeWrite = path => {if (path.endsWith('/settings.json')) throw Object.assign(Error('Settings upload disconnected'), {code: 'NETWORK'})}
+  const interrupted = await store.sync()
+  assert.equal(interrupted.storage.errorCode, 'NETWORK')
+  assert.equal(remote.data().spaces[0].name, 'First device rename')
+  assert.equal(remote.data().appearance.mode, 'system')
+  if (doubleFailure) {
+    const retry = (await mobile(remote, storage)).store
+    assert.equal((await retry.sync()).storage.errorCode, 'NETWORK')
+    await edit(retry, value => {value.spaces[0].name = 'Latest device rename'})
+  } else await edit(store, value => {value.spaces[0].name = 'Latest device rename'})
+  const restart = (await mobile(remote, storage)).store
+  remote.beforeWrite = null
+  const result = await restart.sync()
+  assert.equal(result.storage.syncStatus, 'synced')
+  assert.equal(result.plannerConflict, undefined)
+  assert.equal(remote.data().spaces[0].name, 'Latest device rename')
+  assert.equal(remote.data().appearance.mode, 'dark')
+})
+
+test('inconsistent reads and exhausted conditional writes are retryable without a review', async () => {
+  const remote = await seed(cloud()), {store} = await mobile(remote)
+  const list = remote.listPlannerFiles
+  remote.listPlannerFiles = async directory => {
+    const result = await list(directory)
+    return {...result, files: result.files.map(file => file.path.endsWith('/core.json') ? {...file, etag: '"inventory-version"'} : file)}
+  }
+  const readFailure = await store.sync()
+  assert.equal(readFailure.storage.syncStatus, 'error')
+  assert.equal(readFailure.storage.errorCode, 'PLANNER_READ_CHANGED')
+  assert.equal(readFailure.plannerConflict, undefined)
+  remote.listPlannerFiles = list
+  await store.sync()
+  await edit(store, value => { value.spaces[0].name = 'Saved device edit' })
+  let deniedAttempts = 0
+  remote.beforeWrite = () => { deniedAttempts++; throw Object.assign(Error('Conditional version changed'), {code: 'CONFLICT', status: 412}) }
+  const writeFailure = await store.sync()
+  assert.equal(deniedAttempts, 3)
+  assert.equal(writeFailure.storage.syncStatus, 'error')
+  assert.equal(writeFailure.storage.errorCode, 'PLANNER_WRITE_CHANGED')
+  assert.equal(writeFailure.plannerConflict, undefined)
+  assert.equal(writeFailure.workspace.spaces[0].name, 'Saved device edit')
+  remote.beforeWrite = null
+  await store.sync()
+  assert.equal(remote.data().spaces[0].name, 'Saved device edit')
+})
+
+test('an older persisted contention status without saved copies can retry after update', async () => {
+  const remote = await seed(cloud()), {store, storage} = await mobile(remote)
+  await store.sync()
+  const cache = storage.cache(), previous = await cache.load(KEY)
+  await cache.save(KEY, {...previous, status: 'conflict', errorStage: 'planner-read', errorCode: 'CONFLICT'})
+  const reopened = (await mobile(remote, storage)).store
+  const restored = reopened.getState()
+  assert.equal(restored.storage.syncStatus, 'error')
+  assert.equal(restored.storage.errorCode, 'PLANNER_READ_CHANGED')
+  assert.equal(restored.plannerConflict, undefined)
+  assert.equal((await reopened.sync()).storage.syncStatus, 'synced')
+})
+
+test('a new cloud copy invalidates a conflict review while identical retries retain its revision', async () => {
+  const remote = await seed(cloud()), {store} = await mobile(remote)
+  await store.sync()
+  await edit(store, value => { value.spaces[0].name = 'Device name'; value.categories[1].color = '#ffffff' })
+  const path = `${remote.manifest().generation}/organization.json`
+  const rename = name => remote.mutate(path, document => { document.value.spaces[0].name = name; return document })
+  rename('Cloud name')
+  const first = await store.sync()
+  assert.equal((await store.sync()).plannerConflict.revision, first.plannerConflict.revision)
+  rename('Newest cloud name')
+  const second = await store.sync()
+  assert.notEqual(second.plannerConflict.revision, first.plannerConflict.revision)
+  await assert.rejects(store.resolveConflict('remote', first.plannerConflict.revision), {code: 'REVISION_CONFLICT'})
+  await store.resolveConflict('remote', second.plannerConflict.revision)
+  const resolved = await store.sync()
+  assert.equal(resolved.plannerConflict, undefined)
+  assert.equal(remote.data().spaces[0].name, 'Newest cloud name')
+  assert.equal(remote.data().categories[1].color, '#ffffff')
+})
+
+for (const cloudEdited of [false, true]) test(`unchanged cloud identities remain safe after a native move and copy even with ${cloudEdited ? 'independent cloud edits' : 'an unchanged cloud copy'}`, async () => {
+  const initial = workspace(), taskId = '44444444-4444-4444-8444-444444444444'
+  const oldKey = '0123456789abcdef:tasks:old-list/task.ics', newKey = '0123456789abcdef:tasks:new-list/task.ics'
+  initial.identities = [{id: taskId, source: 'tasks', key: oldKey, aliases: ['task-uid']}]
+  initial.properties[taskId] = {estimate: 20}
+  const remote = await seed(cloud(), initial)
+  const {store} = await mobile(remote)
+  await store.sync()
+  const task = (id, key) => ({id, source: 'tasks', kind: 'task', title: 'Fictional task', identity: {source: 'tasks', key, aliases: ['task-uid']}})
+  await store.reconcileRecords([task('moved-source', newKey)])
+  await edit(store, value => { value.properties[taskId].estimate = 25 })
+  const copied = await store.reconcileRecords([task('moved-source', newKey), task('copy-source', oldKey)])
+  const copyId = copied.records[1].id
+  assert.notEqual(copyId, taskId)
+  await edit(store, value => { value.properties[copyId] = {estimate: 45} })
+  if (cloudEdited) remote.mutate(`${remote.manifest().generation}/organization.json`, document => {
+    document.value.spaces[0].name = 'Independent cloud rename'
+    return document
+  })
+  const result = await store.sync()
+  assert.equal(result.storage.syncStatus, 'synced')
+  const published = remote.data()
+  assert.deepEqual(published.identities.map(({id, key}) => [id, key]), [[taskId, newKey], [copyId, oldKey]])
+  assert.equal(published.properties[taskId].estimate, 25)
+  assert.equal(published.properties[copyId].estimate, 45)
+  assert.equal(published.spaces[0].name, cloudEdited ? 'Independent cloud rename' : initial.spaces[0].name)
+})
+
+for (const choice of ['local', 'remote']) test(`a combined dependency cycle keeps the coherent ${choice} graph and independent settings`, async () => {
+  const remote = await seed(cloud()), a = (await mobile(remote)).store, b = (await mobile(remote, disk(), OTHER_KEY)).store
+  const deviceLink = {id: 'device-edge', type: 'depends_on', fromId: 'draft', toId: 'review'}
+  const cloudLink = {id: 'cloud-edge', type: 'depends_on', fromId: 'review', toId: 'draft'}
+  await a.sync(); await b.sync()
+  await edit(a, value => { value.relations.push(cloudLink); value.spaces[0].color = '#ffffff' })
+  await edit(b, value => { value.relations.push(deviceLink); value.categories[1].name = 'Independent device edit' })
+  await a.sync()
+  const reviewed = await b.sync()
+  assert.equal(reviewed.storage.errorCode, 'PLANNER_OVERLAP')
+  assert.deepEqual(reviewed.plannerConflict, {revision: reviewed.revision, paths: ['relations.dependencies'], dependencyChoice: true})
+  await b.resolveConflict(choice, reviewed.plannerConflict.revision)
+  assert.equal((await b.sync()).storage.syncStatus, 'synced')
+  const published = remote.data()
+  assert.deepEqual(published.relations.filter(edge => edge.type === 'depends_on'), [choice === 'local' ? deviceLink : cloudLink])
+  assert.equal(published.spaces[0].color, '#ffffff')
+  assert.equal(published.categories[1].name, 'Independent device edit')
+})
+
 test('local filters stay per account and never publish organization or settings', async () => {
   const remote = await seed(cloud()), {store, storage} = await mobile(remote); await store.sync()
   const count = remote.writes.length, revision = store.getState().revision

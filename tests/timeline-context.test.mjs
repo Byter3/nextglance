@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {visibleSpanLabel,timelinePointLabel,collapsedTimelineSpans} from '@nextspace/core/timeline-context.mjs'
+import {visibleSpanLabel,timelinePointLabel,timelineBandRuns,collapsedTimelineSpans} from '@nextspace/core/timeline-context.mjs'
 
 test('real span label follows the visible cutoff without escaping its item or viewport',()=>{
   assert.deepEqual(visibleSpanLabel({start:10,end:210,viewportStart:80,viewportEnd:180}),{offset:74,width:92})
@@ -15,6 +15,18 @@ test('point titles use available plot space and never appear for invisible dates
   assert.deepEqual(timelinePointLabel({point:290,viewportStart:80,viewportEnd:300}),{offset:-210,width:196})
   assert.equal(timelinePointLabel({point:79,viewportStart:80,viewportEnd:300}),null)
   assert.equal(timelinePointLabel({point:300,viewportStart:80,viewportEnd:300}),null)
+})
+test('calendar bands use contiguous group rows and keep category precedence',()=>{
+  const space={id:'studio'}, category={id:'editing'}
+  const runs=timelineBandRuns([
+    {spaceId:space.id},{spaceId:space.id,categoryId:category.id},{spaceId:space.id,categoryId:category.id},
+    {spaceId:'other',categoryId:'review'},{spaceId:space.id,categoryId:category.id},
+  ])
+  assert.deepEqual(runs({space,category}),[{start:1,end:3},{start:4,end:5}])
+  assert.deepEqual(runs({space}),[{start:0,end:3},{start:4,end:5}])
+  assert.deepEqual(runs({}),[{start:0,end:5}])
+  assert.deepEqual(runs({space,category:{id:'unavailable'}}),[])
+  assert.deepEqual(timelineBandRuns([])({space,category}),[{start:0,end:4}])
 })
 test('collapsed group previews contain only filtered unique descendant work with actual schedules',()=>{
   const a={id:'a',kind:'card',start:'2026-11-01',due:'2026-11-15'},b={id:'b',kind:'task',due:'2026-11-12'},c={id:'c',kind:'task',start:'2026-11-12',due:'2026-11-14'},d={id:'d',kind:'task',title:'Undated'},e={id:'e',kind:'card',due:'2026-10-01'}

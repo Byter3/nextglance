@@ -9,4 +9,6 @@ export function timelineGeometry(record:WorkspaceRecord,anchor:Date|string,daysC
 export function timelineGroups(records:WorkspaceRecord[],options?:GroupingOptions):TimelineGroup[]
 export function timelineStatus(record:WorkspaceRecord,collections?:Collection[]):string
 export interface TimelineEvent {record:WorkspaceRecord;range:TimelineInterval;labelLeft:number;labelWidth:number;lane:number;overflow:boolean}
+export function indexTimelineEvents(records:WorkspaceRecord[]):(anchor:Date|string,daysCount:number)=>WorkspaceRecord[]
 export function timelineEvents(records:WorkspaceRecord[],anchor:Date|string,daysCount?:number,plotWidth?:number,maxLanes?:number):{entries:TimelineEvent[];lanes:number;overflow:TimelineEvent[]}
+export function timelineDayEvents(events:TimelineEvent[],daysCount:number):TimelineEvent[][]

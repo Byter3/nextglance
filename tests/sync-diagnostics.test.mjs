@@ -22,6 +22,23 @@ test('diagnostics allow only recognized codes and stages and never expose unknow
   assert.match(plannerFailureMessage(fail('PERMISSION'), 'planner-write'), /permissions/)
 })
 
+test('planner consistency failures and reviewable overlaps have distinct safe diagnostics', () => {
+  for (const [code, stage, description] of [
+    ['PLANNER_READ_CHANGED', 'planner-read', /during the read.*Retry/],
+    ['PLANNER_WRITE_CHANGED', 'planner-write', /for saving.*Retry/],
+    ['PLANNER_OVERLAP', 'planner-read', /overlap.*Review.*Settings/],
+    ['CONFLICT', 'planner-read', /during the read.*Retry/],
+    ['CONFLICT', 'planner-write', /for saving.*Retry/],
+    ['FOLDER_CONFLICT', 'planner-read', /review in Nextcloud Files/],
+  ]) {
+    assert.deepEqual(syncDiagnostic(fail(code), stage), {errorCode: code, errorStage: stage})
+    const message = plannerFailureMessage(fail(code), stage)
+    assert.match(message, description)
+    assert.match(message, /Saved changes remain on this device/)
+    assert.doesNotMatch(message, /other device|Host-private/i)
+  }
+})
+
 test('native lifecycle cancellation crosses request, discovery, optional branding and reader boundaries', async () => {
   const request = fixture()
   await assert.rejects(request.request('https://fixture.invalid/nc/status.php'), {code: 'CANCELLED'})

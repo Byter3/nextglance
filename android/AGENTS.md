@@ -6,7 +6,7 @@ The visible product name is **NextGlance**. Preserve the existing Android applic
 
 ## Scope and current milestone
 
-RELEASE-29 is the current packaging milestone at **0.6.29/versionCode31** after BOARD-07 fast verification and orchestrator source freeze. The shared Board adds item type icons and two-line standalone task cards. Preserve the existing touch controls and the app, account, storage and signing identities. Keep packaging local.
+RELEASE-30 packages **0.6.30/versionCode32** after SYNC-17, PERF-19, PERF-20 and EDIT-20 verification and source freeze. Preserve existing app, account, storage and signing identities and prior APKs. Keep packages local.
 
 RELEASE-28 at **0.6.28/versionCode30** packaged EDIT-19 exact-member Calendar revision verification. Preserve that APK and the shared Calendar fix.
 

@@ -1,7 +1,7 @@
 /** Controller integration with real mobile persistence and shared folder protocol. */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createMobileController, cacheKey, metadataKey} from '../src/controller.mjs'
+import {createMobileController, cacheKey, launchKey, metadataKey} from '../src/controller.mjs'
 import {createSlotCache} from '../src/cache.mjs'
 import {createMetadataStore} from '../src/metadata.mjs'
 import {createPlannerWorkspace} from '@nextspace/core/planner.mjs'
@@ -416,6 +416,30 @@ test('delayed UI saves from the former account are rejected before mutating the 
   assert.equal(f.b.writes.length, writes)
 })
 
+test('conflict review publishes only areas, and a cloud change after review requires another choice', async t => {
+  const f = await fixture(), saved = await ready(f.api)
+  t.after(() => f.api.dispose())
+  const folder = new FolderWorkspaceClient(f.a)
+  const cloudRename = async name => {
+    const base = await folder.readWorkspace()
+    base.workspace.spaces[0].name = name
+    await folder.writeWorkspace(base.workspace, base.etag)
+  }
+  saved.workspace.spaces[0].name = 'Device Space name'
+  await f.api.saveWorkspace(saved.workspace, saved.revision)
+  await cloudRename('Reviewed cloud name')
+  const conflict = await f.api.syncWorkspace()
+  assert.deepEqual(conflict.plannerConflict, {revision: conflict.revision, paths: ['spaces[a-space].name']})
+  assert.deepEqual(conflict.metadata, {ready: true})
+  await cloudRename('Newer cloud name')
+  const writes = f.a.writes.length
+  const selected = await f.api.resolveWorkspaceConflict('local', conflict.plannerConflict.revision, {serverUrl: A.serverUrl, username: A.username})
+  assert.equal(selected.workspace.spaces[0].name, 'Device Space name')
+  assert.equal(f.a.data().spaces[0].name, 'Newer cloud name')
+  assert.equal(f.a.writes.length, writes)
+  assert.notEqual(selected.plannerConflict.revision, conflict.plannerConflict.revision)
+})
+
 test('metadata is saved immediately while cloud synchronization is debounced by exactly 1200 ms', async () => {
   const timers={callbacks:new Map(), next:0, setTimeout(callback,delay){const id=++this.next;this.callbacks.set(id,{callback,delay});return id},clearTimeout(id){this.callbacks.delete(id)}}
   const f=await fixture({timers}), state=await ready(f.api)
@@ -429,6 +453,31 @@ test('metadata is saved immediately while cloud synchronization is debounced by 
   timer.callback();await f.api.syncWorkspace()
   assert.equal(f.a.data().name,'Latest change');assert.equal(f.a.writes.length,1)
   f.api.dispose()
+})
+
+test('a checklist link save acknowledges durable metadata before a queued launch write', async t => {
+  const timers = {callbacks: new Map(), next: 0, setTimeout(callback, delay) {const id = ++this.next; this.callbacks.set(id, {callback, delay}); return id}, clearTimeout(id) {this.callbacks.delete(id)}}
+  const f = await fixture({timers}), initial = await ready(f.api)
+  t.after(() => f.api.dispose())
+  const held = deferred(), entered = deferred(), write = f.cache.save
+  f.cache.save = (key, ...args) => {
+    if (key === launchKey(A)) {entered.resolve(); return held.promise.then(() => write(key, ...args))}
+    return write(key, ...args)
+  }
+  t.after(() => held.resolve())
+  initial.workspace.relations.push({id: 'checklist-link', type: 'depends_on', fromId: 'fixture-card', toId: canonical(A)})
+  const saved = await f.api.saveWorkspace(initial.workspace, initial.revision, {serverUrl: A.serverUrl, username: A.username}, {coalesceLaunch: true})
+  assert.equal(saved.workspace.relations.at(-1).id, 'checklist-link')
+  assert.equal(f.a.writes.length, 0)
+  const launch = [...timers.callbacks.values()].find(timer => timer.delay === 100)
+  assert.ok(launch)
+  launch.callback()
+  await entered.promise
+  const reopened = f.create()
+  t.after(() => reopened.dispose())
+  const restored = await reopened.getState()
+  assert.equal(restored.workspace.relations.at(-1).id, 'checklist-link')
+  held.resolve()
 })
 
 for (const failed of [false, true]) test(`automatic metadata sync publishes one final ${failed ? 'error' : 'successful'} update`, async t => {

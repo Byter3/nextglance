@@ -8,7 +8,7 @@ import vue from '@vitejs/plugin-vue'
 import {createEmptyState} from '@nextspace/core/planner.mjs'
 const {createRenderer,nextTick,effect,stop,ssrContextKey}=createRequire(new URL('../packages/ui/package.json',import.meta.url))('vue')
 
-test('actual App supports native attachment capabilities, guarded event deletion and quiet sync details',async()=>{
+test('actual App guards native deletes and planner conflict choices, and presents quiet sync details',async()=>{
   const originals=new Map(),frames=new Map(),scrolls=[];let frameId=0,app
   const set=(name,value)=>{originals.set(name,Object.getOwnPropertyDescriptor(globalThis,name));Object.defineProperty(globalThis,name,{value,writable:true,configurable:true})}
   const noop=()=>{},media={matches:false,addEventListener:noop,removeEventListener:noop}
@@ -24,13 +24,16 @@ test('actual App supports native attachment capabilities, guarded event deletion
     host.collections=[{id:'calendar',source:'calendar',title:'Work calendar'},{id:'deck',source:'deck',title:'Work board',stacks:[{id:'1',title:'To do'}]},{id:'notes',source:'notes',title:'Notes'},{id:'tasks',source:'tasks',title:'Tasks'}]
     host.records=[{id:'event',source:'calendar',kind:'event',collectionId:'calendar',title:'Project review',start:'2026-11-13T10:00:00Z',end:'2026-11-13T11:00:00Z',etag:'"v1"'},{id:'card',source:'deck',kind:'card',collectionId:'deck',title:'Prepare review'},{id:'note',source:'notes',kind:'note',collectionId:'notes',title:'Review brief',fileId:'42'}]
     host.workspace.relations=[{id:'booking',type:'scheduled_during',fromId:'card',toId:'event'}]
-    host.nativeOperations=['attachDeckFile','removeDeckAttachment','uploadDeckAttachment','listFiles','readDeckAttachments','deleteEvent','updateEvent','respondToEvent','createTask','createCard','updateDescription']
+    host.nativeOperations=['attachDeckFile','removeDeckAttachment','uploadDeckAttachment','listFiles','readDeckAttachments','deleteEvent','updateEvent','respondToEvent','createTask','deleteTask','createCard','updateDescription']
     const calls=[];let failDelete=false,failAttach=false
     const api={getState:async()=>structuredClone(host),resumeSync:async()=>{},listFiles:async()=>({path:'/',files:[]}),readDeckAttachments:async()=>({attachments:[]}),removeDeckAttachment:async()=>({attachments:[]}),uploadDeckAttachment:async()=>({attachments:[],cancelled:true}),attachDeckFile:async input=>{calls.push(['attach',input]);if(failAttach)throw new Error('Permission changed');host.records.find(item=>item.id==='card').attachmentFileIds=['42'];return {attachments:[{id:'a',fileId:'42'}]}},deleteEvent:async input=>{calls.push(['delete',input]);if(failDelete)throw new Error('This event changed on Nextcloud');host.records=host.records.filter(item=>item.id!==input.id);return structuredClone(host)}}
     let failEventEdit=false
     api.updateEvent=async input=>{calls.push(['edit',input]);if(failEventEdit)throw new Error('Event version changed');const record=host.records.find(item=>item.id===input.id);for(const key of ['title','location','reminders'])if(key in input)record[key]=input[key];if('description' in input)record.body=input.description;return structuredClone(host)}
     api.respondToEvent=async input=>{calls.push(['respond',input]);const record=host.records.find(item=>item.id===input.id);record.eventScheduling.attendees[0].participation=input.participation;return structuredClone(host)}
-    api.createTask=async input=>{calls.push(['createTask',input]);host.records.push({id:'new-task',kind:'task',source:'tasks',collectionId:'tasks',title:input.title,body:input.description});return structuredClone(host)}
+    api.createTask=async input=>{calls.push(['createTask',input]);host.records.push({id:'new-task',kind:'task',source:'tasks',collectionId:'tasks',title:input.title,body:input.description,etag:'"task-revision"'});return structuredClone(host)}
+    api.deleteTask=async input=>{calls.push(['deleteTask',input]);host.records=host.records.filter(item=>item.id!==input.id);return structuredClone(host)}
+    api.syncWorkspace=async()=>structuredClone(host)
+    api.resolveWorkspaceConflict=async (...args)=>{calls.push(['resolveWorkspaceConflict',...args]);return {...structuredClone(host),revision:4,storage:{syncStatus:'synced'}}}
     api.createCard=async input=>{calls.push(['createCard',input]);host.records.push({id:'new-card',kind:'card',source:'deck',collectionId:input.collectionId,title:input.title,body:input.description});return {...structuredClone(host),createdRecordId:'new-card'}}
     api.updateDescription=async input=>{calls.push(['description',input]);host.records.find(item=>item.id===input.id).body=input.description;return structuredClone(host)}
     const {default:App}=await server.ssrLoadModule('/src/App.vue')
@@ -68,18 +71,38 @@ test('actual App supports native attachment capabilities, guarded event deletion
     await setup.requestDeleteEvent(event());event().title='Updated review';assert.equal(setup.deleteEventChanged,true);await setup.confirmDeleteEvent();assert.equal(calls.filter(([kind])=>kind==='delete').length,0,'changed confirmation cannot delete hidden new details')
     await setup.requestDeleteEvent(event());failDelete=true;await setup.confirmDeleteEvent();assert.ok(event());assert.equal(setup.modal,'delete-event');assert.match(setup.error,/changed on Nextcloud/)
     failDelete=false;await setup.confirmDeleteEvent();assert.equal(event(),undefined);assert.ok(card());assert.equal(setup.state.workspace.relations[0].toId,'event','linked work and unresolved metadata stay intact')
+    const task=()=>setup.state.records.find(record=>record.id==='new-task')
+    setup.selectedId=task().id
+    await setup.requestDeleteTask(task());assert.equal(setup.modal,'delete-task');assert.equal(setup.deleteTaskDraft.source,'Tasks')
+    assert.equal(calls.some(([operation])=>operation==='deleteTask'),false,'opening the dialog does not delete the task')
+    task().etag='"newer-version"';await setup.confirmDeleteTask();assert.equal(setup.deleteTaskChanged,true)
+    assert.equal(calls.some(([operation])=>operation==='deleteTask'),false,'a changed revision requires another confirmation')
+    setup.closeModal();task().etag='"task-revision"';await setup.requestDeleteTask(task())
+    setup.state.connection.username='other';await setup.confirmDeleteTask();assert.equal(setup.deleteTaskChanged,true)
+    assert.equal(calls.some(([operation])=>operation==='deleteTask'),false,'switching accounts invalidates the confirmation')
+    setup.state.connection.username='fixture';assert.equal(setup.deleteTaskChanged,true)
+    setup.closeModal();await setup.requestDeleteTask(task());await setup.confirmDeleteTask();assert.equal(task(),undefined)
+    assert.deepEqual(calls.find(([operation])=>operation==='deleteTask')[1],{id:'new-task',etag:'"task-revision"',expectedAccount:{serverUrl:'https://cloud.example.test',username:'fixture'}})
     setup.state.storage={...setup.state.storage,syncStatus:'error',errorCode:'TIMEOUT'}
     assert.equal(setup.connectionNoticePresentation,'indicator');setup.syncing=true;await setup.openSyncDetails();assert.equal(setup.modal,'settings');assert.equal(setup.settingsContentReady,false);assert.deepEqual(scrolls,[])
     await nextTick();const callbacks=[...frames.values()];frames.clear();callbacks.forEach(fn=>fn(0));await new Promise(resolve=>setTimeout(resolve,0));await nextTick()
     assert.equal(setup.settingsContentReady,true);assert.equal(setup.calendarColorsOpen,false);assert.deepEqual(scrolls,['.planner-storage-settings'])
     setup.state.storage.errorCode='CACHE_WRITE';assert.equal(setup.connectionNoticePresentation,'banner');setup.syncing=false;setup.closeModal()
     await setup.openSyncDetails();setup.closeModal();await nextTick();const obsolete=[...frames.values()];frames.clear();obsolete.forEach(fn=>fn(0));await new Promise(resolve=>setTimeout(resolve,0));assert.equal(setup.settingsContentReady,false,'closing cancels deferred settings mount')
+    setup.modal='settings';setup.state.storage={syncStatus:'conflict',errorCode:'PLANNER_OVERLAP'};setup.state.revision=3
+    setup.state.plannerConflict={revision:3,paths:['spaces[fictional].name']}
+    await setup.resolvePlannerConflict('local',2);assert.equal(calls.some(([operation])=>operation==='resolveWorkspaceConflict'),false)
+    await setup.resolvePlannerConflict('remote',3)
+    assert.deepEqual(calls.find(([operation])=>operation==='resolveWorkspaceConflict'),['resolveWorkspaceConflict','remote',3,{serverUrl:'https://cloud.example.test',username:'fixture'}])
+    assert.equal(setup.state.plannerConflict,undefined);setup.closeModal()
     let projections=0;const observing=effect(()=>{setup.model;projections++})
     for(let i=0;i<30;i++)setup.state.connection={...setup.state.connection,restoreError:`Progress ${i}`}
     assert.equal(projections,1,'connection-only progress does not rebuild the planner projection')
     setup.state.collections=[...setup.state.collections,{id:'new',source:'deck',title:'New source'}];assert.equal(projections,2,'source collection changes still invalidate mapping projections');stop(observing)
     const template=await readFile(new URL('../packages/ui/src/App.vue',import.meta.url),'utf8')
     assert.match(template,/v-if="selected.kind==='event'" class="button danger" :disabled="!canDeleteEvent/);assert.match(template,/event-delete-reason/);assert.match(template,/<EventSummary/);
+    assert.match(template,/@click="requestDeleteTask\(selected\)"/)
+    assert.match(template,/<PlannerConflictReview v-if="api.resolveWorkspaceConflict&&state.plannerConflict"/)
     assert.match(template,/<SyncNotice v-if="connectionNotice&&connectionNoticePresentation==='banner'"/)
     assert.match(template,/class="icon-button sync-button"[^>]*@click="openSyncDetails"/)
     assert.doesNotMatch(template.match(/<button class="icon-button sync-button"[^>]+>/)[0],/:disabled=/)

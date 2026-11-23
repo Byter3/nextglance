@@ -12,6 +12,15 @@ test('diagnostics is off by default and only whitelisted scalar measurements ent
   assert.equal(sanitizeDiagnosticInput({kind:'made-up'}),null)
   assert.deepEqual(sanitizeDiagnosticInput({kind:'cache',bytes:Infinity,count:-1,durationMs:NaN}),{kind:'cache'})
 })
+
+test('planner diagnostics retain safe failure codes and omit review details', () => {
+  const log = createPerformanceDiagnostics({now: () => 0, platform: 'android'})
+  log.start()
+  const codes = ['PLANNER_READ_CHANGED', 'PLANNER_WRITE_CHANGED', 'PLANNER_OVERLAP']
+  for (const code of codes) log.record({kind:'planner', stage:'error', code, paths:['private-settings'], message:'private info'})
+  assert.deepEqual(JSON.parse(log.read()).events, codes.map(code => ({atMs:0, kind:'planner', stage:'error', code})))
+})
+
 test('diagnostics caps duration and ring events; stop and backwards clocks cannot change previous timing', () => {
   let now=0;const log=createPerformanceDiagnostics({now:()=>now});log.start()
   for(let i=0;i<5007;i++) {now++;log.record({kind:'cache',count:i})}

@@ -495,6 +495,44 @@ test('deleted booking stays absent after damaged archive and stale launch recove
   let restored=await f.api.getState();while(restored.deviceSync.restoring){await tick();restored=await f.api.getState()}assert.ok(!restored.records.some(r=>r.id===event.id));assert.ok(restored.records.some(r=>r.id===task.id))
 })
 
+test('Android deletes only the reviewed task and retains its planner link through stale cache recovery', async t => {
+  const f = await fixture({isNative: true})
+  t.after(f.close)
+  const task = f.record('task'), card = f.record('card')
+  f.state.workspace.relations.push({id: 'task-link', type: 'depends_on', fromId: card.id, toId: task.id})
+  await f.api.saveWorkspace(f.state.workspace, f.state.revision)
+  const beforeDelete = await f.api.getState()
+  const {serverUrl, username} = f.account
+  const input = {id: task.id, etag: task.etag, expectedAccount: {serverUrl, username}}
+  assert.ok(beforeDelete.nativeOperations.includes('deleteTask'))
+  await assert.rejects(f.api.deleteTask({...input, expectedAccount: {serverUrl, username: 'different-account'}}), {code: 'CANCELLED'})
+  await assert.rejects(f.api.deleteTask({...input, etag: '"stale-version"'}), {code: 'CONFLICT'})
+  assert.equal(f.writes().length, 0)
+
+  const href = `${calendar}task.ics`
+  f.calendarRepresentationEtag = '"encoded-task-representation"'
+  const callStart = f.calls.length
+  const deleted = await f.api.deleteTask(input)
+  const requests = f.calls.slice(callStart).filter(call => call.url === href)
+  assert.deepEqual(requests.map(call => call.method), ['GET', 'PROPFIND', 'DELETE'])
+  assert.equal(new Headers(requests.at(-1).headers).get('If-Match'), task.etag)
+  assert.equal(f.sources.has(href), false)
+  assert.equal(deleted.records.some(record => record.id === task.id), false)
+  assert.equal(deleted.records.some(record => record.id === card.id), true)
+  assert.deepEqual(deleted.workspace.relations, beforeDelete.workspace.relations)
+  assert.equal(f.cacheValues.get(sourceEditsKey(f.account)).entries.find(entry => entry.record.id === task.id)?.deleted, true)
+
+  f.api.dispose()
+  f.cacheValues.set(launchKey(f.account), launchCheckpoint(beforeDelete, cacheKey(f.account)))
+  f.native.getSavedAccount = async () => ({account: f.account})
+  f.api = f.create()
+  let restored = await f.api.getState()
+  while (restored.deviceSync.restoring) { await tick(); restored = await f.api.getState() }
+  assert.equal(restored.records.some(record => record.id === task.id), false)
+  assert.equal(restored.records.some(record => record.id === card.id), true)
+  assert.deepEqual(restored.workspace.relations, beforeDelete.workspace.relations)
+})
+
 test('native Deck note attachment is read back and preserves a fresh editable card baseline',async t=>{
   const f=await fixture();t.after(f.close);const card=f.record('card'),note=f.record('note')
   const attached=await f.api.attachDeckFile({id:card.id,noteId:note.id});assert.equal(attached.attachments.length,1)

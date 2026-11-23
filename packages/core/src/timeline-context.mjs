@@ -17,6 +17,30 @@ export function timelinePointLabel({point,viewportStart,viewportEnd,maxWidth=240
   return {offset:before?-14-Math.min(maxWidth,left):14,width:Math.min(maxWidth,before?left:right)}
 }
 
+/** Index contiguous band runs once for the rendered rows. */
+export function timelineBandRuns(groups) {
+  const byCategory = new Map(), bySpace = new Map()
+  const add = (index, id, row) => {
+    if (!id) return
+    const runs = index.get(id) || []
+    const last = runs.at(-1)
+    if (last?.end === row) last.end++
+    else runs.push({start: row, end: row + 1})
+    index.set(id, runs)
+  }
+  groups.forEach((group, row) => {
+    add(byCategory, group.categoryId, row)
+    add(bySpace, group.spaceId, row)
+  })
+  const wholePlot = [{start: 0, end: groups.length || 4}]
+  return ({category, space}) => {
+    if (!groups.length) return wholePlot
+    if (category) return byCategory.get(category.id) || []
+    if (space) return bySpace.get(space.id) || []
+    return wholePlot
+  }
+}
+
 /** Groups receive only the filtered hierarchy; never query hidden/source records. */
 export function collapsedTimelineSpans(group,anchor,daysCount) {
   const records=new Map(),visit=node=>{for(const record of node.records||[])if(['task','card'].includes(record.kind))records.set(record.id,record);for(const child of node.children||[])visit(child)}

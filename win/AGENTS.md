@@ -6,9 +6,9 @@ Visible branding is **NextGlance**. A display-name change must preserve the exis
 
 ## Stack and boundaries
 
-RELEASE-29 targets Windows 0.6.29/build31 after fast checks and source freeze. Windows file version is 0.6.29.31. Android and Nextcloud use the same product version. Verify BOARD-07 in the shared Board and preserve EDIT-19, native/package identities, the approved BRAND-01 icon and previous releases. Preserve HISTORY-02 identity isolation and VIEW-18 weekend shading. Keep native freshness separate from planner metadata errors. Update the permanent Windows shortcut EXE after successful packaging.
+RELEASE-30 targets Windows 0.6.30/build32 after fast checks and source freeze. Windows file version is 0.6.30.32. Android and Nextcloud use the same product version. Verify EDIT-20 and PERF-19 and preserve native/package identities, the approved BRAND-01 icon and previous releases. Update the permanent Windows shortcut EXE after successful packaging.
 
-Private pnpm workspace package `@nextspace/windows`, version 0.6.29, build 31. Electron 44, Vue 3.5, TypeScript 5.9, Vite 7, electron-builder 26. Shared UI uses Tiptap, Markdown-it, DOMPurify and Lucide. Use installed/locked versions; do not upgrade frameworks as incidental cleanup.
+Private pnpm workspace package `@nextspace/windows`, version 0.6.30, build 32. Electron 44, Vue 3.5, TypeScript 5.9, Vite 7, electron-builder 26. Shared UI uses Tiptap, Markdown-it, DOMPurify and Lucide. Use installed/locked versions; do not upgrade frameworks as incidental cleanup.
 
 `electron/main.cjs` owns host operations; the preload exposes the typed WorkspaceApi. The sandboxed renderer must not receive Node access, credentials or unrestricted IPC. The host owns secure credential storage, networking, account-local durable storage and scheduling recovery. Operation lanes coordinate background reads, native mutations and account changes.
 

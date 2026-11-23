@@ -45,6 +45,8 @@ Use targeted unit tests and no-emit/syntax checks only during iterations. Exampl
 
 ## Current owner decisions
 
+- RELEASE-30 authorizes final local Windows, Android and Nextcloud packages at **0.6.30/build32** for SYNC-17, PERF-19, PERF-20 and EDIT-20. Use Windows file version **0.6.30.32** and Android versionCode **32**. Preserve previous packages and identities, refresh the stable Windows shortcut, and push privacy-reviewed source to the existing GitHub repository after package checks. Keep binary packages local.
+
 - RELEASE-29 authorizes BOARD-07 and final local Windows, Android and Nextcloud packages at **0.6.29/build31** after focused checks and source freeze. Use Windows file version **0.6.29.31** and Android versionCode **31**. Preserve prior packages, technical identities and the permanent Windows shortcut. After privacy review, push source to the existing GitHub repository. Don't upload packages, deploy or install on user devices.
 
 - RELEASE-28 authorizes EDIT-19 and final Windows and Android packages at **0.6.28/build30** after focused verification and source freeze. Preserve previous packages and technical identities and update `NextGlance-Latest.exe`. Run the shared protocol checks across all client harnesses. No push, deployment or device install is authorized for this milestone.

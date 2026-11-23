@@ -1,5 +1,41 @@
 # NextGlance feature parity and phased implementation
 
+## Local packages and source push — RELEASE-30
+
+See the [local package and verification record](../docs/RELEASES.md#0630--windows-android-and-nextcloud) for artifact checksums, versions and source checks.
+
+## Android checklist task creation — PERF-20
+
+- [x] Verify a series uses durable link save acknowledgements and does not block for a second cloud pass.
+- [x] Verify partial completion and retry keep the same IDs and preserve saved links without duplicating tasks.
+- [ ] Tablet and live-server timing.
+
+The three-task coordinator fixture uses one explicit cloud sync before creating tasks and preserves all three durable links. A later uncertain task response reuses its saved request. The Android controller fixture blocks the quick-launch cache write and verifies that the task link still acknowledges and reopens from durable metadata.
+
+## Delete a native Task — EDIT-20
+
+- [x] Confirm deletion in the shared Task inspector and protect against a changed task or account.
+- [x] Verify conditional native deletion, revised and mixed-resource handling, and cache recovery in each client.
+- [ ] Device and live-server acceptance.
+
+The shared vectors and UI fixture verify strong revisions, list permissions and confirmation invalidation. Native protocol and Windows, Android and Nextcloud controller fixtures verify the conditional removal, unchanged links and stale-refresh protection.
+
+## Android planner retry and conflict review — SYNC-17
+
+- [x] Recover lost acknowledgements after complete and partial uploads followed by a second edit and restart. Keep conflict protection for differing cloud contents.
+- [x] Distinguish sync consistency failures from reviewable overlaps in diagnostics. Verify both choices, stale reviews and compatible edit preservation.
+- [ ] Tablet and live-server acceptance.
+
+Portable folder and Android metadata fixtures cover repeated interrupted uploads, native identity moves and copies, organization conflicts and combined dependency cycles. The Settings action carries the reviewed revision and account. The JavaScript and native diagnostics checks accept the new codes without exporting planner values.
+
+## Timeline rendering with large calendar histories — PERF-19
+
+- [x] Bound Timeline event presentation and repeated grouping work during date navigation.
+- [x] Verify the large-history fixture and existing date-window behavior.
+- [ ] Tablet performance acceptance.
+
+The Timeline fixture renders a fictional 10,000-event history without formatting out-of-window events. The window index checks date navigation, exclusive ends and stable ordering. A linked booking outside the displayed range remains available to its work item.
+
 ## Compact Board tasks and type icons — BOARD-07 / RELEASE-29
 
 - [x] Shared Board shows two-line standalone tasks and source-colored item icons.

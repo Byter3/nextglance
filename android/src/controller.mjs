@@ -17,7 +17,7 @@ import {calendarPreferences,calendarHistoryEvidence,checkedCalendarHistoryDays} 
 import {restoreSourceStatuses} from '@nextspace/core/cached-sources.mjs'
 import {checkedLaunchCheckpoint, launchCheckpoint} from './launch-cache.mjs'
 import {createPerformanceDiagnostics} from '@nextspace/core/performance-diagnostics.mjs'
-import {eventEditOperation,eventDeleteOperation,eventRespondOperation} from '@nextspace/core/native-operations.mjs'
+import {eventEditOperation,eventDeleteOperation,eventRespondOperation,taskDeleteOperation} from '@nextspace/core/native-operations.mjs'
 import {plannerExportDocument} from './planner-export.mjs'
 import {ViewPreferencesClient} from '@nextspace/nextcloud-client/view-preferences.mjs'
 import {createWidgetPublisher,resolveWidgetAction} from './widgets.mjs'
@@ -767,6 +767,25 @@ export function createMobileController({native, cache, openExternal, widgets, ti
     })
     queueLaunch(context.active,context.epoch)
   }
+  async function adoptDeletedDav(result, record, collection, context) {
+    assertContext(context)
+    if (result?.deleted !== true) throw problem(`Nextcloud did not confirm ${record.kind} deletion. Refresh before retrying.`, 'NEXTCLOUD')
+    cancelSourceReads()
+    state.records = state.records.filter(item => nativeKey(item) !== nativeKey(record))
+    lastReconciliation = undefined
+    state.statuses = state.statuses.map(status => ({...status, count: state.records.filter(item => item.source === status.source).length}))
+    try { await persistAcknowledged(record, collection, context, true) }
+    catch {
+      assertContext(context)
+      const message = `The ${record.kind} was deleted in Nextcloud, but recovery data could not be saved. Refresh before retrying.`
+      state.storage = {...state.storage, syncStatus: 'error', errorCode: 'CACHE_WRITE', errorStage: 'local-cache', message}
+      emit()
+      throw problem(message, 'CACHE_WRITE')
+    }
+    assertContext(context)
+    emit()
+    return snapshot()
+  }
   async function commitRecord(record, saved, context) {
     const collection = state.collections.find(item => item.id === record.collectionId && item.source === record.source)
     const updated = await context.client.savedRecord(record, collection, saved)
@@ -1226,6 +1245,7 @@ export function createMobileController({native, cache, openExternal, widgets, ti
     }),
     createTask: input => nativeOperation('createTask', async context => {
       inputObject(input)
+      checkExpectedAccount(input.expectedAccount)
       const options=taskCreationOptions(input)
       const collection=currentCollection(input.collectionId,'tasks')
       if(!metadata||!state.metadata.ready)throw problem('Load your saved planner before creating a task.','METADATA_NOT_READY')
@@ -1279,12 +1299,15 @@ export function createMobileController({native, cache, openExternal, widgets, ti
     }),
     deleteEvent: input=>nativeOperation('deleteEvent',async context=>{
       inputObject(input);const {record,collection}=eventRecord(input.id,'deleteEvent')
-      const deleted=await context.client.deleteEvent({id:record.id},record,collection);assertContext(context)
-      if(deleted?.deleted!==true)throw problem('Nextcloud did not confirm event deletion. Refresh before retrying.','NEXTCLOUD')
-      cancelSourceReads();state.records=state.records.filter(item=>nativeKey(item)!==nativeKey(record));lastReconciliation=undefined
-      state.statuses=state.statuses.map(status=>({...status,count:state.records.filter(item=>item.source===status.source).length}))
-      try{await persistAcknowledged(record,collection,context,true)}catch(error){state.storage={...state.storage,syncStatus:'error',errorCode:'CACHE_WRITE',errorStage:'local-cache',message:'The event was deleted in Nextcloud, but recovery data could not be saved. Refresh before retrying.'};emit();throw problem(state.storage.message,'CACHE_WRITE')}
-      emit();return snapshot()
+      return adoptDeletedDav(await context.client.deleteEvent({id:record.id},record,collection), record, collection, context)
+    }),
+    deleteTask: input => nativeOperation('deleteTask', async context => {
+      inputObject(input)
+      checkExpectedAccount(inputObject(input.expectedAccount))
+      const record = currentRecord(input.id, 'tasks'), collection = currentCollection(record.collectionId, 'tasks')
+      if (record.id !== input.id || record.etag !== input.etag) throw problem('This task changed. Refresh and review it before deleting.', 'CONFLICT')
+      if (taskDeleteOperation(record, [collection]) !== 'deleteTask') throw problem('This task cannot be deleted in NextGlance.', 'PERMISSION')
+      return adoptDeletedDav(await context.client.deleteTask({id: input.id, etag: input.etag}, record, collection), record, collection, context)
     }),
     createLinkedEvent: input => nativeOperation('createLinkedEvent', async () => {
       requireSource('calendar')
@@ -1296,7 +1319,7 @@ export function createMobileController({native, cache, openExternal, widgets, ti
       if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) throw problem('Only secure web links can be opened.', 'SECURITY')
       await openExternal(parsed.href)
     },
-    saveWorkspace: (workspace, expectedRevision, expectedAccount) => gate.run(async () => {
+    saveWorkspace: (workspace, expectedRevision, expectedAccount, options) => gate.run(async () => {
       await initialize()
       if (syncState().restoring) throw problem('Wait for saved planner data to finish restoring before saving changes.', 'METADATA_NOT_READY')
       checkExpectedAccount(expectedAccount)
@@ -1306,18 +1329,24 @@ export function createMobileController({native, cache, openExternal, widgets, ti
       if (epoch !== generation || metadata !== store) throw new Error('The selected Nextcloud account changed. Your edit remains saved for its original account.')
       const saved = store.getState()
       state = {...state, ...saved}
-      await saveLaunch(account, epoch)
+      if (options?.coalesceLaunch === true) queueLaunch(account, epoch)
+      else await saveLaunch(account, epoch)
       // The durable local commit completes before asynchronous cloud work starts.
       scheduleCloudSync(); emit()
-      return clone(saved)
+      return {workspace: saved.workspace, revision: saved.revision, storage: saved.storage}
     }),
     syncWorkspace: () => gate.run(() => syncMetadata()),
     resolveWorkspaceConflict: (choice, expectedRevision, expectedAccount) => gate.run(async () => {
       await initialize()
       if (syncState().restoring) throw problem('Wait for saved planner data to finish restoring.', 'METADATA_NOT_READY')
-      checkExpectedAccount(expectedAccount)
+      checkExpectedAccount(inputObject(expectedAccount))
       if (!metadata || !account) return unavailable()
       const store = metadata, active = account, epoch = generation
+      // A manual retry can discover a different cloud copy. Let it finish
+      // before applying the revision the user reviewed.
+      if (syncPending) await syncPending
+      checkExpectedAccount(expectedAccount)
+      if (epoch !== generation || metadata !== store) throw problem('The selected Nextcloud account changed.', 'CANCELLED')
       await store.resolveConflict(choice, expectedRevision)
       if (epoch !== generation || metadata !== store) return snapshot()
       state = {...state, ...store.getState()}

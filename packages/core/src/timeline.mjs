@@ -3,13 +3,14 @@ import {organizationMembership} from './organization-tags.mjs'
 const list = value => Array.isArray(value) ? value : []
 const dateOnly = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
 const asDate = value => value instanceof Date ? value : new Date(dateOnly(value) ? `${value}T00:00:00` : value)
+const dayNumber = date => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000
 
 /** Calendar-day coordinates keep columns aligned across daylight-saving changes. */
 export function timelineOffset(value, anchor) {
   if (!value) return NaN
   const date = asDate(value), origin = asDate(anchor)
   if (!Number.isFinite(+date) || !Number.isFinite(+origin)) return NaN
-  return (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(origin.getFullYear(), origin.getMonth(), origin.getDate())) / 86400000 + (date.getHours() * 60 + date.getMinutes()) / 1440
+  return dayNumber(date) - dayNumber(origin) + (date.getHours() * 60 + date.getMinutes()) / 1440
 }
 
 export function timelineInterval(start, end, anchor, daysCount = 14) {
@@ -156,6 +157,45 @@ export function timelineStatus(record, collections = []) {
   return status === 'CANCELLED' ? 'Cancelled' : status === 'IN-PROCESS' ? 'In progress' : 'To do'
 }
 
+/** Find potential visible events without laying out the rest of the Calendar history. */
+export function indexTimelineEvents(records) {
+  const windows = []
+  const events = new Map(list(records).filter(record => record.kind === 'event').map(record => [record.id, record]))
+  for (const record of events.values()) {
+    // Include any deadline point the geometry can fall back to. Day bounds are
+    // conservative; timelineGeometry still decides exact times and clipping.
+    const days = [record.start, record.end, record.due].filter(Boolean).map(value => dayNumber(asDate(value))).filter(Number.isFinite)
+    if (days.length) windows.push({record, first: Math.min(...days), last: Math.max(...days), order: windows.length})
+  }
+  windows.sort((a, b) => a.first - b.first)
+  const subtreeEnds = []
+  function index(start, end) {
+    if (start >= end) return -Infinity
+    const middle = Math.floor((start + end) / 2)
+    const last = Math.max(windows[middle].last, index(start, middle), index(middle + 1, end))
+    subtreeEnds[middle] = last
+    return last
+  }
+  index(0, windows.length)
+  return (anchor, daysCount) => {
+    const first = dayNumber(asDate(anchor)), last = first + daysCount
+    if (!Number.isFinite(first)) return []
+    const matches = []
+    function collect(start, end) {
+      if (start >= end || windows[start].first >= last) return
+      const middle = Math.floor((start + end) / 2)
+      if (subtreeEnds[middle] < first) return
+      const window = windows[middle]
+      collect(start, middle)
+      if (window.first < last && window.last >= first) matches.push(window)
+      collect(middle + 1, end)
+    }
+    collect(0, windows.length)
+    // Retain input order for simultaneous events with identical titles.
+    return matches.sort((a, b) => a.order - b.order).map(window => window.record)
+  }
+}
+
 /** Calendar events are background time bands, never work rows. Label lanes use
  * their visible pixel widths so short bookings remain readable at a day zoom. */
 export function timelineEvents(records, anchor, daysCount = 14, plotWidth = 840, maxLanes = 3) {
@@ -179,4 +219,14 @@ export function timelineEvents(records, anchor, daysCount = 14, plotWidth = 840,
     return {record, range, labelLeft, labelWidth, lane, overflow: lane < 0}
   })
   return {entries, lanes: Math.max(1, lanes.length), overflow: entries.filter(entry => entry.overflow)}
+}
+
+/** Keep the sorted layout order in each day agenda, with the same exclusive ends. */
+export function timelineDayEvents(events, daysCount) {
+  const days = Array.from({length: daysCount}, () => [])
+  for (const event of events) {
+    const first = Math.max(0, Math.floor(event.range.start)), end = Math.min(daysCount, Math.ceil(event.range.end))
+    for (let index = first; index < end; index++) days[index].push(event)
+  }
+  return days
 }

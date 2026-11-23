@@ -44,7 +44,7 @@ export function publicSnapshot(state) {
   const collections = state.collections.map(({remote, ...collection}) => {
     return verified.has(collection.source) ? collection : {...collection, readonly: true}
   })
-  return clone({...state, records, collections})
+  return clone({...state, ...(state.metadata ? {metadata: {ready: state.metadata.ready}} : {}), records, collections})
 }
 
 function validateSourceCache(value, accountKey) {

@@ -12,7 +12,7 @@ final class NativeDiagnostics {
         "stage",Set.of("start","finish","error","discovery","cache-read","cache-write","download","projection","local-cache","authorization","planner-read","planner-write","page","panel","frame","scroll","worker-ready","first-checkpoint","full-restore","publication"),
         "page",Set.of("overview","calendar","timeline","board","list","settings"),
         "method",Set.of("GET","HEAD","PROPFIND","REPORT","PUT","POST","DELETE","MKCOL"),
-        "code",Set.of("AUTH","PERMISSION","CANCELLED","TIMEOUT","NETWORK","OFFLINE","LIMIT","FORMAT","VALIDATION","SECURITY","CONFLICT","UNAVAILABLE","NEXTCLOUD","REDIRECT","CACHE_FORMAT","CACHE_READ_FAILED","CACHE_WRITE_FAILED","CACHE_WRITE","CACHE_UNREADABLE","METADATA_NOT_READY","PREVIEW_HOST","PREVIEW_SESSION_EXPIRED","RECONNECT_REQUIRED","UNKNOWN"));
+        "code",Set.of("AUTH","PERMISSION","CANCELLED","TIMEOUT","NETWORK","OFFLINE","LIMIT","FORMAT","VALIDATION","SECURITY","CONFLICT","PLANNER_OVERLAP","PLANNER_READ_CHANGED","PLANNER_WRITE_CHANGED","UNAVAILABLE","NEXTCLOUD","REDIRECT","CACHE_FORMAT","CACHE_READ_FAILED","CACHE_WRITE_FAILED","CACHE_WRITE","CACHE_UNREADABLE","METADATA_NOT_READY","PREVIEW_HOST","PREVIEW_SESSION_EXPIRED","RECONNECT_REQUIRED","UNKNOWN"));
     static final Set<String> NUMBERS=Set.of("durationMs","count","bytes","completed","total","cacheHits","cacheMisses","downloads","frames","maxDelayMs","status");
     static String checked(String text) throws Exception {
         try {

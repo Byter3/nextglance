@@ -5,8 +5,9 @@ import {mkdtemp,rm,readFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {WorkspaceStore,accountScope} from '@nextspace/nextcloud-node/workspace.mjs'
-import {FolderWorkspaceClient,splitWorkspace,assembleWorkspace,sharedFolderHash} from '@nextspace/nextcloud-node/planner-folder.mjs'
+import {FolderWorkspaceClient,splitWorkspace,assembleWorkspace,sharedFolderHash,plannerPublicationDocuments,acknowledgePlannerDocuments} from '@nextspace/nextcloud-node/planner-folder.mjs'
 import {createPlannerWorkspace} from '@nextspace/core/planner.mjs'
+import {mergeWorkspaces} from '@nextspace/core/workspace-merge.mjs'
 
 const clone=value=>structuredClone(value)
 const scope=accountScope('https://folder-fixture.invalid','tester')
@@ -110,6 +111,93 @@ test('folder documents preserve shared data while excluding device navigation an
   assert.deepEqual(documents.get('identities.json').value.identities,workspace.identities)
   assert.deepEqual(documents.get('dependencies.json').value.relations,[])
   assert.equal(JSON.stringify([...documents]).includes('cache'),false)
+})
+
+test('a partially published organization acknowledges only the earlier local edit in the matching document', () => {
+  const base = createPlannerWorkspace()
+  base.spaces = [{id:'studio', name:'Studio', color:'#123456', collectionIds:[]}]
+  base.planner.view = 'board'
+  const local = clone(base)
+  local.spaces[0].name = 'Artwork studio'
+  local.appearance.mode = 'dark'
+  const remote = clone(base)
+  remote.spaces[0].color = '#abcdef'
+  remote.properties.brief = {estimate: 15}
+  const candidate = mergeWorkspaces(base, local, remote).workspace
+  const documentReceipts = plannerPublicationDocuments(base, local, candidate, remote)
+  assert.equal(Object.keys(documentReceipts).length, 2)
+  for (const [key, value] of Object.entries(documentReceipts)) {
+    assert.match(key, /^[a-f0-9]{64}$/)
+    assert.match(value, /^[a-f0-9]{64}$/)
+  }
+
+  const verified = clone(remote)
+  verified.spaces = clone(candidate.spaces)
+  verified.appearance.mode = 'light'
+  const acknowledged = acknowledgePlannerDocuments(base, local, verified, documentReceipts)
+  assert.deepEqual(acknowledged.spaces, local.spaces, 'Keep the earlier local title and let the remote color merge separately')
+  assert.equal(acknowledged.appearance.mode, 'system')
+  assert.equal(acknowledged.properties.brief, undefined)
+  assert.equal(acknowledged.planner.view, 'board')
+  assert.equal(acknowledged.updatedAt, base.updatedAt)
+
+  const latest = clone(local)
+  latest.spaces[0].name = 'Design studio'
+  const result = mergeWorkspaces(acknowledged, latest, verified)
+  assert.deepEqual(result.conflicts, ['appearance.mode'])
+  assert.equal(result.workspace.spaces[0].name, 'Design studio')
+  assert.equal(result.workspace.spaces[0].color, '#abcdef')
+  assert.deepEqual(result.workspace.properties.brief, {estimate: 15})
+})
+
+test('partial publication matches a verified removal and leaves a different cloud document for normal merge', () => {
+  const base = createPlannerWorkspace()
+  base.properties.removed = {estimate: 20}
+  base.properties.kept = {estimate: 40}
+  const local = clone(base)
+  delete local.properties.removed
+  local.properties.kept.estimate = 30
+  const receipts = plannerPublicationDocuments(base, local, local, base)
+  const verified = clone(base)
+  delete verified.properties.removed
+  verified.properties.kept.estimate = 15
+  assert.deepEqual(acknowledgePlannerDocuments(base, local, verified, receipts).properties, {kept: {estimate: 40}})
+  assert.strictEqual(acknowledgePlannerDocuments(base, local, base, receipts), base)
+  assert.strictEqual(acknowledgePlannerDocuments(base, local, verified, {}), base)
+  assert.equal(Object.keys(plannerPublicationDocuments(base, local, local, verified)).length, 1, 'The known missing property needs no removal attempt')
+  assert.deepEqual(plannerPublicationDocuments(base, local, local, null), {})
+})
+
+test('partial publication never treats a path restored by a merge as evidence of the local removal', () => {
+  const base = createPlannerWorkspace()
+  base.properties.fixture = {estimate: 10}
+  const local = clone(base)
+  delete local.properties.fixture
+  const candidate = clone(base)
+  candidate.properties.fixture.estimate = 25
+  assert.deepEqual(plannerPublicationDocuments(base, local, candidate, base), {})
+})
+
+test('partial publication keeps the original baseline when matched documents cannot form a valid planner', () => {
+  const base = createPlannerWorkspace()
+  base.relations = [{...link('previous','task'), label:'Original link'}]
+  const local = clone(base)
+  local.relations = [{...link('new','task'), label:'New link'}]
+  const verified = clone(local)
+  verified.relations.push({...link('previous','another-task'), label:'Cloud link'})
+  const receipts = plannerPublicationDocuments(base, local, local, base)
+  assert.equal(Object.keys(receipts).length, 2)
+  assert.strictEqual(acknowledgePlannerDocuments(base, local, verified, receipts), base)
+})
+
+test('oversized folders fall back to the full-publication receipt', () => {
+  const base = createPlannerWorkspace()
+  // Five required documents plus 19,996 properties is a valid workspace with
+  // more document paths than the partial receipt covers.
+  base.properties = Object.fromEntries(Array.from({length: 19_996}, (_, index) => [`fixture-${index}`, {estimate: 15}]))
+  const local = clone(base)
+  local.name = 'Revised studio'
+  assert.deepEqual(plannerPublicationDocuments(base, local, local, base), {})
 })
 
 test('migration merges unsynced local changes with the existing cloud baseline and never rewrites legacy JSON',async t=>{

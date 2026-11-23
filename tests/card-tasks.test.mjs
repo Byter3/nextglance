@@ -36,6 +36,49 @@ test('batch creation keeps durable per-row receipts with only reservation and fi
   assert.equal(syncs,2);assert.equal(saves,9);assert.equal(publications,2);assert.equal(f.creates,8);assert.equal(Object.values(f.state.workspace.properties.card.cardTasks).filter(value=>value.taskIdentityKey).length,8)
 })
 
+test('Android continues from durable per-task checkpoints and leaves final link sync to the host',async()=>{
+  const f=fixture(),entries=[]
+  for(let index=0;index<3;index++)entries.push(await prepareCardTask({card:f.card,workspace:f.state.workspace,collectionId:'tasks',title:`Step ${index}`}))
+  const {getState,syncWorkspace,saveWorkspace,createTask}=f.api
+  const account={serverUrl:'https://cloud.example.test',username:'demo'},operations=[]
+  f.api.getState=async()=>{operations.push('read');return getState()}
+  f.api.syncWorkspace=async()=>{operations.push('sync');f.state.storage.syncStatus='synced';return syncWorkspace()}
+  f.api.saveWorkspace=async(workspace,revision,expectedAccount,options)=>{
+    assert.deepEqual(expectedAccount,account)
+    operations.push(options?.coalesceLaunch?'save-link':'reserve')
+    f.state.storage.syncStatus='pending'
+    return saveWorkspace(workspace,revision)
+  }
+  f.api.createTask=async input=>{assert.deepEqual(input.expectedAccount,account);operations.push('create');return createTask(input)}
+  const result=await createCardTasks({api:f.api,cardId:'card',entries,deferLinkSync:true})
+  assert.deepEqual(operations,['read','reserve','sync','create','save-link','read','create','save-link','read','create','save-link'])
+  assert.equal(result.linksPending,true)
+  assert.equal(result.state.revision,f.state.revision)
+  assert.equal(result.state.workspace.relations.length,3)
+})
+
+test('a timed-out later Android create preserves earlier links and retries the same native request',async()=>{
+  const f=fixture(),entries=[]
+  for(let index=0;index<3;index++)entries.push(await prepareCardTask({card:f.card,workspace:f.state.workspace,collectionId:'tasks',title:`Step ${index}`}))
+  const {syncWorkspace,saveWorkspace,createTask}=f.api;let syncs=0,calls=0,partialState
+  f.api.syncWorkspace=async()=>{syncs++;f.state.storage.syncStatus='synced';return syncWorkspace()}
+  f.api.saveWorkspace=async(...args)=>{f.state.storage.syncStatus='pending';return saveWorkspace(...args)}
+  f.api.createTask=async input=>{if(++calls===2)f.lost=true;return createTask(input)}
+  const options={api:f.api,cardId:'card',entries,deferLinkSync:true,onState:state=>partialState=state}
+  await assert.rejects(createCardTasks(options),/1 task\(s\) were created or recovered; their planner links are pending/)
+  assert.equal(syncs,1);assert.equal(f.creates,2);assert.equal(partialState.workspace.relations.length,1)
+  const result=await createCardTasks(options)
+  assert.equal(syncs,2);assert.equal(f.creates,3);assert.equal(result.state.workspace.relations.length,3)
+})
+
+test('the foreground reports an unconfirmed final link sync without immediately repeating it',async()=>{
+  const f=fixture(),entry=await prepareCardTask({card:f.card,workspace:f.state.workspace,collectionId:'tasks',title:'Write brief'})
+  const sync=f.api.syncWorkspace;let syncs=0
+  f.api.syncWorkspace=async()=>{if(++syncs===2)throw new Error('Final sync timed out');return sync()}
+  await assert.rejects(createCardTasks({api:f.api,cardId:'card',entries:[entry]}),/Final sync timed out/)
+  assert.equal(syncs,2);assert.equal(f.state.workspace.relations.length,1)
+})
+
 test('editing a checklist task title preserves checklist identity and duplicate prevention',async()=>{
   const f=fixture(),candidate=(await checklistTaskCandidates({...f.state,card:f.card}))[0]
   const entry=await prepareCardTask({card:f.card,workspace:f.state.workspace,collectionId:'tasks',candidate,title:'Gather interview footage'})

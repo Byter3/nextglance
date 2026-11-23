@@ -4,6 +4,20 @@ These are dated records of local builds, not public download links. Artifact pat
 
 Packages listed here are local development artifacts. Outputs stay in `win/release/`, `android/release/` and `web/release/`, outside source control. The reviewed source is published in [Byter3/nextglance](https://github.com/Byter3/nextglance); source publication does not publish these binary packages. Application/account/storage identities remain unchanged.
 
+## 0.6.30 — Windows, Android and Nextcloud
+
+Built on **2026-11-23** for SYNC-17, PERF-19, PERF-20 and EDIT-20. Windows file version is `0.6.30.32`, Android versionCode is `32`, and the Nextcloud app version is `0.6.30`. See the [release notes](RELEASE-NOTES-0.6.30.md).
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `win/release/NextGlance-0.6.30-Windows.exe` | 101,275,116 bytes | `dd73a5ca76fb0c72639a7222e8a36b4b910314b30407fa2ce7f208175ba8894f` |
+| `android/release/NextGlance-0.6.30-Android-debug.apk` | 13,254,775 bytes | `7ee500714a5cc5dc8ff4607a3c59c7840c4d085559259f52671590353bd7ee14` |
+| `web/release/NextGlance-0.6.30-Nextcloud.tar.gz` | 2,046,396 bytes | `bba435de0e122b5c30908847e5bab8b34fa8cd8e5fc92da4a4a30bb4b16e2084` |
+
+The permanent Windows shortcut target `win/release/NextGlance-Latest.exe` matches the versioned EXE byte for byte. The unpacked and portable Windows launch checks and the packaged task-deletion authorization check passed. The Android APK retains its signing identity, matches the built foreground and headless assets, and passed 217 JVM tests. The Nextcloud archive contains matching production assets and 494 matching source files. The embedded session browser fixture passed.
+
+The shared suite passed 966 tests, Android passed 878 JavaScript tests, and Windows and Nextcloud passed 1,008 JavaScript tests. The source privacy scan reported no findings. The prior 40 Windows versioned executables, 29 Android APKs and 20 Nextcloud archives and checksums retained their hashes. Physical-device timing and live-server acceptance remain open.
+
 ## 0.6.29 — Windows, Android and Nextcloud
 
 Built on **2026-11-23** for BOARD-07 / RELEASE-29. Windows file version is `0.6.29.31`, Android versionCode is `31`, and Nextcloud app version is `0.6.29`.

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {spawnSync} from 'node:child_process'
-import {timelineEvents, timelineGroups, timelineGeometry, timelineInterval, timelineOffset, timelineStatus} from '@nextspace/core/timeline.mjs'
+import {indexTimelineEvents, timelineDayEvents, timelineEvents, timelineGroups, timelineGeometry, timelineInterval, timelineOffset, timelineStatus} from '@nextspace/core/timeline.mjs'
 
 const flatten = groups => groups.flatMap(group => [...group.records, ...flatten(group.children)])
 const task = (id, collectionId) => ({id, collectionId, kind:'task', source:'tasks', title:id})
@@ -77,6 +77,60 @@ test('vertical calendar bands preserve timed duration and exclude events ending 
   assert.equal(layout.entries[0].range.start,1+10/24)
   assert.ok(layout.entries[0].labelWidth>2/24/7*700,'Readable labels must not inflate the actual event duration')
   assert.ok(Math.abs(layout.entries[0].labelLeft+layout.entries[0].labelWidth/2-(1+11/24)/7*700)<1e-10,'Short booking labels center over their band')
+})
+
+test('calendar window index preserves exact clipping, point fallback, ordering and label lanes', () => {
+  const event=(id,start,end,extra={})=>({id,kind:'event',source:'calendar',title:'Booking',start,end,...extra})
+  const records=[
+    event('span','2026-01-01','2026-12-01'),
+    event('exclusive','2026-10-14','2026-10-24'),
+    event('timed-a','2026-10-25T09:00:00','2026-10-25T10:00:00'),
+    event('timed-b','2026-10-25T09:00:00','2026-10-25T10:00:00'),
+    event('duplicate','2026-10-25','2026-10-26'),
+    event('duplicate','1950-01-01','1950-01-02'),
+    event('point','2026-10-27'),
+    event('fallback-due','2026-10-27','2026-10-28',{due:'2026-11-01'}),
+    event('invalid-start','invalid','2026-10-28',{due:'2026-11-03'}),
+    event('zone','2026-10-25T23:55:00+01:00','2026-10-26T01:30:00+01:00'),
+    task('work','tasks'),
+  ]
+  const candidates=indexTimelineEvents(records)
+  for(const anchor of ['1950-01-01','2026-10-24','2026-10-25','2026-10-27','2026-11-01','2026-12-01']){
+    for(const days of [1,7,28]){
+      assert.deepEqual(timelineEvents(candidates(anchor,days),anchor,days,500),timelineEvents(records,anchor,days,500))
+    }
+  }
+})
+
+test('panning the calendar window lays out candidates without re-reading distant history', () => {
+  let historicalDateReads=0
+  const history=Array.from({length:10000},(_,index)=>{
+    const start=new Date(Date.UTC(1950,0,1+index)).toISOString().slice(0,10)
+    const end=new Date(Date.UTC(1950,0,2+index)).toISOString().slice(0,10)
+    return {id:`history-${index}`,kind:'event',title:`Archived booking ${index}`,get start(){historicalDateReads++;return start},get end(){historicalDateReads++;return end}}
+  })
+  const long={id:'long',kind:'event',title:'Continuing interval',start:'1950-01-01',end:'2026-12-01'}
+  const appointment={id:'current',kind:'event',title:'Current booking',start:'2026-11-19',end:'2026-11-20'}
+  const candidates=indexTimelineEvents([long,...history,appointment])
+  assert.equal(historicalDateReads,20000)
+  for(const anchor of ['2026-11-12','2026-11-17','2026-11-24']){
+    const relevant=candidates(anchor,14)
+    assert.deepEqual(timelineEvents(relevant,anchor,14).entries.map(entry=>entry.record.id),anchor==='2026-11-24'?['long']:['long','current'])
+  }
+  assert.equal(historicalDateReads,20000)
+})
+
+test('day agendas retain calendar order, timed points and exclusive interval ends', () => {
+  const events=[
+    {record:{id:'clipped'},range:{start:0,end:.3}},
+    {record:{id:'spanning'},range:{start:0,end:2}},
+    {record:{id:'midnight'},range:{start:1,end:1}},
+    {record:{id:'timed-point'},range:{start:1.5,end:1.5}},
+    {record:{id:'last-day'},range:{start:2,end:3}},
+  ]
+  assert.deepEqual(timelineDayEvents(events,3).map(day=>day.map(event=>event.record.id)),[
+    ['clipped','spanning'],['spanning','timed-point'],['last-day'],
+  ])
 })
 
 test('overlapping event labels use bounded collision-free lanes and keep overflow events available', () => {

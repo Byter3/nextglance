@@ -50,6 +50,16 @@ export function eventDeleteFingerprint(record) {
   return record ? JSON.stringify([record.id,record.collectionId,record.etag,record.title,record.start,record.end,Boolean(record.allDay)]) : ''
 }
 
+export function taskDeleteOperation(record,collections=[]) {
+  if(record?.kind!=='task'||record.source!=='tasks'||record.readonly||typeof record.etag!=='string'||record.etag.length>1000||!/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(record.etag))return null
+  const collection=collections.find(item=>item.id===record.collectionId&&item.source==='tasks')
+  return collection&&!collection.readonly?'deleteTask':null
+}
+
+export function taskDeleteFingerprint(record) {
+  return record ? JSON.stringify([record.id,record.collectionId,record.etag,record.title,record.start,record.due]) : ''
+}
+
 /** Native Deck attachments require the matching loaded writable board. */
 export function deckAttachmentOperation(record,collections=[],operation='attachDeckFile') {
   if(!['attachDeckFile','removeDeckAttachment','uploadDeckAttachment'].includes(operation)||!record||record.kind!=='card'||record.source!=='deck'||record.readonly)return null

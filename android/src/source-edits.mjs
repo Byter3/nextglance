@@ -30,7 +30,7 @@ export function checkedSourceEdits(input, accountKey, serverUrl) {
       if (![remote.nativeId,remote.boardId,remote.stackId,collection.remote?.nativeId].every(nativeId) || String(remote.boardId)!==String(collection.remote.nativeId) || String(record.stackId)!==String(remote.stackId) || !collection.stacks?.some(stack=>String(stack.id)===String(remote.stackId)) || !snapshot || String(snapshot.id)!==String(remote.nativeId) || String(snapshot.stackId)!==String(remote.stackId) || typeof snapshot.title!=='string' || typeof snapshot.description!=='string') fail()
       if (record.identity.locator !== undefined && record.identity.locator !== `${serverUrl}/index.php/apps/deck/api/v1.0/boards/${remote.boardId}/stacks/${remote.stackId}/cards/${remote.nativeId}`) fail()
     }
-    if (entry.deleted !== undefined && (entry.deleted !== true || record.source !== 'calendar')) fail()
+    if (entry.deleted !== undefined && (entry.deleted !== true || !['calendar', 'tasks'].includes(record.source))) fail()
     const key = nativeKey(record)
     if (keys.has(key)) fail()
     keys.add(key); sequences.add(entry.sequence)

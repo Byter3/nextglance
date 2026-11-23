@@ -217,6 +217,79 @@ test('invitation-specific edit and delete permissions work even when generic eve
   await f.api.getState();const state=await f.api.refresh(),id=state.records[0].id
   await f.api.updateEvent({id,reminders:[15]});await f.api.respondToEvent({id,etag:'version',participation:'ACCEPTED'});assert.equal((await f.api.deleteEvent({id})).records.length,0);assert.deepEqual([updates,responses,deletes],[1,1,1]);f.api.dispose()
 })
+
+test('Web task deletion requires the reviewed account and revision and preserves planner links across a stale refresh', async t => {
+  const selected = {...record, etag: '"reviewed"', remote: {...record.remote, href: collection.remote.href + 'review.ics'}}
+  const other = {...record, id: 'another-task', title: 'Approve draft', identity: {source: 'tasks', key: 'another-fixture-key'}}
+  const nativeSnapshot = {records: [selected, other], collections: [collection], statuses}
+  const link = {id: 'fictional-link', type: 'depends_on', fromId: other.id, toId: selected.id}
+  const expectedAccount = {serverUrl, username: bootstrap.userId}
+  const input = {id: selected.id, etag: selected.etag, expectedAccount}
+  const requests = []
+  let acknowledged = false
+  const f = fixture({
+    initialIdentities: [{id: other.id, source: 'tasks', key: other.identity.key}],
+    clientOverrides: {
+      readAll: async () => nativeSnapshot,
+      deleteTask: async (request, target, list) => {
+        requests.push(request)
+        assert.equal(target.id, selected.id)
+        assert.equal(target.remote.href, selected.remote.href)
+        assert.equal(list.remote.href, collection.remote.href)
+        return {deleted: acknowledged}
+      },
+    },
+  })
+  t.after(() => f.api.dispose())
+  f.changeCloud(workspace => ({...workspace, relations: [link]}))
+  await f.api.getState()
+  const loaded = await f.api.refresh()
+  const writesBeforeDeletion = f.writes
+  assert.ok(loaded.nativeOperations.includes('deleteTask'))
+  await assert.rejects(f.api.deleteTask({...input, expectedAccount: {...expectedAccount, username: 'other-user'}}), {code: 'CONFLICT'})
+  await assert.rejects(f.api.deleteTask({...input, etag: '"older"'}), {code: 'CONFLICT'})
+  assert.deepEqual(requests, [])
+  await assert.rejects(f.api.deleteTask(input), /did not confirm deletion/)
+  assert.ok((await f.api.getState()).records.some(item => item.id === selected.id))
+
+  let completeRefresh
+  f.native.readAll = () => new Promise(resolve => { completeRefresh = resolve })
+  const refresh = f.api.refresh()
+  while (!completeRefresh) await tick()
+  acknowledged = true
+  const deleted = await f.api.deleteTask(input)
+  assert.deepEqual(deleted.records.map(item => item.id), [other.id])
+  assert.deepEqual(deleted.workspace.relations, [link])
+  completeRefresh(nativeSnapshot)
+  const refreshed = await refresh
+  assert.deepEqual(refreshed.records.map(item => item.id), [other.id])
+  assert.deepEqual(refreshed.workspace.relations, [link])
+  assert.deepEqual(f.cloud.relations, [link])
+  assert.deepEqual(requests, [input, input])
+  assert.equal(f.writes, writesBeforeDeletion)
+})
+
+test('Web task deletion never reaches the connector after the authenticated session changes', async t => {
+  const selected = {...record, etag: '"reviewed"'}
+  let switched = false, deletes = 0
+  const f = fixture({
+    bootstrapFor: () => switched ? {...bootstrap, userId: 'other-user'} : bootstrap,
+    clientOverrides: {
+      readAll: async () => ({records: [selected], collections: [collection], statuses}),
+      deleteTask: async () => { deletes++; return {deleted: true} },
+    },
+  })
+  t.after(() => f.api.dispose())
+  await f.api.getState()
+  await f.api.refresh()
+  switched = true
+  await assert.rejects(f.api.deleteTask({
+    id: selected.id, etag: selected.etag, expectedAccount: {serverUrl, username: bootstrap.userId},
+  }), {code: 'AUTH'})
+  assert.equal(deletes, 0)
+  assert.equal(f.api.getHostState().phase, 'expired')
+})
+
 test('native Deck attachment projection exposes file identities and refreshes the changed card validator',async()=>{
   const card={...record,source:'deck',kind:'card',collectionId:'board',identity:{source:'deck',key:'card-1'},etag:'before'},board={...collection,id:'board',source:'deck'}
   const f=fixture({clientOverrides:{readAll:async()=>({records:[card],collections:[board],statuses}),attachDeckFile:async()=>({attachments:[{id:'attachment',fileId:'18',type:'file'}]}),savedRecord:async before=>({...before,etag:'after'})}})

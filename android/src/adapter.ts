@@ -20,7 +20,7 @@ export interface MobileDeviceState {
 }
 export interface MobileAccountIdentity {serverUrl: string; username: string}
 export interface MobileState extends State {
-  metadata: {ready: boolean; conflict?: {base: Workspace; local: Workspace; remote: Workspace|null; paths: string[]}}
+  metadata: {ready: boolean}
   deviceState: MobileDeviceState
 }
 export interface MobileWorkspaceApi extends WorkspaceApi {
@@ -33,8 +33,8 @@ export interface MobileWorkspaceApi extends WorkspaceApi {
   selectAccount(): Promise<MobileState>
   disconnect(): Promise<MobileState>
   syncWorkspace(): Promise<MobileState>
-  saveWorkspace(workspace: Workspace, expectedRevision: number, expectedAccount?: MobileAccountIdentity): Promise<{workspace: Workspace; revision: number; storage: State['storage']}>
-  resolveWorkspaceConflict(choice: 'local'|'remote', expectedRevision: number, expectedAccount?: MobileAccountIdentity): Promise<MobileState>
+  saveWorkspace(workspace: Workspace, expectedRevision: number, expectedAccount?: MobileAccountIdentity, options?: {coalesceLaunch?: boolean}): Promise<{workspace: Workspace; revision: number; storage: State['storage']}>
+  resolveWorkspaceConflict(choice: 'local'|'remote', expectedRevision: number, expectedAccount: MobileAccountIdentity): Promise<MobileState>
   saveDeviceState(deviceState: MobileDeviceState, expectedAccount?: MobileAccountIdentity): Promise<MobileState>
 }
 interface SsoAccount { name: string; serverUrl: string; username: string }

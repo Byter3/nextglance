@@ -1,7 +1,7 @@
 import {problem, mergeSourceRefresh} from './foundation.mjs'
 
 /** @type {readonly (keyof import('@nextspace/contracts').WorkspaceApi)[]} */
-export const NATIVE_OPERATIONS = Object.freeze(['createNote', 'updateNote', 'setNoteTags', 'updateRecordDates', 'createLinkedEvent', 'setTaskCompleted', 'setCardCompleted', 'listFiles', 'readDeckAttachments', 'attachDeckFile', 'removeDeckAttachment', 'uploadDeckAttachment', 'deleteEvent', 'updateEvent', 'createTask', 'createCard', 'updateDescription', 'createEvent', 'respondToEvent', 'setDeckDependency', 'moveCard', 'updateTaskStatus', 'updateRecordAppearance', 'createDeckLabel'])
+export const NATIVE_OPERATIONS = Object.freeze(['createNote', 'updateNote', 'setNoteTags', 'updateRecordDates', 'createLinkedEvent', 'setTaskCompleted', 'setCardCompleted', 'listFiles', 'readDeckAttachments', 'attachDeckFile', 'removeDeckAttachment', 'uploadDeckAttachment', 'deleteEvent', 'updateEvent', 'createTask', 'deleteTask', 'createCard', 'updateDescription', 'createEvent', 'respondToEvent', 'setDeckDependency', 'moveCard', 'updateTaskStatus', 'updateRecordAppearance', 'createDeckLabel'])
 export const nativeKey = record => record.identity?.key ? `${record.source}\0${record.identity.key}` : record.id
 export function inputObject(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw problem('Invalid action input.', 'VALIDATION')

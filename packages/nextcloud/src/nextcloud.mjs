@@ -2610,6 +2610,38 @@ export class NextcloudClient {
     const evidence=eventSchedulingDetails(baseline.calendar,baseline.event,collection.remote?.scheduling);
     const permission=applyEventAuthority({...record,eventScheduling:evidence.eventScheduling,remote:{...record.remote,eventStructure:evidence.structuralReason,invalidScheduling:evidence.invalid}},collection).eventAccess;
     if(!permission.delete)throw fail('Only the organizer may delete this invitation. Decline or open it in Nextcloud.','PERMISSION');
+    return this.#deleteDavResource({href, collectionHref, etag, raw: record.remote.raw, checkDocument, label: 'event'});
+  }
+
+  async deleteTask({id, etag}, record, collection) {
+    if (id !== record?.id || record?.source !== 'tasks' || record.kind !== 'task' || record.readonly ||
+        collection?.source !== 'tasks' || collection.readonly || collection.id !== record.collectionId) {
+      throw fail('Choose an editable task from a verified Tasks list.', 'PERMISSION');
+    }
+    const {href, raw, uid} = record.remote || {}, collectionHref = collection.remote?.href;
+    if (!validResourceLocator({kind: 'dav', collection: collectionHref, href}, this.serverUrl)) throw fail('The task has no safe calendar resource identity.', 'SECURITY');
+    if (!strongEtag(etag) || etag.length > 1000 || etag !== record.etag) throw fail('Refresh this task before deleting; its version changed or is unavailable.', 'CONFLICT');
+    if (typeof raw !== 'string' || !raw || typeof uid !== 'string' || !uid) throw fail('Refresh this task before deleting it.', 'VALIDATION');
+    const checkDocument = body => {
+      const calendar = parseCalendar(body);
+      if (calendar.name !== 'vcalendar') throw fail('Mixed calendar resources must be deleted in Nextcloud.', 'VALIDATION');
+      const todo = calendar.getFirstSubcomponent('vtodo');
+      const zones = calendar.getAllSubcomponents('vtimezone');
+      if (!todo || isComplexTask(calendar, todo) || todo.hasProperty('exrule') ||
+          calendar.getAllSubcomponents().length !== 1 + zones.length ||
+          zones.some(zone => zone.getAllSubcomponents().some(observance => !['standard', 'daylight'].includes(observance.name) || observance.getAllSubcomponents().length)) ||
+          todo.getAllSubcomponents().some(alarm => alarm.name !== 'valarm' || alarm.getAllSubcomponents().length) ||
+          todo.getAllProperties('uid').length !== 1) {
+        throw fail('Recurring tasks, invitations and mixed calendar resources must be deleted in Nextcloud.', 'VALIDATION');
+      }
+      if (todo.getFirstPropertyValue('uid') !== uid) throw fail('The task identity changed on Nextcloud. Refresh before deleting.', 'CONFLICT');
+    };
+    checkDocument(raw);
+    await this.freshDavWriteCollection(collection);
+    return this.#deleteDavResource({href, collectionHref, etag, raw, checkDocument, label: 'task'});
+  }
+
+  async #deleteDavResource({href, collectionHref, etag, raw, checkDocument, label}) {
     const forget = async (cacheAlreadyInvalidated = false) => {
       this.#davSnapshots.delete(collectionHref); this.#davEpoch++;
       this.#davResources.remove(collectionHref, href);
@@ -2622,13 +2654,13 @@ export class NextcloudClient {
     checkDocument(fresh.body);
     // A proxy can change a GET representation tag. If the complete resource
     // matches, confirm the original revision through its DAV property.
-    const revisionEvidence = {baseline: record.remote.raw, body: fresh.body, etag, responseEtag: fresh.headers.get('ETag')};
+    const revisionEvidence = {baseline: raw, body: fresh.body, etag, responseEtag: fresh.headers.get('ETag')};
     let preflight = calendarDeletePreflight(revisionEvidence);
     if (preflight === 'check-dav') {
       const davEtag = await this.#calendarResourceEtag(href, collectionHref);
       preflight = calendarDeletePreflight({...revisionEvidence, davEtag});
     }
-    if (preflight !== 'verified') throw fail('This event changed on Nextcloud. Refresh and review it before deleting.', 'CONFLICT', 412);
+    if (preflight !== 'verified') throw fail(`This ${label} changed on Nextcloud. Refresh and review it before deleting.`, 'CONFLICT', 412);
     const removed = await this.request(href, {method: 'DELETE', headers: {'If-Match': etag}});
     if ([200, 204].includes(removed.status)) return forget(new URL(href).pathname.includes('/remote.php/dav/calendars/'));
     if (removed.status !== 404) assertStatus(removed);
@@ -2637,7 +2669,7 @@ export class NextcloudClient {
     const verify = await this.request(href, {headers: calendarReadHeaders, maxBytes: 2 * 1024 * 1024});
     if (verify.status === 404) return forget();
     assertStatus(verify);
-    throw fail('Nextcloud has not confirmed that this event was deleted. Refresh before trying again.', 'UNAVAILABLE');
+    throw fail(`Nextcloud has not confirmed that this ${label} was deleted. Refresh before trying again.`, 'UNAVAILABLE');
   }
 
   deckCardUrl(record) {

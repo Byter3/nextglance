@@ -11535,6 +11535,39 @@
       }
     },
     {
+      "id": "task-delete-writable-revision",
+      "behavior": "A native task in its writable list offers deletion when a strong revision is available.",
+      "specRef": "EDIT-20",
+      "initialState": {
+        "record": {"id": "task", "kind": "task", "source": "tasks", "collectionId": "studio-tasks", "etag": "\"verified\""},
+        "collections": [{"id": "studio-tasks", "source": "tasks", "readonly": false}]
+      },
+      "input": {"operation": "native.taskDeleteOperation"},
+      "expected": {"output": "deleteTask"}
+    },
+    {
+      "id": "task-delete-weak-revision",
+      "behavior": "A weak validator is insufficient to delete a task.",
+      "specRef": "EDIT-20",
+      "initialState": {
+        "record": {"id": "task", "kind": "task", "source": "tasks", "collectionId": "studio-tasks", "etag": "W/\"verified\""},
+        "collections": [{"id": "studio-tasks", "source": "tasks", "readonly": false}]
+      },
+      "input": {"operation": "native.taskDeleteOperation"},
+      "expected": {"output": null}
+    },
+    {
+      "id": "task-delete-readonly-list",
+      "behavior": "A task in a read-only list cannot be deleted.",
+      "specRef": "EDIT-20",
+      "initialState": {
+        "record": {"id": "task", "kind": "task", "source": "tasks", "collectionId": "studio-tasks", "etag": "\"verified\""},
+        "collections": [{"id": "studio-tasks", "source": "tasks", "readonly": true}]
+      },
+      "input": {"operation": "native.taskDeleteOperation"},
+      "expected": {"output": null}
+    },
+    {
       "id": "dav-inventory-missing-token",
       "behavior": "Missing collection validators cannot certify old inventory.",
       "specRef": "SYNC-12",

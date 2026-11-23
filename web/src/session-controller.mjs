@@ -8,14 +8,14 @@ import {validateWorkspace} from '@nextspace/core/planner-schema.mjs'
 import {mergeWorkspaces, withDeviceViewPreferences} from '@nextspace/core/workspace-merge.mjs'
 import {projectNativeIdentities,promoteNativeIdentities,publicTaskIdentity} from '@nextspace/core/identity.mjs'
 import {mergeSourceRefresh} from '@nextspace/core/source-refresh.mjs'
-import {eventEditOperation,eventDeleteOperation,eventRespondOperation} from '@nextspace/core/native-operations.mjs'
+import {eventEditOperation,eventDeleteOperation,eventRespondOperation,taskDeleteOperation} from '@nextspace/core/native-operations.mjs'
 import {taskCreationOptions} from '@nextspace/core/card-tasks.mjs'
 import {normalizeCalendarWindow} from '@nextspace/core/history.mjs'
 import {createSessionTransport, webProblem} from './session-transport.mjs'
 import {calendarSnapshot,replaceCalendar,mergeCalendarWindow,coversWindow,sameWindow,inCalendarWindow} from './calendar-window.mjs'
 
 const SOURCES = ['tasks','calendar','deck','notes','collectives']
-export const WEB_NATIVE_OPERATIONS = Object.freeze(['createNote','updateNote','setNoteTags','createTask','setTaskCompleted','setTaskDue','updateTaskStatus','createCard','setCardCompleted','moveCard','setDeckDependency','updateDescription','updateRecordDates','updateRecordAppearance','createDeckLabel','createEvent','updateEvent','respondToEvent','deleteEvent','listFiles','readDeckAttachments','attachDeckFile','removeDeckAttachment','uploadDeckAttachment'])
+export const WEB_NATIVE_OPERATIONS = Object.freeze(['createNote','updateNote','setNoteTags','createTask','setTaskCompleted','setTaskDue','updateTaskStatus','deleteTask','createCard','setCardCompleted','moveCard','setDeckDependency','updateDescription','updateRecordDates','updateRecordAppearance','createDeckLabel','createEvent','updateEvent','respondToEvent','deleteEvent','listFiles','readDeckAttachments','attachDeckFile','removeDeckAttachment','uploadDeckAttachment'])
 const key = record => record.identity ? JSON.stringify([record.identity.source,record.identity.key]) : record.id
 const copy = value => structuredClone(value)
 const serial = () => { let tail = Promise.resolve(); return fn => { const task = tail.then(fn); tail = task.catch(() => {}); return task } }
@@ -384,6 +384,16 @@ export function createWebController(options) {
     createDeckLabel:input=>mutation(`labels:${input?.collectionId}`,async native=>{const collection=collectionFor(input?.collectionId,'deck'),result=await native.createDeckLabel(input,collection);active();const label=result.label||result;state.collections=state.collections.map(value=>value.id===collection.id?{...value,labels:[...(value.labels||[]).filter(item=>item.id!==label.id),label]}:value);emit();return {label,state:snapshot()}}),
     setDeckDependency:input=>mutation(input?.fromId,async native=>{const from=recordFor(input?.fromId,'deck'),to=recordFor(input?.toId,'deck',false);return commit(from,await native.setDeckDependency(input,from,to),native)}),
     deleteEvent:input=>mutation(input?.id,async native=>{const {record,collection}=eventFor(input?.id,'deleteEvent'),result=await native.deleteEvent(input,record,collection);active();if(result?.deleted!==true)throw webProblem('Nextcloud did not confirm deletion. Refresh before retrying.');remember(record,true);emit();return snapshot()}),
+    deleteTask:input=>mutation(input?.id,async native=>{
+      const {serverUrl,username}=state.connection
+      if(!serverUrl||!username||input?.expectedAccount?.serverUrl!==serverUrl||input.expectedAccount.username!==username)throw webProblem('The Nextcloud account changed. Review the task before deleting.', 'CONFLICT')
+      const record=recordFor(input.id,'tasks'),collection=collectionFor(record.collectionId,'tasks')
+      if(!taskDeleteOperation(record,[collection])||input.etag!==record.etag)throw webProblem('Review the latest task in a writable list before deleting.', 'CONFLICT')
+      const result=await native.deleteTask(input,record,collection)
+      active()
+      if(result?.deleted!==true)throw webProblem('Nextcloud did not confirm deletion. Refresh before retrying.')
+      remember(record,true);emit();return snapshot()
+    }),
   }
   for(const method of ['readNoteTags','setNoteTags'])api[method]=input=>mutation(input?.id,async native=>{const record=recordFor(input?.id,'notes',method==='setNoteTags'),result=await native[method](method==='readNoteTags'?record:input,method==='readNoteTags'?undefined:record);active();const current=currentProjection(record);remember({...current,fileTags:result.tags,tagDetails:result.tags,tags:[...(current.tags||[]).filter(tag=>tag==='Favorite'),...result.tags.map(tag=>tag.title)]});emit();return result})
   return api

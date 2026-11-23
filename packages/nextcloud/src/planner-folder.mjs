@@ -2,7 +2,7 @@
 import {sha256} from './runtime.mjs'
 import {createPlannerWorkspace} from '@nextspace/core/planner.mjs'
 import {validateWorkspace, jsonValue} from '@nextspace/core/planner-schema.mjs'
-import {deviceViewKeys, mergeWorkspaces} from '@nextspace/core/workspace-merge.mjs'
+import {deviceViewKeys, mergeWorkspaces, withDeviceViewPreferences} from '@nextspace/core/workspace-merge.mjs'
 import {safeArrangementId} from '@nextspace/core/planning-order.mjs'
 
 export const PLANNER_FOLDER = '/Workspace/Nextspace/'
@@ -19,6 +19,7 @@ const strongEtag = value => typeof value === 'string' && /^"[^"\r\n]*"$/.test(va
 const directories = ['','links','plans','properties','workflow','arrangements']
 const fixed = {core:'core.json',organization:'organization.json',settings:'settings.json',dependencies:'dependencies.json',identities:'identities.json'}
 const groups = {relation:'links',plan:'plans',property:'properties',workflow:'workflow',arrangement:'arrangements'}
+const MAX_PUBLICATION_DOCUMENTS = 20_000
 function documentPath(kind,key) {
   if (kind === 'arrangement' && !safeArrangementId(key)) throw error('A planner arrangement has an unsafe scope key.')
   if (Object.hasOwn(fixed,kind) && key === 'workspace') return fixed[kind]
@@ -53,6 +54,58 @@ export function splitWorkspace(input) {
   return new Map([...result].sort(([a],[b])=>a.localeCompare(b)))
 }
 export function sharedFolderHash(workspace) { return digest([...splitWorkspace(workspace)]) }
+
+function publicationPaths(base, local) {
+  const paths = new Set([...base.keys(), ...local.keys()])
+  return paths.size > MAX_PUBLICATION_DOCUMENTS ? [] : [...paths].sort((a,b) => a.localeCompare(b))
+}
+
+/** Record only the documents this attempt must publish for its local edits. */
+export function plannerPublicationDocuments(base, local, candidate, remote) {
+  if (!remote) return {}
+  const previous = splitWorkspace(base), saved = splitWorkspace(local)
+  const paths = publicationPaths(previous, saved)
+  if (!paths.length) return {}
+  const wanted = splitWorkspace(candidate), known = splitWorkspace(remote)
+  const documents = {}
+  for (const path of paths) {
+    if (equal(previous.get(path), saved.get(path)) || equal(wanted.get(path), known.get(path))) continue
+    if (saved.has(path) !== wanted.has(path)) continue
+    // Presence must agree with the local edit. A missing candidate is an
+    // attempted removal only if the local edit and the cloud write remove it.
+    documents[digest(path)] = digest(wanted.get(path) ?? null)
+  }
+  return documents
+}
+
+/** Rebase only local documents that the next verified folder read acknowledges. */
+export function acknowledgePlannerDocuments(base, local, remote, documents) {
+  if (!remote || !documents) return base
+  const count = Object.keys(documents).length
+  if (!count || count > MAX_PUBLICATION_DOCUMENTS) return base
+  const previous = splitWorkspace(base), saved = splitWorkspace(local)
+  const paths = publicationPaths(previous, saved)
+  if (!paths.length) return base
+  const known = splitWorkspace(remote)
+  let acknowledged = false
+  for (const path of paths) {
+    if (equal(previous.get(path), saved.get(path)) || saved.has(path) !== known.has(path)) continue
+    const key = digest(path)
+    if (!Object.hasOwn(documents,key) || documents[key] !== digest(known.get(path) ?? null)) continue
+    if (saved.has(path)) previous.set(path, saved.get(path))
+    else previous.delete(path)
+    acknowledged = true
+  }
+  if (!acknowledged) return base
+  // Independent documents can still form an invalid whole. Keep the original
+  // merge baseline in that case so normal conflict handling remains available.
+  try {
+    const workspace = assembleWorkspace(previous, {updatedAt: base.updatedAt})
+    return validateWorkspace(withDeviceViewPreferences(workspace, base))
+  } catch {
+    return base
+  }
+}
 
 function validateDocument(path,document) {
   jsonValue(document)

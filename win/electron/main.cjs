@@ -8,6 +8,7 @@ const { safeUrl, trustedSender, LoginFlowRegistry } = require('./security.cjs')
 const { OperationLanes } = require('./operation-lanes.cjs')
 const { createPageHandlers, removeDeniedPage } = require('./pages.cjs')
 const { createCalendarDeleteHandler } = require('./calendar-delete.cjs')
+const { createTaskDeleteHandler } = require('./task-delete.cjs')
 const { restoreSavedAccount } = require('./auth-restore.cjs')
 const { CalendarScheduler } = require('./scheduling.cjs')
 const { migrateDeckNoteLinks } = require('./note-link-migration.cjs')
@@ -17,6 +18,7 @@ configureProfile(app)
 const testMode = !app.isPackaged && process.env.NEXTSPACE_TEST_MODE === '1'
 let window, store, client, connection = { connected: false }, mode = 'disconnected'
 let WorkspaceStore, accountScope, atomicWriteJson, NextcloudClient, beginLoginFlow, pollLoginFlow, calendarInterval, createPlannerWorkspace, createEmptyState, normalizeEventDetails, normalizeEventAttendees, normalizeEventParticipation, taskCreationOptions, ViewPreferencesClient
+let taskDeleteOperation
 let dataDirectory, credentialPath, credentialDirectory, activeCredentialPath, entryUrl, startupWarning
 const operations = new OperationLanes()
 let refreshPromise
@@ -214,6 +216,17 @@ const handlers = {
     const record = currentEventRecord(id)
     return {client, store, record, collection: currentCollection(record.collectionId, 'calendar')}
   }, state}),
+  deleteTask: createTaskDeleteHandler({
+    getContext: id => {
+      const record = currentRecord(id, 'tasks')
+      const collection = currentCollection(record.collectionId, 'tasks')
+      if (taskDeleteOperation(record, [collection]) !== 'deleteTask') throw new Error('Refresh this task before deleting it, or open it in Nextcloud.')
+      return {client, store, record, collection}
+    },
+    getAccount: () => connection,
+    isCurrent: context => context.client === client && context.store === store,
+    state,
+  }),
   ...createPageHandlers({
     getContext: input => ({ mode, connection, client, cache: {records:[store.recordSnapshot(input?.id,'collectives')].filter(Boolean),statuses:store.statusSnapshot()}, resolveRecordId: id => store.resolveRecordId(id) }),
     onAccessDenied: async (record, error) => {
@@ -577,6 +590,7 @@ else {
     ;({normalizeEventDetails} = await import('@nextspace/core/event-details.mjs'))
     ;({normalizeEventAttendees,normalizeEventParticipation} = await import('@nextspace/core/event-scheduling.mjs'))
     ;({taskCreationOptions} = await import('@nextspace/core/card-tasks.mjs'))
+    ;({taskDeleteOperation} = await import('@nextspace/core/native-operations.mjs'))
     ;({SourceHistorySession,readCalendarHistory,saveCalendarHistory} = await import('./calendar-history.mjs'))
     ;({createResourceCache} = await import('./resource-cache.mjs'))
     ;({refreshNativeSources:refreshSourceSession} = await import('./source-refresh.mjs'))

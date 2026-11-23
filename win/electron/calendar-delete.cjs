@@ -1,3 +1,5 @@
+const {removeConfirmedRecord} = require('./native-delete-cache.cjs')
+
 /** Only a workspace ID crosses IPC; the host resolves private DAV baselines. */
 function createCalendarDeleteHandler({getContext, state}) {
   return async input => {
@@ -5,11 +7,7 @@ function createCalendarDeleteHandler({getContext, state}) {
     const {client, store, record, collection} = getContext(input.id)
     const result = await client.deleteEvent({id: record.id}, record, collection)
     if (result?.deleted !== true) throw new Error('Nextcloud did not confirm that this event was deleted. Refresh before trying again.')
-    await store.updateCache(cache => {
-      const id = store.resolveRecordId(record.id)
-      const records = cache.records.filter(item => !(item.source === 'calendar' && (item.id === id || record.identity?.key && item.identity?.key === record.identity.key)))
-      return {...cache, records, statuses: cache.statuses.map(status => status.source === 'calendar' ? {...status, count: records.filter(item => item.source === 'calendar').length} : status)}
-    }, {purgeBackup: true})
+    await removeConfirmedRecord(store, record, collection)
     return state()
   }
 }
