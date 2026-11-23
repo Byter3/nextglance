@@ -144,7 +144,7 @@ async function fixture({isNative = false, metadataReady = true} = {}) {
   }
   f.create=()=>createMobileController({native,cache,makeMetadataStore:metadata,isNative,hostAvailable:true,openExternal:async()=>{},exportPlanner:async document=>{f.exports.push(JSON.parse(document));return f.exportResult}})
   f.api=f.create();f.state=await f.api.refresh();f.account=authorized.account
-  f.close=()=>{f.api.dispose();host.close()};f.setCapabilities=value=>{capabilities=value};f.native=native
+  f.close=()=>{f.api.dispose();host.close()};f.setCapabilities=value=>{capabilities=value};f.native=native;f.cache=cache
   f.record=kind=>f.state.records.find(record=>record.kind===kind)
   f.writes=()=>calls.filter(call=>['PUT','POST','DELETE'].includes(call.method)&&!call.url.includes('/login/'))
   f.request=()=>({requestId:'11111111-1111-4111-8111-111111111111',recordId:f.record('task').id,collectionId:f.state.collections.find(c=>c.source==='calendar').id,title:'Focused work',start:'2030-06-11T09:00:00Z',end:'2030-06-11T10:00:00Z',expectedRevision:f.state.revision})
@@ -228,6 +228,19 @@ test('an older in-flight source refresh cannot overwrite an acknowledged note ed
   await f.api.updateNote({id:note.id,title:note.title,content:'Acknowledged while refreshing',etag:note.etag})
   wait.resolve();await refresh
   assert.equal((await f.api.getState()).records.find(r=>r.id===note.id).body,'Acknowledged while refreshing')
+})
+
+test('warm background archive adoption cannot overwrite an acknowledged edit made during its read',async t=>{
+  const f=await fixture();t.after(f.close);const note=f.record('note'),blocked=deferred(),started=deferred()
+  const archive=clone(f.cacheValues.get(cacheKey(f.account)))
+  f.native.getSavedAccount=async()=>({account:f.account})
+  f.cache.loadChanged=async()=>{started.resolve();await blocked.promise;return {changed:true,value:archive}}
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await started.promise
+  await f.api.updateNote({id:note.id,title:note.title,content:'Acknowledged during local adoption',etag:note.etag})
+  blocked.resolve();for(let i=0;i<8;i++)await tick()
+  assert.equal((await f.api.getState()).records.find(record=>record.id===note.id).body,'Acknowledged during local adoption')
+  const receipt=f.cacheValues.get(sourceEditsKey(f.account))
+  assert.ok(receipt.sequence>0);assert.equal(receipt.entries[0].record.body,'Acknowledged during local adoption')
 })
 
 test('schedule survives a lost native response and restart without duplicate event or relation',async t=>{

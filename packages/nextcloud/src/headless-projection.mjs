@@ -1,9 +1,10 @@
 import {NextcloudClient} from './nextcloud.mjs'
 import {portableRuntime,byteLength} from './runtime.mjs'
 import {checkedResourceEntry} from './resource-cache-policy.mjs'
+import {davProjectionWindow} from './dav-checkpoint-policy.mjs'
 import {mergeSourceRefresh} from '@nextspace/core/source-refresh.mjs'
 import {validateWorkspace} from '@nextspace/core/planner-schema.mjs'
-import {reconcileIdentities} from '@nextspace/core/identity.mjs'
+import {projectNativeIdentities} from '@nextspace/core/identity.mjs'
 
 const failure=(message,code='FORMAT')=>Object.assign(new Error(message),{code})
 const copy=value=>structuredClone(value)
@@ -13,7 +14,7 @@ const headers=value=>{const entries=new Map(Object.entries(value||{}).map(([key,
  * The host validates its archive/mutation watermark and owns all persistence.
  * Missing replies are failures, never permission to perform network I/O here.
  */
-export async function projectHeadlessSources({account,previous,workspace,sources,snapshot,now,makeId=portableRuntime.randomUUID,reconcile=true,isActive=()=>true}) {
+export async function projectHeadlessSources({account,previous,workspace,sources,snapshot,now,calendarHistoryDays,makeId=portableRuntime.randomUUID,reconcile=true,isActive=()=>true}) {
   if(!account||typeof account.serverUrl!=='string'||typeof account.username!=='string'||typeof account.accountKey!=='string'||!account.accountKey||!Number.isFinite(now)||!Array.isArray(sources)||!sources.length||sources.some(source=>!['tasks','calendar','deck'].includes(source))||!previous||previous.accountKey!==undefined&&previous.accountKey!==account.accountKey||!['records','collections','statuses'].every(key=>Array.isArray(previous[key])))throw failure('Invalid background projection input.')
   const check=()=>{if(isActive()!==true)throw failure('Background projection was cancelled.','CANCELLED')}
   const base=new URL(account.serverUrl),prefix=base.pathname.replace(/\/$/,'')+'/'
@@ -54,7 +55,7 @@ export async function projectHeadlessSources({account,previous,workspace,sources
   }
   if(previous.davCheckpoint)client.primeDavState({accountKey:account.accountKey,records:previous.records,collections:previous.collections,checkpoint:previous.davCheckpoint})
   const selected=[...new Set(sources)],result={records:[],collections:[],statuses:[]},stamp=new Date(now).toISOString()
-  const context={isActive,checkActive:check,selected,scan:null}
+  const context={isActive,checkActive:check,selected,scan:null,projectionWindow:davProjectionWindow(now,{calendarHistoryDays})}
   let calendars
   if(selected.some(source=>source==='tasks'||source==='calendar'))try{calendars=await client.discoverCalendars(check,context)}catch(error){check();calendars=error}
   for(const source of selected){
@@ -70,7 +71,7 @@ export async function projectHeadlessSources({account,previous,workspace,sources
   if(!complete)return {...copy(previous),complete:false,workspace:copy(workspace),recordIdAliases:{},attemptStatuses:result.statuses}
   const merged=mergeSourceRefresh(previous,result,selected),valid=copy(workspace)
   validateWorkspace(valid)
-  const resolved=reconcile?reconcileIdentities(valid,merged.records,makeId):{workspace:valid,records:merged.records,remap:new Map()}
+  const resolved=reconcile?projectNativeIdentities(valid,merged.records,makeId):{workspace:valid,records:merged.records,remap:new Map()}
   check()
   return {complete:true,...merged,records:resolved.records,workspace:resolved.workspace,recordIdAliases:Object.fromEntries(resolved.remap),davCheckpoint:client.davCheckpoint()}
 }

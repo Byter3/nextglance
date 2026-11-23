@@ -32,7 +32,7 @@ export interface CalendarScheduling {canInvite: boolean; organizer?: {uri: strin
 export interface WorkspaceRecord {
   id: string; source: Source; kind: 'task'|'event'|'card'|'note'|'page'; title: string
   body?: string; url?: string; collectionId?: string; collectionTitle?: string
-  due?: string; start?: string; end?: string; allDay?: boolean; busy?: boolean; completed?: boolean; priority?: number; percentComplete?: number
+  due?: string; start?: string; end?: string; allDay?: boolean; busy?: boolean; completed?: boolean; completedAt?: string; priority?: number; percentComplete?: number
   tags?: string[]; tagDetails?: RecordTag[]; color?: string; status?: string; updatedAt?: string; readonly?: boolean; etag?: string
   assigneeIds?: string[]; assignmentKnown?: boolean; assignmentCount?: number; stackId?: string; nativeDependencies?: string[]; nativeDependents?: string[]; nativeRelatedIds?: string[]
   fileId?: string; attachmentFileIds?: string[]; fileTags?: FileTag[]
@@ -76,15 +76,21 @@ export interface ScheduleRequest {
   allDay?: boolean; description?: string; location?: string; reminders?: number[]; attendees?: EventParticipantInput[]
 }
 export interface DeviceSyncSettings {caldavMinutes:0|15|30|60|240;deckMinutes:0|15|30|60|240;wifiOnly:boolean}
+export interface BackgroundSourceSync {
+  enabled:boolean; scheduled:boolean; lastAttemptAt?:string; downloadedAt?:string; readGenerationAt?:string
+  projection?:'pending'|'ready'|'unavailable'|'incomplete'; message?:string; error?:string
+}
 export interface DeviceSync {
   settings:DeviceSyncSettings
   restoring:boolean
+  foregroundError?:string
   plannerSyncing?:boolean
   plannerVerifiedAt?:string
   activity?:{sources:Source[];stage:'authorization'|'discovery'|'source-read'|'local-cache';startedAt:string;lastProgressAt:string;completed:number;total?:number;message:string}
-  background?:{supported:boolean;scheduled:boolean;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;projection?:'pending'|'ready'|'unavailable'|'incomplete';readGenerationAt?:string;message?:string}
+  background?:{supported:boolean;scheduled:boolean;lastAttemptAt?:string;lastSuccessAt?:string;error?:string;projection?:'pending'|'ready'|'unavailable'|'incomplete';readGenerationAt?:string;message?:string;sources?:{caldav:BackgroundSourceSync;deck:BackgroundSourceSync}}
 }
 export interface State {
+  calendarHistoryDays?: number | null
   deviceSync?:DeviceSync
   nativeOperations?: string[]
   /** Ephemeral verified source prerequisites; independent of bulk data freshness. Never restored as authority. */
@@ -93,7 +99,7 @@ export interface State {
   createdRecordId?: string; creationWarning?: string
   mode: 'demo'|'live'|'disconnected'; workspace: Workspace; revision: number
   records: WorkspaceRecord[]; collections: Collection[]
-  statuses: {source: Source; state: 'connected'|'error'|'unavailable'|'demo'; count: number; message?: string; lastSyncedAt?: string; metadataStale?: boolean; errorCode?: string; errorStage?: string}[]
+  statuses: {source: Source; state: 'connected'|'error'|'unavailable'|'demo'; count: number; cached?:boolean; permissionDenied?:boolean; message?: string; lastSyncedAt?: string; metadataStale?: boolean; errorCode?: string; errorStage?: string}[]
   theme?: NextcloudTheme
   pendingSchedules?: (ScheduleRequest & {created?: boolean})[]
   connection: {connected: boolean; serverUrl?: string; username?: string; reconnectRequired?: boolean; restoreError?: string; recoveryOnly?: boolean}
@@ -118,6 +124,8 @@ export interface DiagnosticInput {
   code?:string;durationMs?:number;count?:number;bytes?:number;completed?:number;total?:number;cacheHits?:number;cacheMisses?:number;downloads?:number;frames?:number;maxDelayMs?:number;status?:number;success?:boolean
 }
 export interface WorkspaceApi {
+  setCalendarHistoryDays?(days:number|null):Promise<State>
+  readCalendarWindow?(window:{from:number;to:number}):Promise<State>
   getViewPreferences?():Promise<ViewPreferencesState>
   saveViewPreferences?(input:ViewPreferencesInput):Promise<ViewPreferencesState>
   startDiagnostics?():DiagnosticSummary;stopDiagnostics?():DiagnosticSummary;getDiagnostics?():DiagnosticSummary;clearDiagnostics?():DiagnosticSummary

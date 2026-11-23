@@ -31,7 +31,7 @@ public class NativeSourceSyncTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder();
     final String base = "https://cloud.example/nextcloud", calendar = base + "/remote.php/dav/calendars/user/personal/";
     final String board = base + "/index.php/apps/deck/api/v1.0/boards/12";
-    NativeResourceCache cache() throws Exception { return new NativeResourceCache(temporary.getRoot(), "account", base, () -> {}); }
+    NativeResourceCache cache() throws Exception { return new NativeResourceCache(temporary.getRoot(), "account", base, () -> {},(from,to)->{Files.move(from.toPath(),to.toPath(),java.nio.file.StandardCopyOption.ATOMIC_MOVE,java.nio.file.StandardCopyOption.REPLACE_EXISTING);return true;}); }
     NativeSyncPolicy.Entry entry(String kind, String collection, String href, String etag, String body) { return new NativeSyncPolicy.Entry(1, kind, collection, href, etag, body, body.getBytes(StandardCharsets.UTF_8).length); }
     String row(String href, String properties) {
         if (href.startsWith(calendar) && !properties.contains("resourcetype")) properties += href.equals(calendar) ? "<d:resourcetype><d:collection/></d:resourcetype>" : "<d:resourcetype/>";
@@ -46,6 +46,72 @@ public class NativeSourceSyncTest {
         return null;
     }
     NativeSyncEngine engine(NativeResourceCache cache, NativeSyncEngine.Network network) { return new NativeSyncEngine(base, network, cache, () -> {}, () -> 0, (s,c,t) -> {}); }
+
+    NativeSyncEngine.Reply tokenDiscovery(String url,String token,String property){
+        if(url.equals(base+"/remote.php/dav/calendars/user/"))return reply(xml(row(url,"<d:resourcetype><d:collection/></d:resourcetype>")+row(calendar,"<d:resourcetype><d:collection/><c:calendar/></d:resourcetype><d:sync-token>"+token+"</d:sync-token>"+property)));
+        return discovery(url);
+    }
+    void forgetResourceIndexes()throws Exception{
+        for(String name:List.of("INVENTORIES","VALIDATORS","SIZES","MUTATIONS")){var field=NativeResourceCache.class.getDeclaredField(name);field.setAccessible(true);((Map<?,?>)field.get(null)).clear();}
+    }
+    @Test public void completedPublishedInventorySkipsUnchangedListingAfterProcessRestart()throws Exception{
+        NativeResourceCache cache=cache();cache.put(entry("dav",calendar,calendar+"a.ics","\"a\"","BEGIN:VCALENDAR\nEND:VCALENDAR"));
+        List<String> requests=new ArrayList<>();NativeSyncEngine.Network network=(url,m,h,b,max,r)->{requests.add(url);var discovery=tokenDiscovery(url,"one","");return discovery!=null?discovery:reply(xml(row(calendar,"")+row(calendar+"a.ics","<d:getetag>&quot;a&quot;</d:getetag>")));};
+        var initial=engine(cache,network);initial.run("dav");assertEquals(4,requests.size());
+        // An un-published pass must never certify its token.
+        requests.clear();var unpublished=engine(cache,network);unpublished.run("dav");assertEquals(4,requests.size());unpublished.projected();
+        forgetResourceIndexes();requests.clear();List<String> replayed=new ArrayList<>();NativeResourceCache cold=cache();
+        new NativeSyncEngine(base,network,cold,()->{},()->0,(s,c,t)->{},(url,reply)->{assertEquals(calendar,url);assertEquals(2,NativeSyncEngine.parseDav(reply.body()).size());replayed.add(url);}).run("dav");
+        assertEquals(new NativeResourceCache.IoCounts(0,0),cold.ioCounts());
+        assertEquals(3,requests.size());assertEquals(List.of(calendar),replayed);assertEquals(1,cache().list("dav",calendar).size());assertEquals(1,cache().snapshot("dav",Set.of()).size());
+    }
+    @Test public void emptyCompletedCollectionCanReuseButChangedPropertiesCannot()throws Exception{
+        AtomicBoolean changed=new AtomicBoolean();List<String> requests=new ArrayList<>();
+        NativeSyncEngine.Network network=(url,m,h,b,max,r)->{requests.add(url);var discovery=tokenDiscovery(url,"one",changed.get()?"<d:displayname>Renamed</d:displayname>":"");return discovery!=null?discovery:reply(xml(row(calendar,"")));};
+        var initial=engine(cache(),network);initial.run("dav");initial.projected();requests.clear();engine(cache(),network).run("dav");assertEquals(3,requests.size());
+        changed.set(true);requests.clear();engine(cache(),network).run("dav");assertEquals(4,requests.size());
+    }
+    @Test public void ctagIsRecognizedAndComponentAttributesInvalidateProof()throws Exception{
+        AtomicBoolean changed=new AtomicBoolean();List<String> requests=new ArrayList<>();
+        NativeSyncEngine.Network network=(url,m,h,b,max,r)->{requests.add(url);if(url.equals(base+"/remote.php/dav/calendars/user/"))return reply(xml(row(url,"<d:resourcetype><d:collection/></d:resourcetype>")+row(calendar,"<d:resourcetype><d:collection/><c:calendar/></d:resourcetype><cs:getctag xmlns:cs='http://calendarserver.org/ns/'>ctag-1</cs:getctag><c:supported-calendar-component-set><c:comp name='"+(changed.get()?"VEVENT":"VTODO")+"'/></c:supported-calendar-component-set>")));var discovery=discovery(url);return discovery!=null?discovery:reply(xml(row(calendar,"")));};
+        var initial=engine(cache(),network);initial.run("dav");initial.projected();requests.clear();engine(cache(),network).run("dav");assertEquals(3,requests.size());changed.set(true);requests.clear();engine(cache(),network).run("dav");assertEquals(4,requests.size());
+    }
+    @Test public void localWritesMissingBodiesAndMalformedProofCannotReuseToken()throws Exception{
+        NativeResourceCache cache=cache();var item=entry("dav",calendar,calendar+"a.ics","\"a\"","BEGIN:VCALENDAR\nEND:VCALENDAR");cache.put(item);
+        List<String> requests=new ArrayList<>();NativeSyncEngine.Network network=(url,m,h,b,max,r)->{requests.add(m+" "+url);var discovery=tokenDiscovery(url,"one","");if(discovery!=null)return discovery;if(m.equals("GET"))return new NativeSyncEngine.Reply(200,Map.of("etag","\"a\""),item.body());return reply(xml(row(calendar,"")+row(item.href(),"<d:getetag>&quot;a&quot;</d:getetag>")));};
+        var initial=engine(cache,network);initial.run("dav");initial.projected();cache.put(item);requests.clear();var afterWrite=engine(cache,network);afterWrite.run("dav");assertEquals(4,requests.size());afterWrite.projected();
+        var directory=new java.io.File(temporary.getRoot(),NativeLoginFlow.digest("account"));var resource=new java.io.File(directory,NativeLoginFlow.digest("dav\0"+calendar+"\0"+item.href())+".json");assertTrue(resource.delete());requests.clear();var missing=engine(cache,network);missing.run("dav");assertEquals(5,requests.size());missing.projected();
+        var marker=new java.io.File(directory,NativeLoginFlow.digest(calendar)+".inventory.json");Files.write(marker.toPath(),"{}".getBytes(StandardCharsets.UTF_8));requests.clear();engine(cache,network).run("dav");assertEquals(4,requests.size());
+    }
+    @Test public void failedChangedPassDoesNotRetainPreviousTokenAndDenialNeverReplays()throws Exception{
+        AtomicBoolean changed=new AtomicBoolean(),denied=new AtomicBoolean();NativeResourceCache cache=cache();List<String> requests=new ArrayList<>();
+        NativeSyncEngine.Network network=(url,m,h,b,max,r)->{requests.add(url);if(denied.get()&&url.equals(base+"/remote.php/dav/calendars/user/"))return new NativeSyncEngine.Reply(403,Map.of(),"");var discovery=tokenDiscovery(url,changed.get()?"two":"one","");if(discovery!=null)return discovery;if(changed.get())throw NativeSyncPolicy.failure("TIMEOUT","fixture");return reply(xml(row(calendar,"")));};
+        var initial=engine(cache,network);initial.run("dav");initial.projected();changed.set(true);assertThrows(Exception.class,()->engine(cache,network).run("dav"));changed.set(false);requests.clear();engine(cache,network).run("dav");assertEquals(4,requests.size());denied.set(true);requests.clear();assertEquals("PERMISSION",assertThrows(NativeLoginFlow.Failure.class,()->engine(cache,network).run("dav")).code);assertEquals(3,requests.size());
+    }
+    @Test public void pendingProofCannotPublishAfterSameSizeSameTimestampWriteOrLateCancellation()throws Exception{
+        NativeResourceCache cache=cache();var item=entry("dav",calendar,calendar+"a.ics","\"a\"","one");cache.put(item);
+        var proof=cache.prepareInventory(calendar,"a".repeat(64),"sync-token","one",List.of(new NativeResourceCache.Metadata(item.href(),item.etag())));assertNotNull(proof);
+        var directory=new java.io.File(temporary.getRoot(),NativeLoginFlow.digest("account"));var resource=new java.io.File(directory,NativeLoginFlow.digest("dav\0"+calendar+"\0"+item.href())+".json");long timestamp=resource.lastModified();
+        cache.put(entry("dav",calendar,item.href(),item.etag(),"two"));assertTrue(resource.setLastModified(timestamp));cache.commitInventory(proof);assertNull(cache.reuseInventory(calendar,"a".repeat(64),"sync-token","one"));
+        AtomicBoolean permitted=new AtomicBoolean(true);var guarded=new NativeResourceCache(temporary.getRoot(),"guarded",base,()->{if(!permitted.get())throw NativeSyncPolicy.failure("CANCELLED","fixture");});
+        var empty=guarded.prepareInventory(calendar,"a".repeat(64),"sync-token","one",List.of());permitted.set(false);assertEquals("CANCELLED",assertThrows(NativeLoginFlow.Failure.class,()->guarded.commitInventory(empty)).code);permitted.set(true);assertNull(guarded.reuseInventory(calendar,"a".repeat(64),"sync-token","one"));
+    }
+    @Test public void coldWarmStageOpensNoRawFilesFor512PublishedUnchangedResources()throws Exception{
+        NativeResourceCache cache=cache();StringBuilder listing=new StringBuilder(row(calendar,""));
+        for(int index=0;index<512;index++){String href=calendar+index+".ics",etag="\""+index+"\"";cache.put(entry("dav",calendar,href,etag,"BEGIN:VCALENDAR\nEND:VCALENDAR"));listing.append(row(href,"<d:getetag>&quot;"+index+"&quot;</d:getetag>"));}
+        List<String> requests=new ArrayList<>();NativeSyncEngine.Network network=(url,m,h,b,max,r)->{requests.add(url);var discovery=tokenDiscovery(url,"one","");return discovery!=null?discovery:reply(xml(listing.toString()));};
+        var initial=engine(cache,network);initial.run("dav");initial.projected();assertEquals(512,cache.ioCounts().metadataReads());
+        forgetResourceIndexes();requests.clear();NativeResourceCache cold=cache();engine(cold,network).run("dav");assertEquals(3,requests.size());assertEquals(new NativeResourceCache.IoCounts(0,0),cold.ioCounts());
+    }
+    @Test public void denialCorruptResourceAndAccountReplacementInvalidateInventoryReuse()throws Exception{
+        NativeResourceCache cache=cache();var item=entry("dav",calendar,calendar+"a.ics","\"a\"","body");cache.put(item);String properties="a".repeat(64);
+        var proof=cache.prepareInventory(calendar,properties,"sync-token","one",List.of(new NativeResourceCache.Metadata(item.href(),item.etag())));cache.commitInventory(proof);assertNotNull(cache.reuseInventory(calendar,properties,"sync-token","one"));
+        var other=new NativeResourceCache(temporary.getRoot(),"another-account",base,()->{});assertNull(other.reuseInventory(calendar,properties,"sync-token","one"));
+        cache.invalidateInventories("dav",calendar);assertNull(cache.reuseInventory(calendar,properties,"sync-token","one"));
+        proof=cache.prepareInventory(calendar,properties,"sync-token","one",List.of(new NativeResourceCache.Metadata(item.href(),item.etag())));cache.commitInventory(proof);
+        var directory=new java.io.File(temporary.getRoot(),NativeLoginFlow.digest("account"));var resource=new java.io.File(directory,NativeLoginFlow.digest("dav\0"+calendar+"\0"+item.href())+".json");Files.write(resource.toPath(),"broken".getBytes(StandardCharsets.UTF_8));assertNull(cache.reuseInventory(calendar,properties,"sync-token","one"));assertNull(cache.get(item.locator()));
+        var pending=cache.prepareInventory(calendar,properties,"sync-token","one",List.of());cache.clear();cache.commitInventory(pending);assertNull(cache.reuseInventory(calendar,properties,"sync-token","one"));
+    }
 
     @Test public void settingsAreStrictAndRestorationHasDocumentedDefaults() throws Exception {
         assertEquals(new NativeSyncPolicy.Settings(0, 240, true), NativeSyncPolicy.settings(JsonParser.parseString("{\"caldavMinutes\":0,\"deckMinutes\":240,\"wifiOnly\":true}").getAsJsonObject(), true));

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fictional native picker preview; never reads an account or source snapshot. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:padding="2dp">
+    <ImageView android:layout_width="match_parent" android:layout_height="match_parent"
+        android:src="@drawable/widget_shell_dark" android:scaleType="fitXY" android:alpha="0.68" android:importantForAccessibility="no" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical" android:padding="8dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:gravity="center_vertical">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="@string/app_name" android:textColor="#eff4fb" android:textSize="16sp" android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+            <ImageView android:layout_width="44dp" android:layout_height="44dp" android:padding="11dp"
+                android:src="@drawable/widget_icon_plus" android:tint="#41b5f4" android:background="@drawable/widget_action_surface" android:importantForAccessibility="no" />
+            <ImageView android:layout_width="44dp" android:layout_height="44dp" android:padding="12dp"
+                android:src="@drawable/widget_icon_settings" android:tint="#41b5f4" android:background="@drawable/widget_action_surface" android:importantForAccessibility="no" />
+        </LinearLayout>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/widget_preview_context"
+            android:textColor="#c3cfde" android:textSize="11sp" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" android:paddingBottom="3dp" />
+        <TextView android:layout_width="match_parent" android:layout_height="26dp" android:gravity="center_vertical"
+            android:text="@string/widget_preview_status" android:textColor="#c3cfde" android:textSize="12sp" android:fontFamily="sans-serif-medium" android:includeFontPadding="false" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="50dp"
+            android:orientation="horizontal" android:gravity="center_vertical" android:padding="8dp" android:background="@drawable/widget_card_dark">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/widget_icon_card" android:tint="#70bfce" android:importantForAccessibility="no" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:paddingStart="7dp"
+                android:text="@string/widget_preview_card" android:textColor="#eff4fb" android:textSize="15sp" android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false" android:maxLines="2" android:ellipsize="end" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="44dp"
+            android:layout_marginStart="15dp" android:gravity="center_vertical" android:paddingTop="5dp" android:paddingBottom="5dp">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/widget_icon_task" android:tint="#c394e5" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingStart="7dp">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/widget_preview_task"
+                    android:textSize="14sp" android:textColor="#eff4fb" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/widget_preview_link"
+                    android:textSize="11sp" android:textColor="#c3cfde" android:includeFontPadding="false" android:paddingTop="3dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

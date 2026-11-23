@@ -1,5 +1,194 @@
 # NextGlance feature parity and phased implementation
 
+## Denser widget work timelines — WIDGET-09 / RELEASE-27
+
+- [x] Denser work rows, headings, and font-aware readable metadata in Overview and Timeline.
+- [x] Aligned date-plot dependency connectors, accessible counts, and item navigation.
+- [x] Focused tests, verified local release artifacts and refreshed Windows shortcut.
+- [x] Source and history privacy review for publication.
+- [ ] Physical launcher acceptance.
+
+Native Java and widget resources compiled. All 93 focused widget JVM tests passed, including geometry, row alignment, hit bounds, clipping and compact fallback counts. The illustrated examples use the shared projection and native geometry with fictional data. Windows launch checks, APK signature and contents checks, and Nextcloud archive checks are recorded in [release evidence](../docs/RELEASES.md#0627--windows-android-and-nextcloud).
+
+## In-app work timeline arrangement on Android widgets — WIDGET-08
+
+- [x] Split work list and date grid with responsive compact fallback in Overview and Timeline.
+- [x] Row-aligned ranges and aligned Overview panes with preserved dependency and item actions.
+- [x] Focused native and fixture checks and an illustrative preview.
+- [ ] Physical launcher acceptance.
+
+Native Java and resource compilation and 89 focused widget JVM tests passed. The shared widget regression and vector suites passed 1,366 tests, and Android no-emit type checking passed. The fictional preview used production geometry and verified wide, phone and compact rows, date alignment, dependency placement, and the scrolling Timeline header. The 0.6.26 APK predates this layout change.
+
+## Dependency arrows on Android work timelines — WIDGET-07
+
+- [x] Bounded, filtered dependency projection with correct direction and counts.
+- [x] Overview and scrolling Timeline arrow routing, compact fallback and existing item actions.
+- [x] Visible-period membership, local-date rollover and time-change rescheduling.
+- [x] Focused shared/native verification and fictional preview.
+- [ ] Physical launcher acceptance.
+
+Fast checks passed 1,366 shared/widget tests, Android no-emit typecheck, native compilation and 81 focused widget JVM tests. Fixtures checked dependency direction and omitted-link counts, date boundaries, DST scheduling and account eligibility. The fictional browser preview used production geometry and checked arrows and the next local day’s projected membership at wide and compact widths. Job delivery and touch on a physical launcher remain separate checks. The 0.6.26 APK predates these changes.
+
+## Calendar itinerary and Overview timeline — WIDGET-06
+
+- [x] Calendar Today, Week and Overview use the available chart space without a duplicate item strip.
+- [x] Month day selection, bounded selected-day itinerary and existing item/day navigation.
+- [x] Overview and Timeline show useful work metadata with aligned date ranges at compact and expanded sizes.
+- [x] Targeted widget fixture and native checks.
+- [ ] Physical launcher acceptance.
+
+Targeted verification passed 1,355 shared/widget tests, the Android no-emit typecheck, native Java compilation and 71 focused widget JVM tests. The fictional browser preview exercised five layouts, two widths, populated and empty Month dates, and chart-only Day, Week and Overview. The 0.6.26 APK predates these source changes.
+
+## Large history, weekend shading and native widgets — RELEASE-26
+
+- [x] HISTORY-02 large Calendar projection, referenced identity promotion and independent native cache publication.
+- [x] VIEW-18 quieter shared and native weekend shading.
+- [x] WIDGET-05 explicit Board ownership, chart contrast and native layout checks.
+- [x] Final Windows, Android and Nextcloud packages.
+- [ ] Physical Android launcher and live-account sync acceptance.
+
+Fast checks passed 1,502 shared and session tests, 90 Windows and 235 Android focused tests, and all three no-emit checks. These include large fictional native histories, restart and linked-task receipts, and independent publication after planner metadata failure. The mounted fictional Nextcloud session passed weekend appearance and Calendar navigation checks. Android native compilation and 48 focused tests covered linked Board rows, chart layout and weekend shading.
+
+The 0.6.26 packages passed separate artifact checks. Windows passed unpacked and portable launch checks and the stable shortcut matches the new executable. Android passed 185 JVM tests, signature continuity and asset checks. The Nextcloud archive passed source, asset and privacy checks. [Packages and checksums](../docs/RELEASES.md#0626--windows-android-and-nextcloud)
+
+## Board completion age and Calendar history — HISTORY-01
+
+- [x] Board completion-age controls and native timestamp projection across clients.
+- [x] Configurable native Calendar history with persistent reuse and Android foreground/background parity.
+- [x] Bounded, navigable session-only history in the Nextcloud client.
+- [x] Fast regression checks and RELEASE-25 packages on all three platforms.
+
+Fast checks passed the exact shared vectors on all three clients, the portable DAV history reuse fixture, Windows private cache/restart and edit-fence tests, and Android foreground/headless and revision-fence checks. The mounted Nextcloud fixture verified historic Day, Week, Month grid edges, Overview and Timeline, settled navigation, and Board completion choices. Session-only retention and permission/account fences passed focused tests. Physical Android and live-server timings remain separate acceptance evidence.
+
+RELEASE-25 produced all three 0.6.25 packages. Windows unpacked and portable launch checks passed and the stable shortcut target matches the new Windows executable. The Android APK passed 181 JVM tests and signature and asset checks. The Nextcloud archive passed asset, embedded source, and privacy checks. [Package sizes and checksums](../docs/RELEASES.md#0625--windows-android-and-nextcloud)
+
+## Responsive widget presentation — WIDGET-04
+
+Authorized 2026-11-23. RELEASE-24 targets Android 0.6.24/versionCode26.
+
+- [x] Proportional chart rendering, adaptive viewports and aligned native hit targets.
+- [x] Native resources and presentation across Calendar, Overview, Timeline, Board and List.
+- [x] Targeted widget checks, shared vectors and final Android package verification.
+- [ ] Physical launcher visual and touch acceptance.
+
+Fast verification passed 467 shared and Android tests, including 424 exact behavior vectors, plus Android no-emit and Java compilation. The 44 targeted native tests covered fit, budget, geometry, presentation resources and weekend shading. An independent fixture ran 26,050 invariants across 3,888 production Java fit cases and inspected 18 XML layout rules. Geometry illustrations were reviewed for phone, tablet and rotated sizes. Launcher typography and touch remain separate device checks.
+
+Final packaging passed 180 JVM tests. The verified 0.6.24/versionCode26 APK retains the 0.6.23 signing certificate and includes both proportional launcher layouts and matching UI and headless assets. [Package and checksum](../docs/RELEASES.md#0624--android-build-26)
+
+## Weekend shading and preferences — VIEW-17
+
+Authorized 2026-11-23 with RELEASE-23. Target Windows, Android and Nextcloud 0.6.23, Windows file version 0.6.23.25 and Android versionCode 25.
+
+- [x] Shared weekday rules, Saturday/Sunday default and durable app-wide appearance setting.
+- [x] Shared page/date-editor shading and scoped browser verification.
+- [x] Native Android widget shading and preference bridge with targeted compilation/tests.
+- [x] Final packages and independent artifact checks for all three clients.
+
+Fast verification on 2026-11-23 passed 1,386 targeted tests including 424 exact vectors per client, all three no-emit checks, PHP syntax, Java compilation and 33 targeted native widget tests. The mounted shared planner inside a fictional Nextcloud shell verified all five views, the Calendar modes, persistence, light and dark contrast, Today, and scope containment. Native widget appearance still needs launcher observation.
+
+Final package verification passed 24 Windows checks with an isolated portable launch, 169 Android JVM tests and APK signature and resource checks, and Nextcloud archive metadata, asset, license and source checks. See [release records](../docs/RELEASES.md#0623--windows-android-and-nextcloud).
+
+## Foreground connection recovery — SYNC-16
+
+Authorized 2026-11-23 with final RELEASE-22 Android **0.6.22/versionCode24**. Existing periodic job and background publication contracts carry forward.
+
+- [x] Deferred entry resumes access and metadata on an allowed connection without scanning fresh sources again.
+- [x] Duplicate callbacks coalesce and error evidence remains separate from background job status.
+- [x] A widget rendering failure cannot prevent an otherwise valid source generation from being saved.
+- [x] Interrupted warm adoption leaves the background generation eligible on another entry.
+- [x] Final Android APK and frozen-source artifact checks.
+- [ ] Physical reopening, background timing and battery evidence.
+
+Fresh 2026-11-23 evidence includes offline and Wi-Fi-only entries with fresh or manual sources, queued connectivity signals, current Wi-Fi policy, reconnect and account boundaries, independent foreground errors, timed-out and retried adoption, real two-slot revision acknowledgements and isolated headless widget failures. The targeted Android regression run passed 293 tests. No device timing was measured.
+
+RELEASE-22 produced Android **0.6.22/versionCode24**. Final packaging passed **162** JVM tests across **19** suites. The APK kept its application and signing identity. The packaged chart classes, native widget resources, UI and headless assets were inspected. All **398** frozen files and six earlier artifacts matched. [Package checksum and evidence](../docs/RELEASES.md#0622--android-build-24)
+
+## Planner-faithful widgets — WIDGET-03
+
+Authorized 2026-11-23 from physical tablet feedback. WIDGET-01 temporary filtered app routing is superseded. Final packaging is authorized with SYNC-16 in RELEASE-22.
+
+- [x] Parent-led Board task context, hard exclusion safety and actual project/planner grouping.
+- [x] Day/Week calendar projection, split Overview and grouped Timeline with exact shared vectors.
+- [x] Regular planner item navigation. Widget preferences stay in the widget.
+- [x] Native chart resources and presenter geometry for dense-item fallback, separators and independent config compatibility.
+- [x] Bounded bitmap work and native fast verification.
+- [ ] Physical launcher visual/touch acceptance; actual wallpaper blur remains unavailable through the researched public APIs.
+
+Fresh 2026-11-23 evidence includes 1,498 consolidated checks with 416 exact vectors per client, all three no-emit checks, and the mounted planner route fixture across all five pages. The fixture covers exact selection outside the saved page filter, preserved preferences, scoped creation, denial handling and dirty drafts during an asynchronous widget action. Native compile and 47 targeted JVM tests passed. The layout and action checks cover source and geometry. Launcher appearance and touch still require device observation.
+
+
+## Durable background restore — SYNC-15
+
+Authorized 2026-11-22, included in pending RELEASE-21 Android 0.6.21/versionCode23. The owner stopped the earlier packaging run; no 0.6.21 APK was produced by it. Windows/Web packages remain unchanged.
+
+- [x] Hourly fallback defaults preserve valid saved settings; exact all-client shared vectors.
+- [x] Historical cached source provenance and truthful UI without restored write authority; cold/warm and freshness regressions.
+- [x] Offline job reconciliation before authorization/network; matching jobs preserve cadence.
+- [x] Native per-family download versus usable publication evidence, scheduling and fast compilation/tests.
+- [x] Final frozen-source APK and packaged-content verification.
+- [ ] Physical-device reboot/Doze/background timing and cold-launch acceptance (not inferred from unit tests).
+
+Fresh 2026-11-22 evidence: **1,236** shared assertions passed, including **402 exact vectors per client** and **27** targeted sync/authority/label checks. All three client no-emit checks passed. Android startup, controller, headless, cache, denial and native-edit regressions passed **227** tests; the **95** startup/controller/foundation subset was rerun after the legacy-cache recovery refinement. Native compile and **56** targeted JVM tests passed (background evidence, publication concurrency, cache, deadlines, read generations and sync). The orchestrator inspected the native XML and build log; independent review and deterministic concurrency assertions found no remaining blocker. Physical timing, battery and launcher evidence is still pending. See [the background-sync reference](../docs/ANDROID-BACKGROUND-SYNC.md).
+
+RELEASE-21 completed 2026-11-22: Android **0.6.21/versionCode23**, **147** final JVM tests across **18** suites passed, same application/signing identity, **387** frozen files and five earlier artifacts unchanged. Packaged UI/headless/icon assets match their sources; no development-server URL. [Artifact checksum and evidence](../docs/RELEASES.md#0621--android-build-23). No device installation or publication.
+
+## Widget visual correction — WIDGET-02
+
+Reported **2026-11-22** from physical One UI Home screenshots: released 0.6.20 has generic rows across pages and does not faithfully implement the approved visual hierarchy. WIDGET-01's compiler/fixture checks did not establish visual fidelity. After the source correction and fast checks, the owner explicitly requested **RELEASE-21: Android 0.6.21/versionCode23**. Windows/Web packages remain unchanged.
+
+- [x] Distinct Calendar time-column, Board card/linked-task, List work-row, Overview summary and Timeline date-grid presentations implemented in native resources/presenter.
+- [x] Compact context, inline heading counts, project icons and restrained freshness footer; existing transparency controls retained.
+- [x] Shared presentation fields and exact vectors, existing config/filter/action/privacy compatibility.
+- [x] Native resource/layout policy checks plus compile, and independent source review against the approved examples.
+- [x] RELEASE-21 APK identity/signature, frozen-source and packaged-asset verification; previous APKs preserved.
+- [ ] Actual launcher visual/touch acceptance of the corrected build (separate evidence).
+
+Fresh **2026-11-22** evidence: **52** shared widget/planner tests plus **384 exact vectors per client** and the harness check passed (**1,205 assertions**). **89** Android widget/headless/Worker/startup/denial regressions and all three clients' no-emit checks passed. Native `:app:compileDebugJavaWithJavac` and targeted `:app:testDebugUnitTest` passed **32** JVM tests (12 presentation/resource geometry, 12 policy, eight lifecycle). The orchestrator inspected the native test XML and compiler log independently. Resource/source review verifies both Android collection adapters register all five row layouts, narrow titles retain room, minimum widgets retain 44dp actions, month grids suppress partial agenda rows, and resizing restores agenda visibility. Repository hygiene and diff whitespace checks passed. Existing Lucide icon derivatives retain their upstream license/notice.
+
+The source-correction iteration produced no APK. RELEASE-21 subsequently produced Android 0.6.21/versionCode23 with WIDGET-02 and SYNC-15; package evidence is in [Releases](../docs/RELEASES.md#0621--android-build-23). These tests do not establish One UI visual fidelity, enlarged-font behavior or physical readability. The existing 0.6.20 APK predates these corrections.
+
+## Android home widgets — WIDGET-01 / RELEASE-20
+
+Authorized **2026-11-22**, including translucent styling and a final Android **0.6.20/versionCode22** package after verification/source freeze. Windows/Web packages stay unchanged. Existing composer routing is the first working creation path; a separate native fast-capture write runtime remains follow-up scope.
+
+- [x] Shared pure configuration/projection/action rules with exact all-client vectors and deterministic date fixtures.
+- [x] Independent local settings, name/page/Space/source/status/project/tag/date/grouping/appearance choices; safe deletion/restore/account fencing in pure/native tests.
+- [x] Native Calendar agenda/month, Board, List, Overview and Timeline presentations, resize conditions and bounded collections implemented and compiled; launcher acceptance remains below.
+- [x] Foreground/headless snapshot publication reuses reconciled cached data, no per-widget source jobs or WebView rendering.
+- [x] Contextual create/open/record routes preserve saved main-app filters and current mutation guards in the mounted shared-UI fixture.
+- [x] Transparent surfaces, solid high-contrast fallback and native resource/compile/unit verification; physical readability remains below.
+- [x] Final APK identity, signing, asset/checksum verification and previous-artifact preservation.
+- [ ] Physical-device launcher placement/resize/touch, cold-start and battery acceptance (separate evidence).
+
+Follow-up: native lightweight capture/direct actions require a guarded shared write runtime. Background planner metadata freshness must remain explicitly distinguished from source freshness where its existing safe protocol is unavailable to the headless host.
+
+Fresh **2026-11-22** fast evidence: the orchestrator independently ran **48** widget/planner tests and **379 exact shared vectors per client** (**1,186 assertions** including the harness check), **89** Android widget/headless/Worker/startup/denial regressions, and all-client no-emit checks. The actual shared-UI browser fixture verifies all five page routes, temporary filters and restoration, unchanged local/cloud FILTER-03 preferences, eligible composer destinations, dirty drafts, exact record/date routes, contextual Calendar membership and excluded Board headings. Native compilation plus **22 targeted JVM tests** passed (12 policy, eight instance lifecycle, two read-generation). Late publication is fenced by account, configuration, denial state and archive/edit revisions; revocation filters are applied by the shared projector and adopted before opening a widget context. Compact files carry an access proof so interrupted invalidation cannot restore an older denied projection. These are fixture/compiler results, not launcher or physical-device measurements.
+
+RELEASE-20 package evidence, **2026-11-22**: Android **0.6.20/code22** built successfully after freezing **366 production/configuration files**. The final native test task executed and **123 tests across 15 suites** passed. Application/version/signing continuity, all 50 UI assets, headless code, seven widget resources, eight compiled widget host classes, manifest components, 15 launcher PNGs and adaptive/themed/splash bindings passed package checks. No development-server URL is present. Frozen files and both prior 0.6.19/0.6.17 APKs retained their hashes. [Artifact and checksum](../docs/RELEASES.md#0620--android-build-22). No emulator, installation, live-account writes, deployment, push or publication occurred.
+
+## Android local launch and source verification — SYNC-14
+
+Authorized **2026-11-22**. RELEASE-19 targets Android **0.6.19/versionCode21** after fast verification and source freeze; physical-device performance remains separate evidence.
+
+- [x] Fresh Tasks/Calendar/Deck access discovery is independent of body synchronization, with current-target mutation guards preserved.
+- [x] Recent restored data does not force a bulk refresh for independently verified sources; manual/off/stale/backwards-clock behavior covered by exact shared vectors.
+- [x] Launch/source slot reads select the newest valid candidate without reading a valid backup body; corrupt/revision-race fallback and strict edit history preserved.
+- [x] Warm resume adopts newer guarded background data without overwriting drafts, metadata or acknowledged edits.
+- [x] Native background token reuse proves a complete unchanged inventory; changes/denial/corruption/partial work invalidate reuse.
+- [x] Cold background inventory reuse avoids raw prefix/body reads for certified resources; shared headless publication still validates and projects the current pass.
+- [x] Relevant fast checks, privacy review and final new Android APK verified; previous artifacts retained.
+- [ ] Physical-device cold launch, background timing, thermal behavior and actual-account acceptance.
+
+Audit correction: the earlier PERF-18 entry overstated native token checks. Foreground portable token reuse existed, but the native background engine requested tokens without comparing them and still inventoried every collection. This is a newly confirmed implementation gap, not completed historical evidence. The current milestone addresses it explicitly.
+
+Deferred optimization: skipping the entire unchanged headless projection needs a separately validated freshness handoff. This milestone retains publication on every completed background pass, so saved content timestamps stay truthful; it does not claim zero parsing or zero CPU usage for unchanged sync.
+
+Fresh **2026-11-22** fixture evidence: root independently ran **187** Android startup/cache/Worker/headless/denial/native-edit regressions and **170** protocol/access/cache/delta/Windows-route checks, all passing. All **366 shared vectors per client** pass (**1,099 assertions** including the harness validation), with nine new scheduling cases. Windows/shared, Android and Web no-emit checks pass. Native compilation and **44 targeted JVM tests** pass across source-sync, cache-file/arguments/epoch and read-generation suites. Counts from earlier overlapping runs are not additive.
+
+The actual Android controller plus portable CalDAV protocol creates and durably acknowledges an event while source HTTP inventory remains deliberately unresolved; recent cached content performs zero resource inventory requests. The 4,000-row two-slot fixture reads one full body rather than two; unchanged resume checks read neither full body. A 512-resource native fixture reuses a committed inventory after simulated process restart with zero raw metadata/body opens in the inventory stage and three discovery requests instead of four. Headless publication still reads and validates raw bodies. Tests cover partial work, token/property changes, scoped denial, corruption, account switching, delayed callbacks, cancellation, and a newer user edit racing background adoption. No physical-device launch/thermal/provider measurement or live-account access is implied. **322 production files** were frozen before final packaging.
+
+RELEASE-19 package evidence, **2026-11-22**: Android **0.6.19/code21** built successfully; the final native test task executed and **103 JVM tests across 13 suites** passed. Manifest/application ID and signing continuity match the existing app. All **50 UI assets**, the headless bundle, **15 launcher PNGs**, adaptive/themed vectors, splash bindings and absence of a development-server URL were verified. The 322 frozen production files and previous 0.6.17 APK remain unchanged. [Artifact and checksum](../docs/RELEASES.md#0619--android-build-21). No emulator, device installation, live-account write, deployment or source/binary publication occurred.
+
 ## Windows calendar refresh regression — SYNC-13
 
 Reported 2026-11-18 on Windows 0.6.17/build19. The owner subsequently requested RELEASE-18: a corrected Windows 0.6.18/build20 package and source push. Android/Web packages remain unchanged; live-account acceptance is separate.
@@ -58,7 +247,7 @@ Authorized 2026-11-17; target all clients **0.6.15/build17**. Spec section above
 - [x] Safe shorter checklist creation transactions, partial-success recovery and compact touch-capable task editor.
 - [x] Actual Windows Electron title/calendar control regression. Both tested creation paths passed; the reported obstruction was not reproduced, so no correction is claimed.
 - [ ] Reproduce the reported Windows obstruction in the affected window/display state if it persists.
-- [x] Android cheap cached restoration, metadata-only/token background checks, bounded prioritized requests, resumable retry and failure classification.
+- [x] Android cached restoration, metadata-only checks, bounded prioritized requests, resumable retry and failure classification. Correction on 2026-11-22: native background token comparison was missing; SYNC-14 records and repairs that gap separately.
 - [x] Headless shared projector updates usable account-fenced Android read generations; unsupported runtime fallback is explicit.
 - [x] REPORT delta/multiget with expired-token/cancellation/deletion safeguards and SSO fallback.
 - [x] Per-account/scope/page synchronized filters, local migration, conflict handling, startup retention and legacy folder compatibility across three hosts.

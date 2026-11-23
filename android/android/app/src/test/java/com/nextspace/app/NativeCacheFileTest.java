@@ -4,6 +4,20 @@ import static org.junit.Assert.*;
 import java.nio.file.Files;
 import java.io.File;
 public class NativeCacheFileTest {
+    @Test public void slotStatReturnsBoundedRevisionMatchedPrefixWithoutInterpretingEnvelope()throws Exception{
+        File root=Files.createTempDirectory("cache-fixture").toFile();NativeCacheFile cache=cache(root);
+        assertNull(cache.stat(path,guard).size());
+        byte[] bytes=("{\"version\":1,\"generation\":27,\"value\":\""+"x".repeat(4096)+"\"}").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String token=cache.begin(path,bytes.length,0,owner,guard);cache.append(path,token,0,owner,0,bytes,guard);cache.commit(path,token,0,owner,guard);
+        var stat=cache.stat(path,guard);assertEquals(Long.valueOf(bytes.length),stat.size());assertEquals(256,stat.prefix().length());assertTrue(stat.prefix().startsWith("{\"version\":1,\"generation\":27,"));
+        assertEquals(cache.revision(path),stat.revision());assertArrayEquals(bytes,cache.read(path,0,bytes.length,stat.size(),stat.revision(),guard));
+        cache.remove(path,guard);assertNotEquals(stat.revision(),cache.stat(path,guard).revision());
+    }
+    @Test public void slotStatStopsAtNonAsciiAndRejectsCancellation()throws Exception{
+        NativeCacheFile cache=cache(Files.createTempDirectory("cache-fixture").toFile());byte[] bytes="headerőtail".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String token=cache.begin(path,bytes.length,0,owner,guard);cache.append(path,token,0,owner,0,bytes,guard);cache.commit(path,token,0,owner,guard);
+        assertEquals("header",cache.stat(path,guard).prefix());assertThrows(Exception.class,()->cache.stat(path,()->{throw new Exception("cancelled");}));
+    }
     private final String path="cache/"+"a".repeat(64)+".0.json",owner="a".repeat(32);
     private final NativeCacheFile.Guard guard=()->{};
     private NativeCacheFile cache(File root){return new NativeCacheFile(root,(from,to)->Files.move(from.toPath(),to.toPath(),java.nio.file.StandardCopyOption.ATOMIC_MOVE,java.nio.file.StandardCopyOption.REPLACE_EXISTING));}

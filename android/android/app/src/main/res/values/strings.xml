@@ -4,4 +4,9 @@
     <string name="title_activity_main">NextGlance</string>
     <string name="package_name">com.nextspace.app</string>
     <string name="custom_url_scheme">com.nextspace.app</string>
+    <string name="widget_description">Your calendar, tasks and Deck cards. Configure each widget independently.</string>
+    <string name="widget_create">Create item</string>
+    <string name="widget_settings">Widget settings</string>
+    <string name="widget_open">Open all</string>
+    <string name="widget_prepare">Open NextGlance to prepare saved data.</string>
 </resources>

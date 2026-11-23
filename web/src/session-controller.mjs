@@ -6,11 +6,13 @@ import {ViewPreferencesClient} from '@nextspace/nextcloud-client/view-preference
 import {createEmptyState, createPlannerWorkspace} from '@nextspace/core/planner.mjs'
 import {validateWorkspace} from '@nextspace/core/planner-schema.mjs'
 import {mergeWorkspaces, withDeviceViewPreferences} from '@nextspace/core/workspace-merge.mjs'
-import {reconcileIdentities} from '@nextspace/core/identity.mjs'
+import {projectNativeIdentities,promoteNativeIdentities,publicTaskIdentity} from '@nextspace/core/identity.mjs'
 import {mergeSourceRefresh} from '@nextspace/core/source-refresh.mjs'
 import {eventEditOperation,eventDeleteOperation,eventRespondOperation} from '@nextspace/core/native-operations.mjs'
 import {taskCreationOptions} from '@nextspace/core/card-tasks.mjs'
+import {normalizeCalendarWindow} from '@nextspace/core/history.mjs'
 import {createSessionTransport, webProblem} from './session-transport.mjs'
+import {calendarSnapshot,replaceCalendar,mergeCalendarWindow,coversWindow,sameWindow,inCalendarWindow} from './calendar-window.mjs'
 
 const SOURCES = ['tasks','calendar','deck','notes','collectives']
 export const WEB_NATIVE_OPERATIONS = Object.freeze(['createNote','updateNote','setNoteTags','createTask','setTaskCompleted','setTaskDue','updateTaskStatus','createCard','setCardCompleted','moveCard','setDeckDependency','updateDescription','updateRecordDates','updateRecordAppearance','createDeckLabel','createEvent','updateEvent','respondToEvent','deleteEvent','listFiles','readDeckAttachments','attachDeckFile','removeDeckAttachment','uploadDeckAttachment'])
@@ -22,14 +24,18 @@ export function createWebController(options) {
   const now = options.now || (() => new Date()), makeId = options.randomUUID || (() => crypto.randomUUID())
   let state = createEmptyState(), host = {phase:'opening'}, session, client, folder, viewPreferences, base, etag, initialized, refreshing, disposed = false, epoch = 0, editSequence = 0
   let online = options.online ? options.online() : true, lastPlannerRead=0, lastSourceRefresh=0, readGeneration=0
-  const listeners = new Set(), hostListeners = new Set(), syncListeners = new Set(), edits = new Map(), itemQueues = new Map(), metadata = serial(), preferenceWrites = serial()
+  let recentCalendar=calendarSnapshot(state),recentWindow,extraCalendar,requestedWindow,calendarReading,windowSequence=0
+  const listeners = new Set(), hostListeners = new Set(), syncListeners = new Set(), edits = new Map(), itemQueues = new Map(), metadata = serial(), preferenceWrites = serial(),sourceReads=serial()
   const operations = WEB_NATIVE_OPERATIONS.filter(name => name !== 'uploadDeckAttachment' || options.selectUpload)
   const hostEmit = () => { for (const listener of hostListeners) listener({...host}) }
   function setHost(phase,message) { host = {phase,...(message ? {message} : {}),...(session ? {userId:session.userId,loginUrl:session.loginUrl,sourceUrl:session.sourceUrl,appVersion:session.appVersion} : {})}; hostEmit() }
   function snapshot() {
     const write = new Set(online && host.phase === 'ready' ? state.nativeWriteSources || [] : [])
     const collectionsById=new Map(state.collections.map(collection=>[collection.id,collection]))
-    const records = state.records.map(({remote,...record}) => ({...record,...(remote?.category !== undefined ? {remote:{category:remote.category}} : {}),...(write.has(record.source)&&!collectionsById.get(record.collectionId)?.readonly ? {} : {readonly:true})}))
+    const records = state.records.map(value => {
+      const {remote,identity,...record}=value, receiptIdentity=publicTaskIdentity(value)
+      return {...record,...(receiptIdentity?{identity:receiptIdentity}:{}),...(remote?.category !== undefined ? {remote:{category:remote.category}} : {}),...(write.has(record.source)&&!collectionsById.get(record.collectionId)?.readonly ? {} : {readonly:true})}
+    })
     const collections = state.collections.map(({remote,...collection}) => ({...collection,...(write.has(collection.source) ? {} : {readonly:true})}))
     return copy({...state,records,collections,nativeOperations:online && host.phase === 'ready' ? operations : [],nativeWriteSources:[...write]})
   }
@@ -37,6 +43,7 @@ export function createWebController(options) {
   function expire(message) {
     epoch++; client = null; folder = null; viewPreferences = null; base = null; etag = null; edits.clear()
     state = {...createEmptyState(),nativeOperations:[],nativeWriteSources:[],connection:{connected:false,reconnectRequired:true},storage:{remotePath:PLANNER_FOLDER,syncStatus:'error',message,errorCode:'AUTH'}}
+    recentCalendar=calendarSnapshot(state);recentWindow=extraCalendar=requestedWindow=undefined;windowSequence++
     setHost('expired',message); emit()
   }
   const transport = createSessionTransport({...options,online:()=>online,onExpired:expire})
@@ -88,7 +95,7 @@ export function createWebController(options) {
   async function savePlanner(desired, expectedRevision) {
     await initialize(); const captured = await verify(); active(captured)
     if (expectedRevision !== undefined && expectedRevision !== state.revision) throw webProblem('Planner data changed. Review the latest view and retry.', 'CONFLICT')
-    let next = validateWorkspace(desired), reference = copy(base)
+    let next = validateWorkspace(promoteNativeIdentities(validateWorkspace(desired),state.records,makeId).workspace), reference = copy(base)
     if (sharedFolderHash(next) === sharedFolderHash(base)) { state.workspace = copy(next); state.revision++; emit(); return snapshot() }
     state.storage = {...state.storage,syncStatus:'syncing'}; emit()
     try {
@@ -116,6 +123,11 @@ export function createWebController(options) {
     state.records = deleted ? state.records.filter(value=>key(value)!==key(record)) : [...state.records.filter(value=>key(value)!==key(record)),record]
     state.statuses = state.statuses.map(status=>({...status,count:state.records.filter(value=>value.source===status.source).length}))
     if(!deleted&&record.source==='notes'&&!state.collections.some(collection=>collection.id===record.collectionId))state.collections.push({id:record.collectionId,source:'notes',title:record.collectionTitle||'Uncategorized (default)',readonly:Boolean(record.readonly),remote:{category:record.remote?.category||''}})
+    if(record.source==='calendar'){
+      // Acknowledged local results remain visible even outside the currently queried period.
+      recentCalendar.records=deleted?recentCalendar.records.filter(value=>key(value)!==key(record)):[...recentCalendar.records.filter(value=>key(value)!==key(record)),record]
+      if(extraCalendar)extraCalendar.snapshot.records=extraCalendar.snapshot.records.filter(value=>key(value)!==key(record))
+    }
   }
   function currentProjection(record,creating=false) {
     const status=state.statuses.find(value=>value.source===record.source)
@@ -126,9 +138,13 @@ export function createWebController(options) {
   }
   async function identify(persist=true) {
     const reconcile=()=>{
-      active();const resolved=reconcileIdentities(state.workspace,state.records,makeId)
-      if(sharedFolderHash(resolved.workspace)!==sharedFolderHash(state.workspace))state.revision++
-      state.records=resolved.records;state.workspace=resolved.workspace
+      active();const resolved=projectNativeIdentities(state.workspace,state.records,makeId)
+      state.records=resolved.records
+      const aliases=[...resolved.remap].filter(([id,target])=>id!==target&&/^native-[a-f0-9]{64}$/.test(id))
+      if(aliases.length)state.recordIdAliases={...state.recordIdAliases,...Object.fromEntries(aliases)}
+      const workspace=validateWorkspace(resolved.workspace)
+      if(sharedFolderHash(workspace)!==sharedFolderHash(state.workspace))state.revision++
+      state.workspace=workspace
     }
     if(!persist){reconcile();return}
     // Compute identities inside the same queue as remote organization writes.
@@ -148,12 +164,14 @@ export function createWebController(options) {
   async function refresh() {
     await initialize()
     if (refreshing) return refreshing
-    refreshing = (async()=>{
-      const captured = await verify(), native = client, startedSequence = editSequence, scan=++readGeneration
+    windowSequence++;recentWindow=undefined;extraCalendar=undefined
+    Object.assign(state,replaceCalendar(state,recentCalendar))
+    refreshing = sourceReads(async()=>{
+      const captured = await verify(), native = client, startedSequence = editSequence, scan=++readGeneration,primaryWindow={from:now().getTime()-14*86400000,to:now().getTime()+90*86400000}
       setHost('ready'); state.deviceSync = {settings:{caldavMinutes:0,deckMinutes:0,wifiOnly:false},restoring:false,background:{supported:false,scheduled:false},activity:{sources:SOURCES,stage:'source-read',startedAt:now().toISOString(),lastProgressAt:now().toISOString(),completed:0}}
       emit()
       try {
-        const result = await native.readAll({isActive:()=>!disposed&&captured===epoch&&scan===readGeneration&&online,onCollections:part=>{
+        const result = await native.readAll({calendarWindow:primaryWindow,isActive:()=>!disposed&&captured===epoch&&scan===readGeneration&&online,onCollections:part=>{
           if(captured!==epoch||scan!==readGeneration||!online)return
           const ids = new Set(part.collections.map(value=>value.id))
           state.collections = [...state.collections.filter(value=>!ids.has(value.id)),...part.collections]
@@ -163,16 +181,18 @@ export function createWebController(options) {
         if(scan!==readGeneration)return snapshot()
         const merged = mergeSourceRefresh(state,result)
         // An old scan cannot undo an acknowledged edit or resurrect a deletion.
-        for (const [nativeKey,change] of edits) if(change.sequence>startedSequence) {
+        for (const [nativeKey,change] of edits) if(change.sequence>startedSequence||change.record.source==='calendar'&&!inCalendarWindow(change.record,primaryWindow)) {
           merged.records = merged.records.filter(value=>key(value)!==nativeKey)
           const denied = merged.statuses.some(status=>status.source===change.record.source&&(status.permissionDenied||status.revokedCollectionIds?.includes(change.record.collectionId)))
           if(!change.deleted&&!denied)merged.records.push(change.record)
         }
         Object.assign(state,merged)
+        recentWindow=result.statuses.some(status=>status.source==='calendar'&&status.state==='connected'&&!status.permissionDenied)?primaryWindow:undefined
         state.nativeWriteSources = SOURCES.filter(source=>!result.statuses.some(status=>status.source===source&&status.permissionDenied)&&(state.collections.some(collection=>collection.source===source&&!collection.readonly)||source==='notes'&&result.statuses.some(status=>status.source==='notes'&&status.state==='connected')))
         await identify(); active(captured)
+        recentCalendar=calendarSnapshot(state)
         lastSourceRefresh=now().getTime()
-        for(const [nativeKey,change] of edits)if(change.sequence<=startedSequence)edits.delete(nativeKey)
+        for(const [nativeKey,change] of edits)if(change.sequence<=startedSequence&&(change.record.source!=='calendar'||inCalendarWindow(change.record,recentWindow)))edits.delete(nativeKey)
       } catch(error) {
         active(captured)
         if(scan!==readGeneration)return snapshot()
@@ -181,8 +201,62 @@ export function createWebController(options) {
         else if(error.code==='NETWORK'||error.code==='OFFLINE')setHost('offline',error.message)
       } finally { if(captured===epoch&&state.deviceSync) { delete state.deviceSync.activity; emit() } }
       return snapshot()
-    })().finally(()=>{refreshing=null})
+    }).finally(()=>{refreshing=null;if(requestedWindow&&online&&host.phase==='ready')void readCalendarWindow(requestedWindow).catch(()=>{})})
     return refreshing
+  }
+  function overlayEdits(result,startedSequence) {
+    for(const [nativeKey,change] of edits)if(change.record.source==='calendar'&&change.sequence>startedSequence){
+      result.records=result.records.filter(value=>key(value)!==nativeKey)
+      const denied=result.statuses.some(status=>status.source===change.record.source&&(status.permissionDenied||status.revokedCollectionIds?.includes(change.record.collectionId)))
+      if(!change.deleted&&!denied)result.records.push(change.record)
+    }
+    return result
+  }
+  async function readCalendarWindow(input) {
+    const window=normalizeCalendarWindow(input)
+    if(!window)throw webProblem('Choose a calendar period of at most 120 days.', 'VALIDATION')
+    await initialize();active()
+    if(!sameWindow(window,requestedWindow)){requestedWindow=window;windowSequence++}
+    if(coversWindow(recentWindow,window)){
+      if(extraCalendar){extraCalendar=undefined;Object.assign(state,replaceCalendar(state,recentCalendar));emit()}
+      return snapshot()
+    }
+    if(extraCalendar?.complete&&coversWindow(extraCalendar.window,window))return snapshot()
+    if(calendarReading)return calendarReading
+    calendarReading=(async()=>{
+      for(;;){
+        const target=requestedWindow,sequence=windowSequence
+        if(!target||!online||host.phase==='expired'||disposed)break
+        await sourceReads(async()=>{
+          if(sequence!==windowSequence||coversWindow(recentWindow,target)||extraCalendar?.complete&&coversWindow(extraCalendar.window,target))return
+          const captured=await verify(),native=client,startedSequence=editSequence,scan=++readGeneration
+          if(extraCalendar&&!sameWindow(extraCalendar.window,target)){extraCalendar=undefined;Object.assign(state,replaceCalendar(state,recentCalendar));emit()}
+          try{
+            const result=await native.readAll({sources:['calendar'],calendarWindow:target,isActive:()=>!disposed&&captured===epoch&&scan===readGeneration&&sequence===windowSequence&&online})
+            active(captured)
+            if(scan!==readGeneration||sequence!==windowSequence||!online)return
+            const merged=mergeCalendarWindow(recentCalendar,extraCalendar,result,target)
+            recentCalendar=overlayEdits(merged.recent,startedSequence);extraCalendar=merged.additional;extraCalendar.snapshot=overlayEdits(extraCalendar.snapshot,startedSequence);if(merged.invalidateRecent)recentWindow=undefined
+            Object.assign(state,replaceCalendar(state,overlayEdits(merged.snapshot,startedSequence)))
+            const writable=state.collections.some(collection=>collection.source==='calendar'&&!collection.readonly)&&!state.statuses.some(status=>status.source==='calendar'&&status.permissionDenied)
+            state.nativeWriteSources=[...(state.nativeWriteSources||[]).filter(source=>source!=='calendar'),...(writable?['calendar']:[])]
+            await identify();active(captured)
+            const current=new Map(state.records.map(record=>[key(record),record]))
+            recentCalendar.records=recentCalendar.records.map(record=>current.get(key(record))||record)
+            if(extraCalendar)extraCalendar.snapshot.records=extraCalendar.snapshot.records.map(record=>current.get(key(record))||record)
+          }catch(error){
+            active(captured)
+            if(scan!==readGeneration||sequence!==windowSequence||error.code==='CANCELLED')return
+            state.statuses=state.statuses.map(status=>status.source==='calendar'?{...status,state:'error',message:error.message,errorCode:error.code||'NETWORK'}:status)
+            if(error.code==='AUTH')transport.expire(error.message)
+            else if(['NETWORK','OFFLINE'].includes(error.code))setHost('offline',error.message)
+          }finally{if(captured===epoch)emit()}
+        })
+        if(sequence===windowSequence)break
+      }
+      return snapshot()
+    })().finally(()=>{calendarReading=null})
+    return calendarReading
   }
   function recordFor(id,source,write=true) {
     const value = state.records.find(record=>record.id===id)
@@ -201,6 +275,8 @@ export function createWebController(options) {
     const target=state.collections.find(value=>value.id===denied.collectionId&&value.source===denied.source)
     if(!target)return
     readGeneration++
+    const calendarAffected=target.source==='calendar'||target.source==='tasks'&&target.remote?.href&&state.collections.some(collection=>collection.source==='calendar'&&collection.remote?.href===target.remote.href)
+    if(calendarAffected){windowSequence++;recentWindow=undefined;extraCalendar=undefined;Object.assign(state,replaceCalendar(state,recentCalendar))}
     const affected=new Set(),collectionIds=new Set()
     state.collections=state.collections.map(collection=>{
       const same=collection.id===target.id&&collection.source===target.source
@@ -211,6 +287,7 @@ export function createWebController(options) {
     state.records=state.records.map(record=>collectionIds.has(record.collectionId)?{...record,readonly:true}:record)
     state.nativeWriteSources=(state.nativeWriteSources||[]).filter(source=>!affected.has(source)||state.collections.some(collection=>collection.source===source&&!collection.readonly))
     state.statuses=state.statuses.map(status=>affected.has(status.source)?{...status,state:'error',errorCode:'PERMISSION',errorStage:'source-read',message:'A Nextcloud destination became read-only. Refresh to check its permissions; other writable destinations remain available.'}:status)
+    if(calendarAffected)recentCalendar=calendarSnapshot(state)
     emit()
   }
   async function invoke(action) { await initialize(); const captured = await verify(), native = client;try{const result = await action(native); active(captured); return result}catch(error){if(captured===epoch&&host.phase!=='expired')nativeDenied(error);throw error} }
@@ -286,10 +363,11 @@ export function createWebController(options) {
     getHostState:()=>({...host}),
     async getState(){await initialize();if(!refreshing&&!state.records.length)void refresh().catch(()=>{});return snapshot()},
     refresh,
+    readCalendarWindow,
     async resumeSync(reason){await initialize();if(!online||host.phase==='expired')return snapshot();const elapsed=now().getTime();if(elapsed-lastPlannerRead>=(reason==='resume'?30000:60000))await api.syncWorkspace();if(refreshing||elapsed-lastSourceRefresh>=(reason==='resume'?30000:60000))return refresh();return snapshot()},
     async retryConnection(){if(host.phase==='expired')return unavailable();await initialize();await verify();setHost('ready');return refresh()},
     async setOnline(value){online=Boolean(value);if(!online&&host.phase!=='expired'){state.nativeWriteSources=[];setHost('offline','You are offline. Reconnect to edit.');emit()}else if(online&&host.phase!=='expired'){try{await initialize();await verify();setHost('ready');await refresh()}catch(error){if(host.phase!=='expired')setHost('offline',error.message)}}},
-    dispose(){disposed=true;epoch++;transport.dispose();listeners.clear();hostListeners.clear();syncListeners.clear();state=createEmptyState();client=null;folder=null;viewPreferences=null;base=null;edits.clear()},
+    dispose(){disposed=true;epoch++;windowSequence++;transport.dispose();listeners.clear();hostListeners.clear();syncListeners.clear();state=createEmptyState();recentCalendar=calendarSnapshot(state);recentWindow=extraCalendar=requestedWindow=undefined;client=null;folder=null;viewPreferences=null;base=null;edits.clear()},
     beginLogin:unavailable,pollLogin:unavailable,cancelLogin:unavailable,connect:unavailable,disconnect:unavailable,
     saveWorkspace:(workspace,expectedRevision)=>metadata(async()=>{const result=await savePlanner(workspace,expectedRevision);return {workspace:result.workspace,revision:result.revision,storage:result.storage}}),
     syncWorkspace:()=>metadata(async()=>{await initialize();await loadPlanner();await identify(false);if(sharedFolderHash(state.workspace)!==sharedFolderHash(base))await savePlanner(state.workspace);emit();return snapshot()}),

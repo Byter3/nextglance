@@ -13,7 +13,7 @@ final class NativeSyncPolicy {
     static final int DAV_BYTES = 2 * 1024 * 1024, RESPONSE_BYTES = 24 * 1024 * 1024;
     static final long REQUEST_MILLIS = 45_000, JOB_MILLIS = 90_000;
     record Settings(int caldavMinutes, int deckMinutes, boolean wifiOnly) {
-        static Settings defaults() { return new Settings(15, 15, false); }
+        static Settings defaults() { return new Settings(60, 60, false); }
     }
     record Locator(String kind, String collection, String href) {}
     record Entry(int version, String kind, String collection, String href, String etag, String body, long bytes) {

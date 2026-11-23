@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {useIsWeekend} from './useWeekendDays'
 import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
 import { CalendarDays, Plus, CircleCheck, PanelsTopLeft, RotateCcw } from 'lucide-vue-next'
 import OverviewAgenda from './OverviewAgenda.vue'
@@ -24,13 +25,14 @@ import './calendar-density.css'
 import { creationSelection, type CreationRange, type CreationSelection } from '@nextspace/core/range-selection.mjs'
 import { calendarMoveEdit, calendarPlanMove } from '@nextspace/core/calendar-edit.mjs'
 import type {TimelineDateEdit} from '@nextspace/core/timeline-edit.mjs'
+const isWeekend=useIsWeekend()
 const props=withDefaults(defineProps<{preferenceKey?:string;persistPresentation?:boolean;mode?:'day'|'week'|'month';contextCollapsed?:boolean;contextRecordIds?:string[];scopeId?:string;records:WorkspaceRecord[];plans:PlanSession[];days:Date[];anchor?:Date;selectedId?:string|null;colorFor:(record:WorkspaceRecord)=>string;sourceColorFor?:(record:WorkspaceRecord)=>string;tagsFor?:(record:WorkspaceRecord)=>RecordTag[];canCreate?:boolean;canEditRecord?:(record:WorkspaceRecord)=>boolean;canEditPlans?:boolean;embedded?:boolean;relatedIds?:string[];axis?:OverviewAxis;focusId?:string;contextTitle?:string;contextDetail?:string;activeDay?:string;hoveredId?:string|null;highlightedIds?:string[];relations?:Relation[]}>(),{mode:'week',scopeId:'all',embedded:false,relatedIds:()=>[],highlightedIds:()=>[],relations:()=>[]})
 const sourceTint=(record:WorkspaceRecord)=>props.sourceColorFor?.(record)||props.colorFor(record)
 const tagsByRecord=computed(()=>new WeakMap(props.records.map(record=>[record,props.tagsFor?.(record)||recordTags(record)] as const)))
 const itemTags=(record:WorkspaceRecord)=>tagsByRecord.value.get(record)||props.tagsFor?.(record)||recordTags(record)
 const contextIds=computed(()=>new Set(props.contextRecordIds||[]))
 const recordTooltip=(record:WorkspaceRecord,label:string)=>`${contextIds.value.has(record.id)?'Linked context · ':''}${label}: ${record.title}\nSource: ${record.collectionTitle||record.source}${itemTags(record).length?'\nTags: '+itemTags(record).map(tag=>tag.title).join(', '):''}`
-const emit=defineEmits<{open:[record:WorkspaceRecord];create:[range:CreationRange];horizontalScroll:[left:number];datePan:[delta:number];dateZoomStart:[centerPixel:number];dateZoom:[intent:{scale:number;centerPixel:number}];focusDate:[date:string];scrollbarWidth:[width:number];hover:[id:string|null];dateEdit:[edit:TimelineDateEdit];planEdit:[edit:{id:string;start:string;end:string}]}>()
+const emit=defineEmits<{open:[record:WorkspaceRecord];create:[range:CreationRange];horizontalScroll:[left:number];datePan:[delta:number];dateZoomStart:[centerPixel:number];dateZoom:[intent:{scale:number;centerPixel:number}];focusDate:[date:string];scrollbarWidth:[width:number];hover:[id:string|null];dateEdit:[edit:TimelineDateEdit];planEdit:[edit:{id:string;start:string;end:string}];visibleDays:[days:number]}>()
 const root=ref<HTMLElement>()
 const hourHeight=ref(48)
 const scroller=ref<HTMLElement>()
@@ -51,6 +53,7 @@ const localViewportWidth=ref(800)
 const horizontalZoomWidth=ref<number>()
 const localDayWidth=computed(()=>horizontalZoomWidth.value===undefined?Math.max(85,(localViewportWidth.value-53)/Math.max(1,props.days.length)):Math.max(12,(localViewportWidth.value-53)/90,Math.min(1440,horizontalZoomWidth.value)))
 const localVisibleDays=computed(()=>horizontalZoomWidth.value===undefined?props.days.length:Math.max(1,Math.min(90,Math.ceil((localViewportWidth.value-53)/localDayWidth.value))))
+watch(localVisibleDays,value=>emit('visibleDays',value),{immediate:true})
 const canvas=useDateCanvas(()=>({anchor:dayKey(props.anchor||props.days[0]||new Date()),visibleDays:localVisibleDays.value,dayWidth:localDayWidth.value,scope:props.scopeId}),anchor=>{if(!sharedAxis.value)emit('focusDate',anchor)})
 const days=computed(()=>sharedAxis.value?props.days:Array.from({length:canvas.renderDays.value},(_,index)=>{const day=dateValue(canvas.anchor.value);day.setDate(day.getDate()+index);return day}))
 const dateLabels=useDateLabels(()=>days.value)
@@ -368,7 +371,7 @@ defineExpose({revealRecord})
       <div ref="mainScroller" class="calendar-main" @scroll="pinSourceEdges">
         <div ref="calendarContent" class="calendar-content">
         <div v-if="!sharedAxis" ref="headingScroller" class="calendar-heading-viewport" @scroll="syncDayScroll">
-        <div class="calendar-header"><div class="calendar-zone">{{timeZoneLabel}}</div><div v-for="day in days" :key="dayKey(day)" class="calendar-day-heading" :class="{today:dayKey(day)===dayKey(now)}"><span>{{dateLabels.get(+day)?.weekday}}</span><strong>{{day.getDate()}}</strong><button v-if="canCreate" class="icon-button day-add" :aria-label="`New item on ${dateLabels.get(+day)?.local}`" @click="createDay(day)"><Plus :size="12"/></button></div></div>
+        <div class="calendar-header"><div class="calendar-zone">{{timeZoneLabel}}</div><div v-for="day in days" :key="dayKey(day)" class="calendar-day-heading" :data-date="dayKey(day)" :class="{weekend:isWeekend(day),today:dayKey(day)===dayKey(now)}"><span>{{dateLabels.get(+day)?.weekday}}</span><strong>{{day.getDate()}}</strong><button v-if="canCreate" class="icon-button day-add" :aria-label="`New item on ${dateLabels.get(+day)?.local}`" @click="createDay(day)"><Plus :size="12"/></button></div></div>
         </div>
         <div ref="allDayScroller" class="calendar-all-day-viewport" tabindex="0" aria-label="All-day items, scroll for more" :class="{'has-all-day-items':allDayLayout.lanes>0}" @scroll="syncDayScroll">
         <div class="calendar-all-day" :style="{gridTemplateRows:allDayLayout.lanes?`repeat(${allDayLayout.lanes},28px)`:'18px'}" @pointerdown="beginCreation($event,false)">
@@ -380,7 +383,7 @@ defineExpose({revealRecord})
             </div>
             <span class="calendar-all-day-label">All day<br>Multi-day</span>
           </div>
-          <div v-for="(day,index) in days" :key="dayKey(day)" class="all-day-cell" :class="{'active-day':sharedAxis&&activeDay===dayKey(day)}" :style="{gridColumn:index+2}" :data-day="dayKey(day)" aria-hidden="true"></div>
+          <div v-for="(day,index) in days" :key="dayKey(day)" class="all-day-cell" :data-date="dayKey(day)" :class="{weekend:isWeekend(day),'active-day':sharedAxis&&activeDay===dayKey(day)}" :style="{gridColumn:index+2}" :data-day="dayKey(day)" aria-hidden="true"></div>
           <div v-if="allDayCreationStyle" class="calendar-new-all-day" :style="allDayCreationStyle" aria-hidden="true"></div>
           <button v-for="item in renderedAllDayItems" :key="item.id" class="all-day-event" :class="{deadline:item.point&&item.record.kind!=='event',work:item.record.kind!=='event','continues-before':allDayClipped(item).before,'continues-after':allDayClipped(item).after,selected:item.record.id===selectedId,related:item.record.id!==selectedId&&relatedIdsSet.has(item.record.id),hovered:item.record.id===hoveredRecordId,'hover-linked':item.record.id!==hoveredRecordId&&highlightedIdsSet.has(item.record.id),'can-move':canMoveItem(item),'moving':drag?.moved&&drag.item.id===item.id}" :style="allDayStyle(item)" :data-record-id="item.record.id" :data-record-kind="item.record.kind" :data-first-day="dayKey(days[item.first]!)" :data-last-day="dayKey(days[item.last-1]!)" :title="recordTooltip(item.record,item.label)" :aria-label="`${item.label}: ${item.record.title}${relatedIdsSet.has(item.record.id)?', linked to selected item':''}`" @pointerenter="hoverRecord(item.record.id,$event)" @pointerleave="leaveRecord" @focusin="hoverRecord(item.record.id,$event)" @focusout="leaveRecord" @pointerdown="beginMove($event,item)" @click="openItem(item.record)"><i class="calendar-source-edge" aria-hidden="true"/><span class="all-day-pinned-label"><component :is="sourceIcon(item.record)" :size="12"/><span v-if="item.point" class="deadline-label">{{item.label.toUpperCase()}}</span><span class="all-day-title">{{item.record.title}}</span><small v-if="contextIds.has(item.record.id)" class="calendar-context-badge">Linked context</small><RecordTagMarkers class="calendar-tags" :tags="itemTags(item.record)" :limit="2"/></span></button>
         </div>
@@ -394,7 +397,7 @@ defineExpose({revealRecord})
               </div>
               <span v-for="hour in hours" :key="hour" :style="{top:`${hour*hourHeight}px`}">{{String(hour).padStart(2,'0')}}:00</span>
             </div>
-            <div v-for="(day,index) in days" :key="dayKey(day)" class="calendar-day-track" :class="{today:dayKey(day)===dayKey(now),'active-day':sharedAxis&&activeDay===dayKey(day)}" :data-day="dayKey(day)">
+            <div v-for="(day,index) in days" :key="dayKey(day)" class="calendar-day-track" :data-date="dayKey(day)" :class="{weekend:isWeekend(day),today:dayKey(day)===dayKey(now),'active-day':sharedAxis&&activeDay===dayKey(day)}" :data-day="dayKey(day)">
 
               <div v-if="timedCreationStyle(index)" class="calendar-new-time" :style="timedCreationStyle(index)" aria-hidden="true"></div>
               <button v-for="block in dayBlocks(day)" :key="block.id" class="calendar-event" :class="{planned:block.planned,work:block.record.kind!=='event',deadline:block.point,selected:block.record.id===selectedId,related:block.record.id!==selectedId&&relatedIdsSet.has(block.record.id),hovered:block.record.id===hoveredRecordId,'hover-linked':block.record.id!==hoveredRecordId&&highlightedIdsSet.has(block.record.id),'can-move':canMoveItem(block),'moving':drag?.moved&&drag.item.id===block.id}" :style="blockStyle(block)" :data-record-id="block.record.id" :data-record-kind="block.record.kind" :title="recordTooltip(block.record,block.label)" :aria-label="`${block.label}: ${block.record.title}, ${block.timeLabel}${block.planned?', planned work':''}${relatedIdsSet.has(block.record.id)?', linked to selected item':''}`" @pointerenter="hoverRecord(block.record.id,$event)" @pointerleave="leaveRecord" @focusin="hoverRecord(block.record.id,$event)" @focusout="leaveRecord" @pointerdown="beginMove($event,block)" @click="openItem(block.record)"><i class="calendar-source-edge" aria-hidden="true"/><strong><component :is="sourceIcon(block.record)" :size="11"/>{{block.record.title}}</strong><span>{{block.point?`${block.label} `:''}}{{block.timeLabel}}<template v-if="block.to-block.from>25"> · {{block.planned?'Work session':block.record.kind==='event'?block.record.collectionTitle:block.record.kind==='card'?'Deck card':'Task'}}</template></span><small v-if="contextIds.has(block.record.id)" class="calendar-context-badge">Linked context</small><RecordTagMarkers class="calendar-tags" :tags="itemTags(block.record)" :limit="2"/></button>

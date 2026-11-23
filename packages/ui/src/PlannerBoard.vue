@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {useIsWeekend} from './useWeekendDays'
 import {usePortalTarget} from "./portal-target"
 const portalTarget=usePortalTarget()
 import { computed, nextTick, ref, watch } from 'vue'
@@ -7,7 +8,7 @@ import { boardColumns, isClosed } from '@nextspace/core/planner.mjs'
 import {defaultStatusMapping,mappedColumnForRecord,statusMoveTargets,UNMAPPED_COLUMN,unifiedStatus,boardModeAfterMappingChange} from '@nextspace/core/status-mapping.mjs'
 import type {StatusMoveIntent,StatusMoveTarget} from '@nextspace/core/status-mapping.mjs'
 import type { Collection, Relation, StatusMapping, WorkspaceRecord } from '@nextspace/contracts'
-import { isOverdue, shortDate, sourceLabels } from './planner-ui'
+import { dayKey, isOverdue, shortDate, sourceLabels } from './planner-ui'
 import BoardChecklist from './BoardChecklist.vue'
 import BoardTaskLayers from './BoardTaskLayers.vue'
 import {boardTaskStacks,boardOrderKey,orderBoardRecords,reorderIds,buildLinkIndex,boardHighlightState,boardColumnDropAllowed} from '@nextspace/core/planning-order.mjs'
@@ -15,6 +16,7 @@ import {useListReorder,type ListReorderPoint,type ListReorderVisual} from './use
 import {useBoardWindow} from './useBoardWindow'
 import type {ScopeArrangement} from '@nextspace/contracts'
 
+const isWeekend=useIsWeekend()
 const props=withDefaults(defineProps<{records:WorkspaceRecord[];collections:Collection[];relations:Relation[];workflow:Record<string,string>;scopeId:string;selectedId?:string|null;username?:string;canCreateCard?:boolean;createCardReason?:string;canMoveNative?:boolean;canCompleteNative?:boolean;canMoveTasks?:boolean;canEditRecord?:(record:WorkspaceRecord)=>boolean;locked?:boolean;colorFor:(record:WorkspaceRecord)=>string;sourceColorFor?:(record:WorkspaceRecord)=>string;tagsFor?:(record:WorkspaceRecord)=>{id:string;title:string;color?:string}[];statusMapping?:StatusMapping;hasCustomMapping?:boolean;toolbarTarget?:string;arrangement?:ScopeArrangement;groupTasks?:boolean}>(),{hasCustomMapping:undefined,canCompleteNative:undefined})
 const emit=defineEmits<{open:[record:WorkspaceRecord];createCard:[boardId?:string];workflow:[id:string,column:'inbox'|'planned'|'doing'|'done'];move:[id:string,stackId:string];checklistEdit:[edit:{id:string;body:string}];configureStatuses:[];statusMove:[intent:StatusMoveIntent];reorder:[intent:{key:string;ids:string[]}];resetOrder:[];'update:groupTasks':[value:boolean]}>()
 const configuredMapping=computed(()=>props.hasCustomMapping??Boolean(props.statusMapping))
@@ -171,7 +173,7 @@ function assigneeLabel(record:WorkspaceRecord){if(!record.assignmentKnown)return
               <span class="board-card-source"><span class="source-color-dot" :style="{background:sourceColorFor?.(record)||colorFor(record)}" title="Original source color"></span>{{record.collectionTitle||sourceLabels[record.source]}}</span>
               <span v-if="unified" class="board-native-status">{{nativeLabel(record)}}</span>
               <span v-if="tagsFor?.(record).length" class="board-card-tags"><span v-for="tag in tagsFor?.(record)" :key="tag.id" :style="{'--tag-color':tag.color||'var(--muted)'}"><i></i>{{tag.title}}</span></span>
-              <span v-if="record.due||isClosed(record)||linkIndex.has(record.id)" class="card-meta"><span v-if="isClosed(record)" :class="record.completed?'complete-label':'muted'">{{record.completed?'Completed':'Cancelled'}}</span><span v-else-if="record.due" :class="{overdue:isOverdue(record)}"><CalendarDays :size="12"/>{{shortDate(record.due)}}</span><Link2 v-if="linkIndex.has(record.id)" :size="12" aria-label="Has linked items"/></span>
+              <span v-if="record.due||isClosed(record)||linkIndex.has(record.id)" class="card-meta"><span v-if="isClosed(record)" :class="record.completed?'complete-label':'muted'">{{record.completed?'Completed':'Cancelled'}}</span><span v-else-if="record.due" :class="{overdue:isOverdue(record),'weekend-date':isWeekend(record.due)}" :data-date="dayKey(record.due)"><CalendarDays :size="12"/>{{shortDate(record.due)}}</span><Link2 v-if="linkIndex.has(record.id)" :size="12" aria-label="Has linked items"/></span>
             </button>
             <button v-if="childCount(record.id)" class="text-button stack-expand" :aria-expanded="stackExpanded(record.id)" :aria-label="(stackExpanded(record.id)?'Collapse':'Expand')+' linked tasks for '+record.title" @click.stop="toggleStack(record.id)"><Layers :size="12"/>{{childCount(record.id)}} tasks<ChevronDown :size="12"/></button>
             <BoardChecklist v-if="record.kind==='card'&&record.body" :body="record.body" :record-id="record.id" :title="record.title" :editable="!record.readonly&&!locked&&Boolean(canEditRecord?.(record))" @edit="editChecklist(record,$event)"/>

@@ -1,15 +1,23 @@
 import {validResourceLocator, httpEtag} from './resource-cache-policy.mjs';
 import {byteLength} from './runtime.mjs';
+import {normalizeCalendarHistoryDays, normalizeCalendarWindow} from '@nextspace/core/history.mjs';
 
 const DAY = 86_400_000;
+export const DAV_PROJECTION_VERSION = 4;
 const sources = {VTODO: 'tasks', VEVENT: 'calendar'};
 const keyField = {tasks: 'taskKeys', calendar: 'eventKeys'};
 const text = value => typeof value === 'string' && value.length > 0 && value.length <= 16384 && !/[\u0000-\u001f]/.test(value);
 const unique = values => new Set(values).size === values.length;
-export function davProjectionWindow(now) {
+export function davProjectionWindow(now, {calendarHistoryDays = 14, calendarWindow} = {}) {
   if (!Number.isFinite(now) || !Number.isFinite(new Date(now).getTime())) throw new TypeError('A valid projection instant is required.');
+  if (calendarWindow !== undefined) {
+    const window = normalizeCalendarWindow(calendarWindow);
+    if (!window) throw new TypeError('A bounded Calendar date range is required.');
+    return window;
+  }
   const day = Math.floor(now / DAY) * DAY;
-  return {from: day - 14 * DAY, to: day + 91 * DAY};
+  const days = normalizeCalendarHistoryDays(calendarHistoryDays), earliest = Date.parse('0001-01-01T00:00:00Z');
+  return {from: days === null ? earliest : Math.max(earliest, day - days * DAY), to: day + 91 * DAY};
 }
 export function checkedDavToken(value) {
   return value && ['sync-token', 'ctag'].includes(value.kind) && typeof value.value === 'string' && value.value.trim() && value.value.length <= 4096 && !/[\u0000-\u001f]/.test(value.value) ? {kind: value.kind, value: value.value} : null;
@@ -30,7 +38,7 @@ export function davInventoryCompatible(checkpoint, calendar, selected = ['tasks'
  * is discarded independently of valid user records and drafts.
  */
 export function checkedDavCheckpoint(value, {accountKey, serverUrl, records = [], collections = []} = {}) {
-  if (!value || value.version !== 1 || value.projectionVersion !== 3 || value.accountKey !== accountKey || !text(accountKey) || !Array.isArray(value.collections) || value.collections.length > 64 || !Array.isArray(records) || !Array.isArray(collections)) return null;
+  if (!value || value.version !== 1 || value.projectionVersion !== DAV_PROJECTION_VERSION || value.accountKey !== accountKey || !text(accountKey) || !Array.isArray(value.collections) || value.collections.length > 64 || !Array.isArray(records) || !Array.isArray(collections)) return null;
   const recordMap = new Map(), duplicates = new Set(), collectionRecords = new Map();
   for (const record of records) if (record && ['tasks', 'calendar'].includes(record.source) && text(record.identity?.key)) {
     if (recordMap.has(record.identity.key)) duplicates.add(record.identity.key);
@@ -71,7 +79,7 @@ export function checkedDavCheckpoint(value, {accountKey, serverUrl, records = []
     }
     checked.push({href: entry.href, token, components: [...entry.components], readonly: entry.readonly, from: entry.from, to: entry.to, resources});
   }
-  return {version: 1, projectionVersion: 3, accountKey, collections: checked};
+  return {version: 1, projectionVersion: DAV_PROJECTION_VERSION, accountKey, collections: checked};
 }
 
 /** Metadata is only a scheduling hint; remote inventory remains authoritative. */

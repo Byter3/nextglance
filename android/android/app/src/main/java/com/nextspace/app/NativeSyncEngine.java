@@ -26,6 +26,7 @@ final class NativeSyncEngine {
     record Reply(int status, Map<String, String> headers, String body) {}
     interface Network { Reply request(String url, String method, Map<String, List<String>> headers, String body, int maxBytes, long remainingMillis) throws Exception; }
     interface Progress { void update(String stage, int completed, int total) throws Exception; }
+    interface InventoryReplay { void accept(String url, Reply reply) throws Exception; }
     private final String base;
     private final Network network;
     private final NativeResourceCache cache;
@@ -34,11 +35,18 @@ final class NativeSyncEngine {
     private final Progress progress;
     private final long deadline;
     private int completed;
+    private final InventoryReplay replay;
+    private final List<NativeResourceCache.InventoryProof> pendingInventories = new ArrayList<>();
     NativeSyncEngine(String base, Network network, NativeResourceCache cache, NativeResourceCache.Guard guard, LongSupplier clock, Progress progress) {
+        this(base,network,cache,guard,clock,progress,(url,reply)->{});
+    }
+    NativeSyncEngine(String base, Network network, NativeResourceCache cache, NativeResourceCache.Guard guard, LongSupplier clock, Progress progress, InventoryReplay replay) {
         this.base = base.replaceAll("/+$", ""); this.network = network; this.cache = cache; this.guard = guard; this.clock = clock; this.progress = progress;
+        this.replay=replay;
         deadline = clock.getAsLong() + NativeSyncPolicy.JOB_MILLIS;
     }
     void run(String kind) throws Exception { check(); if ("dav".equals(kind)) dav(); else if ("deck".equals(kind)) deck(); else throw NativeSyncPolicy.failure("VALIDATION", "Unknown background source."); }
+    void projected()throws Exception{for(var proof:pendingInventories){check();cache.commitInventory(proof);}pendingInventories.clear();}
     private void check() throws Exception {
         guard.check(); if (clock.getAsLong() >= deadline) throw NativeSyncPolicy.failure("TIMEOUT", "Background source check reached its 90-second budget. Saved downloads will be reused on the next check.");
     }
@@ -77,17 +85,28 @@ final class NativeSyncEngine {
         }
         List<DavRow> rows = propfind(url(home), "<d:displayname/><d:resourcetype/><d:owner/><c:supported-calendar-component-set/><d:current-user-privilege-set/><a:calendar-color/><d:sync-token/><cs:getctag/>", 1);
         requireCompleteInventory(rows, url(home));
-        Set<String> collections = new HashSet<>();
+        Set<String> collections = new HashSet<>(); Map<String,DavRow> collectionRows=new HashMap<>();
         for (DavRow row : rows) {
             if (row.status >= 400) throw NativeSyncPolicy.failure("PERMISSION", "Calendar discovery was incomplete. Existing cached sources were retained.");
             Element type = row.props.get("resourcetype");
             if (type == null || type.getElementsByTagNameNS("urn:ietf:params:xml:ns:caldav", "calendar").getLength() == 0) continue;
             String collection = url(row.href); if (!collection.endsWith("/")) collection += "/";
             NativeSyncPolicy.locator(base, new NativeSyncPolicy.Locator("dav", collection, collection + "validation.ics")); collections.add(collection);
+            collectionRows.put(collection,row);
         }
         check(); cache.retain("dav", collections);
         for (String collection : collections.stream().sorted().toList()) {
             check(); List<DavRow> resources;
+            DavRow discovered=collectionRows.get(collection);String properties=properties(discovered);
+            String tokenKind=discovered.props.containsKey("sync-token")&&!discovered.props.get("sync-token").getTextContent().isBlank()?"sync-token":discovered.props.containsKey("getctag")?"ctag":null;
+            String token=tokenKind==null?null:discovered.props.get("sync-token".equals(tokenKind)?"sync-token":"getctag").getTextContent();
+            var prior=cache.reuseInventory(collection,properties,tokenKind,token);
+            if(prior!=null){
+                completed+=prior.resources().size();progress.update("source-read",completed,completed);
+                replay.accept(collection,new Reply(200,Map.of("content-type","application/xml"),inventoryXml(prior)));continue;
+            }
+            // A changed/absent token cannot leave an old completed token eligible after interruption.
+            cache.invalidateInventory(collection);
             try { resources = propfind(collection, "<d:getetag/><d:resourcetype/>", 1); }
             catch (NativeLoginFlow.Failure error) {
                 if ("PERMISSION".equals(error.code)) cache.prune("dav", collection, Set.of());
@@ -125,7 +144,24 @@ final class NativeSyncEngine {
                 else cache.remove(resource.locator);
                 completed++;
             }
+            var proof=cache.prepareInventory(collection,properties,tokenKind,token,inventory.stream().map(item->new NativeResourceCache.Metadata(item.locator.href(),item.etag)).toList());
+            if(proof!=null)pendingInventories.add(proof);
         }
+    }
+    private static String escaped(String value){return value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;");}
+    private static String inventoryXml(NativeResourceCache.InventoryProof proof){
+        StringBuilder xml=new StringBuilder("<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>").append(escaped(proof.collection())).append("</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>");
+        for(var resource:proof.resources())xml.append("<d:response><d:href>").append(escaped(resource.href())).append("</d:href><d:propstat><d:prop><d:resourcetype/><d:getetag>").append(escaped(resource.etag())).append("</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>");
+        return xml.append("</d:multistatus>").toString();
+    }
+    private static String properties(DavRow row)throws Exception{
+        StringBuilder value=new StringBuilder();for(String key:row.props.keySet().stream().sorted().toList()){value.append(key).append(':');canonical(row.props.get(key),value);}return NativeLoginFlow.digest(value.toString());
+    }
+    private static void canonical(Element element,StringBuilder value){
+        value.append('{').append(element.getNamespaceURI()).append('}').append(element.getLocalName()).append('[');
+        List<String> attributes=new ArrayList<>();for(int index=0;index<element.getAttributes().getLength();index++){Node attribute=element.getAttributes().item(index);if(!"http://www.w3.org/2000/xmlns/".equals(attribute.getNamespaceURI()))attributes.add("{"+attribute.getNamespaceURI()+"}"+attribute.getLocalName()+"="+attribute.getNodeValue());}
+        attributes.stream().sorted().forEach(attribute->value.append(attribute.length()).append(':').append(attribute));value.append(']');
+        for(Node node=element.getFirstChild();node!=null;node=node.getNextSibling()){if(node instanceof Element child)canonical(child,value);else if(node.getNodeValue()!=null&&!node.getNodeValue().isBlank())value.append(node.getNodeValue().length()).append(':').append(node.getNodeValue());}value.append('/');
     }
     private void deck() throws Exception {
         progress.update("discovery", 0, 0);
@@ -190,7 +226,7 @@ final class NativeSyncEngine {
                     List<Element> statuses = children(propstat, "status"); if (statuses.size() != 1) throw new IllegalArgumentException();
                     int code = status(statuses.get(0).getTextContent());
                     if (code == 200) {
-                        for (Element prop : children(propstat, "prop")) for (Node node = prop.getFirstChild(); node != null; node = node.getNextSibling()) if (node instanceof Element && List.of("DAV:", "urn:ietf:params:xml:ns:caldav").contains(node.getNamespaceURI())) props.put(node.getLocalName(), (Element) node);
+                        for (Element prop : children(propstat, "prop")) for (Node node = prop.getFirstChild(); node != null; node = node.getNextSibling()) if (node instanceof Element && List.of("DAV:", "urn:ietf:params:xml:ns:caldav", "http://calendarserver.org/ns/", "http://apple.com/ns/ical/").contains(node.getNamespaceURI())) props.put(node.getLocalName(), (Element) node);
                     } else if (code != 404) status = code;
                 }
                 result.add(new DavRow(hrefs.get(0).getTextContent(), status, props));

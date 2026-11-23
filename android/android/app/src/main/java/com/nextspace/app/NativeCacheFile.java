@@ -33,6 +33,17 @@ final class NativeCacheFile {
         return file;
     }
     synchronized Long size(String path)throws Exception{orphans();File file=target(path);if(!file.exists())return null;long size=file.length();if(size>MAX)throw error("CACHE_TOO_LARGE","Saved cache exceeds its limit.");return size;}
+    record Stat(Long size,String revision,String prefix){}
+    /** The worker may use these bounded bytes to order slots, never to validate their content. */
+    synchronized Stat stat(String path,Guard guard)throws Exception{
+        guard.check();Long length=size(path);String revision=revision(path);
+        if(length==null)return new Stat(null,revision,"");
+        byte[] bytes=read(path,0,(int)Math.min(256,length),length,revision,guard);
+        // Only the ASCII header is useful. Avoid splitting a UTF-8 code point in the value.
+        int count=0;while(count<bytes.length&&bytes[count]>=0)count++;
+        guard.check();if(!revision.equals(revision(path)))throw error("CACHE_FORMAT","Saved cache changed while being inspected.");
+        return new Stat(length,revision,new String(bytes,0,count,java.nio.charset.StandardCharsets.US_ASCII));
+    }
     synchronized byte[] read(String path,long offset,int length,long expected,String revision,Guard guard)throws Exception{
         guard.check();Long size=size(path);if(size==null||size!=expected||!revision(path).equals(revision)||offset<0||length<0||length>CHUNK||offset+length>size)throw error("CACHE_FORMAT","Saved cache changed while being read.");
         byte[] bytes=new byte[length];try(RandomAccessFile input=new RandomAccessFile(target(path),"r")){input.seek(offset);input.readFully(bytes);}guard.check();return bytes;

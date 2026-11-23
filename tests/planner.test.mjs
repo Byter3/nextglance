@@ -26,6 +26,20 @@ test('completed work never falls into an open personal planning column', () => {
   assert.deepEqual(ids(columns.find(c => c.id === 'planned').records), ['open'])
 })
 
+test('Board completion cutoff applies to both cards and tasks linked to a visible card', () => {
+  const state=plannerFixture(now);
+  const task=state.records.find(record=>record.id==='task-today'),card=state.records.find(record=>record.id==='card-complete');
+  Object.assign(task,{completed:true,status:'COMPLETED',completedAt:'2020-01-01T00:00:00Z'});
+  card.completedAt='2020-01-01T00:00:00Z';
+  state.workspace.relations.push({id:'history-link',type:'depends_on',fromId:'card-mine',toId:task.id});
+  const board=days=>ids(model(state,{view:'board',scopeId:'all',assignment:'all',boardCompletedDays:days}).actions);
+  assert.ok(board(14).includes('card-mine'));
+  assert.ok(!board(14).includes(task.id));
+  assert.ok(!board(14).includes(card.id));
+  assert.ok(board(null).includes(task.id));
+  assert.ok(board(null).includes(card.id));
+});
+
 test('board preserves custom labels and missing stack context without inferring completion', () => {
   const records = [{id:'a',kind:'card',collectionId:'board',stackId:'s',status:'Kész',completed:false},{id:'b',kind:'card',collectionId:'board',stackId:'missing',status:'Waiting',completed:false},{id:'cancelled',kind:'task',status:'CANCELLED'}]
   const collections = [{id:'board',source:'deck',stacks:[{id:'s',title:'Kész'},{id:'empty',title:'Empty'}]}]
@@ -169,7 +183,7 @@ test('query finds titles, collection names and labels without changing source re
   const state = plannerFixture(now)
   const before = JSON.stringify(state)
   assert.deepEqual(ids(model(state, {query: 'opening'}).records), ['card-mine'])
-  assert.ok(model(state, {query: 'KÖZÖS'}).events.length > 0)
+  assert.ok(model(state, {query: 'SHARED CALENDAR'}).events.length > 0)
   assert.equal(JSON.stringify(state), before)
 })
 

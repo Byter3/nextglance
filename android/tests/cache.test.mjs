@@ -19,6 +19,102 @@ function fixture(options = {}) {
   return {files, values, calls, cache: createSlotCache(files, options), restart: () => createSlotCache(files, options)}
 }
 
+function hintedFixture() {
+  const f=fixture()
+  f.files.stat=async file=>{
+    const text=f.values.get(file),match=text?.match(/^\{"version":1,"generation":([1-9]\d*),"value":/)
+    return {size:text===undefined?null:Buffer.byteLength(text),revision:text===undefined?null:text.slice(0,80),...(match?{generation:Number(match[1])}:{})}
+  }
+  return {...f,cache:createSlotCache(f.files)}
+}
+
+test('hinted cold restoration reads one full generation of a large fictional archive',async()=>{
+  const f=hintedFixture(), records=Array.from({length:4000},(_,i)=>({id:`fixture-${i}`,title:`Fictional task ${i}`,description:'Example '.repeat(40)}))
+  f.values.set(path(A,0),envelope(8,{records}));f.values.set(path(A,1),envelope(9,{records}))
+  assert.deepEqual(await f.cache.load(A),{records})
+  assert.deepEqual(f.calls.read,[path(A,1)])
+  const bytes=Buffer.byteLength(f.values.get(path(A,1)))
+  assert.ok(bytes>1_000_000)
+  assert.deepEqual(await f.cache.loadChanged(A),{changed:false})
+  assert.equal(f.calls.read.length,1,'Unchanged resume uses only revision metadata')
+  f.values.set(path(A,0),envelope(10,{records:records.slice(1)}))
+  const changed=await f.cache.loadChanged(A)
+  assert.equal(changed.changed,true);assert.deepEqual(changed.value,{records:records.slice(1)})
+  assert.equal(changed.confirm(),true)
+  assert.deepEqual(f.calls.read,[path(A,1),path(A,0)])
+})
+
+test('warm candidate is offered again until adoption confirms its validated revision',async()=>{
+  const f=hintedFixture()
+  f.values.set(path(A,0),envelope(8,{title:'Visible previous generation'}))
+  f.values.set(path(A,1),envelope(9,{title:'Visible current generation'}))
+  await f.cache.load(A)
+  f.values.set(path(A,0),envelope(10,{title:'Background generation'}))
+  const abandoned=await f.cache.loadChanged(A),retried=await f.cache.loadChanged(A)
+  assert.equal(abandoned.changed,true);assert.equal(retried.changed,true)
+  assert.deepEqual(retried.value,{title:'Background generation'})
+  assert.deepEqual(f.calls.read,[path(A,1),path(A,0),path(A,0)])
+  assert.equal(abandoned.confirm(),false,'A later offer invalidates an older acknowledgement')
+  assert.equal(retried.confirm(),true)
+  assert.deepEqual(await f.cache.loadChanged(A),{changed:false})
+  assert.equal(f.calls.read.length,3,'Confirmed unchanged generations use revision metadata only')
+})
+
+test('late warm confirmation cannot overwrite the proof from a newer local save',async()=>{
+  const f=hintedFixture()
+  await f.cache.save(A,{title:'Initial generation'})
+  f.values.set(path(A,1),envelope(2,{title:'Background generation'}))
+  const incoming=await f.cache.loadChanged(A)
+  await f.cache.save(A,{title:'New local generation'})
+  const readCount=f.calls.read.length
+  assert.equal(incoming.confirm(),false)
+  assert.deepEqual(await f.cache.loadChanged(A),{changed:false})
+  assert.equal(f.calls.read.length,readCount)
+  assert.deepEqual(await f.restart().load(A),{title:'New local generation'})
+})
+
+test('late confirmation from a first warm read cannot revive a removed cache proof',async()=>{
+  const f=hintedFixture()
+  f.values.set(path(A,0),envelope(1,{title:'Saved generation'}))
+  const incoming=await f.cache.loadChanged(A)
+  await f.cache.remove(A)
+  assert.equal(incoming.confirm(),false)
+  assert.equal(await f.cache.load(A),null)
+  assert.deepEqual(await f.cache.loadChanged(A),{changed:false})
+})
+
+test('a warm read without stable file revisions cannot acknowledge an old proof',async()=>{
+  const f=hintedFixture()
+  f.values.set(path(A,0),envelope(1,{title:'Current generation'}));await f.cache.load(A)
+  f.values.set(path(A,1),envelope(2,{title:'Background generation'}))
+  const stableStat=f.files.stat;let revision=0
+  f.files.stat=async file=>({...await stableStat(file),revision:String(++revision)})
+  const unstable=await f.cache.loadChanged(A)
+  assert.equal(unstable.changed,true);assert.equal(unstable.confirm,undefined)
+  f.files.stat=stableStat
+  const retry=await f.cache.loadChanged(A)
+  assert.equal(retry.changed,true);assert.deepEqual(retry.value,{title:'Background generation'})
+  assert.equal(retry.confirm(),true)
+  assert.deepEqual(await f.cache.loadChanged(A),{changed:false})
+})
+
+test('hinted selection preserves semantic fallback, ties, strict history and raced revisions',async()=>{
+  for (const mode of ['invalid-newest','tied','strict','raced']) {
+    const f=hintedFixture()
+    f.values.set(path(A,0),envelope(4,{valid:true,title:'Previous'}))
+    f.values.set(path(A,1),mode==='strict'?'{broken':envelope(mode==='tied'?4:5,{valid:mode!=='invalid-newest',title:'Latest'}))
+    const validate=value=>{assert.equal(value.valid,true);return value}
+    if(mode==='strict')validate.requireIntact=true
+    if(mode==='raced'){
+      const read=f.files.read;let first=true
+      f.files.read=async file=>{const value=await read(file);if(first){first=false;f.values.set(path(A,0),envelope(6,{valid:true,title:'Background'}))}return value}
+    }
+    if(['tied','strict'].includes(mode))await assert.rejects(f.cache.load(A,validate),{code:'CACHE_UNREADABLE'})
+    else assert.equal((await f.cache.load(A,validate)).title,mode==='raced'?'Background':'Previous')
+    assert.ok(f.calls.read.includes(path(A,0))&&f.calls.read.includes(path(A,1)),mode)
+  }
+})
+
 test('validated revisions avoid rereading archives on save but revalidate external changes', async () => {
   const f = fixture(), versions = new Map()
   f.files.stat = async file => ({size: await f.files.size(file), revision: f.values.has(file) ? String(versions.get(file) || 0) : null})

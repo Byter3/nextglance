@@ -21,7 +21,7 @@ pnpm --filter @nextspace/nextcloud build
 pnpm --filter @nextspace/nextcloud package
 ```
 
-Output: `web/release/NextGlance-0.6.17-Nextcloud.tar.gz` and its `.sha256` file. The archive contains a single `nextglance/` directory, compiled assets, PHP files, license and matching source archive. The package command consumes existing assets; it does not compile them. Use the version printed by the command if it changes.
+Output: `web/release/NextGlance-0.6.27-Nextcloud.tar.gz` and its `.sha256` file. The archive contains a single `nextglance/` directory, compiled assets, PHP files, license and matching source archive. The package command consumes existing assets; it does not compile them. Use the version printed by the command if it changes.
 
 ## 2. Install on the server
 
@@ -31,11 +31,11 @@ Copy the archive and checksum to the server, for example with SCP, SFTP or your 
 
 ```bash
 cd /tmp
-sha256sum -c NextGlance-0.6.17-Nextcloud.tar.gz.sha256
-tar -tzf NextGlance-0.6.17-Nextcloud.tar.gz
+sha256sum -c NextGlance-0.6.27-Nextcloud.tar.gz.sha256
+tar -tzf NextGlance-0.6.27-Nextcloud.tar.gz
 # Check that every entry is under nextglance/ before extracting.
 sudo mkdir -p /var/www/nextcloud/custom_apps
-sudo tar -xzf NextGlance-0.6.17-Nextcloud.tar.gz -C /var/www/nextcloud/custom_apps
+sudo tar -xzf NextGlance-0.6.27-Nextcloud.tar.gz -C /var/www/nextcloud/custom_apps
 sudo chown -R www-data:www-data /var/www/nextcloud/custom_apps/nextglance
 sudo -u www-data php /var/www/nextcloud/occ app:enable nextglance
 ```

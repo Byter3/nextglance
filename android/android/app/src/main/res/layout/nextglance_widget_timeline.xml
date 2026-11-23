@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_row"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="42dp" android:orientation="vertical">
+    <LinearLayout android:id="@+id/widget_timeline_content" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:minHeight="42dp" android:orientation="vertical" android:gravity="center_vertical"
+        android:layoutDirection="locale" android:paddingTop="2dp" android:paddingBottom="2dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+            android:gravity="center_vertical" android:paddingStart="4dp" android:paddingEnd="4dp">
+            <ImageView android:id="@+id/widget_row_icon" android:layout_width="14dp" android:layout_height="14dp"
+                android:layout_marginEnd="4dp" android:src="@drawable/widget_icon_task" android:importantForAccessibility="no" />
+            <TextView android:id="@+id/widget_row_title" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:textSize="13sp" android:fontFamily="sans-serif-medium" android:includeFontPadding="false"
+                android:textColor="#eff4fb" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/widget_row_date" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:maxWidth="90dp" android:paddingStart="4dp" android:gravity="end" android:textSize="10sp" android:includeFontPadding="false"
+                android:textColor="#c3cfde" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <TextView android:id="@+id/widget_row_subtitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingStart="22dp" android:paddingEnd="4dp" android:textSize="10sp" android:includeFontPadding="false"
+            android:textColor="#c3cfde" android:maxLines="1" android:ellipsize="end" />
+        <ImageView android:id="@+id/widget_timeline_bar" android:layout_width="match_parent" android:layout_height="12dp"
+            android:scaleType="fitCenter" android:importantForAccessibility="no" />
+    </LinearLayout>
+</LinearLayout>

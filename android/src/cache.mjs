@@ -39,14 +39,14 @@ export function createSlotCache(files, {maxBytes = DEFAULT_MAX_BYTES} = {}) {
     void settled.then(() => { if (queues.get(key) === settled) queues.delete(key) })
     return operation
   }
-  const readSlot = async (key, slot) => {
+  const readSlot = async (key, slot, expected) => {
     const path = pathFor(key, slot)
     try {
       // Stat before reading avoids allocating an oversized/corrupt bridge body.
-      const size = await files.size(path)
+      const size = expected ? expected.size : await files.size(path)
       if (size === null) return {slot, kind: 'missing'}
       if (!Number.isSafeInteger(size) || size <= 0 || size > maxBytes) return {slot, kind: 'invalid'}
-      const text = await files.read(path)
+      const text = await files.read(path, expected)
       if (typeof text !== 'string' || encoder.encode(text).length > maxBytes) return {slot, kind: 'invalid'}
       const envelope = JSON.parse(text)
       jsonValue(envelope, 0, 24, 4 * 1024 * 1024)
@@ -59,7 +59,32 @@ export function createSlotCache(files, {maxBytes = DEFAULT_MAX_BYTES} = {}) {
     const known = validatedRevisions.get(key)
     if (!hydrate && known && known.validate === validate && sameRevisions(before, known.revisions)) return known.previous
     validatedRevisions.delete(key)
-    const slots = await Promise.all([readSlot(key, 0), readSlot(key, 1)])
+    let slots
+    // The committed writer emits a canonical small header. Read its newest
+    // candidate first, but never replace full semantic/account validation with
+    // a prefix. Strict acknowledged histories still inspect both generations.
+    const hinted = !validate?.requireIntact && before && before.every(entry => entry.size === null || Number.isSafeInteger(entry.generation) && entry.generation > 0)
+    const order = hinted ? before.map((entry, slot) => ({...entry, slot})).filter(entry => entry.size !== null).sort((a,b) => b.generation-a.generation) : []
+    if (hinted && order.length && (order.length === 1 || order[0].generation !== order[1].generation)) {
+      const latest = await readSlot(key, order[0].slot, order[0])
+      let checked = false
+      if (latest.kind === 'valid' && latest.generation === order[0].generation) {
+        try {
+          if (validate && latest.value !== null) {
+            if (validate.check) {validate.check(latest.value); if (hydrate) latest.value = typeof validate.hydrate === 'function' ? validate.hydrate(latest.value) : validate(latest.value)}
+            else latest.value = validate(latest.value)
+          }
+          checked = true
+        } catch {}
+      }
+      const after = await revisions(key)
+      if (checked && sameRevisions(before, after)) {
+        validatedRevisions.set(key, {validate, revisions: after, previous: {slot:latest.slot,generation:latest.generation}})
+        return latest
+      }
+      // A raced/invalid hint requires the original complete recovery path.
+    }
+    slots = await Promise.all([readSlot(key, 0), readSlot(key, 1)])
     if (validate?.requireIntact && slots.some(slot => slot.kind === 'invalid')) throw readFailure(slots, 'An acknowledged edit snapshot could not be read. Existing files were preserved.')
     const candidates = slots.filter(slot => slot.kind === 'valid').sort((a, b) => b.generation - a.generation)
     // Compare tied raw envelopes before normalization. Validate only the newest
@@ -95,6 +120,24 @@ export function createSlotCache(files, {maxBytes = DEFAULT_MAX_BYTES} = {}) {
       if (validate) validators.set(key, validate)
       return (await current(key, validators.get(key)))?.value ?? null
     }),
+    loadChanged: async key => queued(key, async () => {
+      const known = validatedRevisions.get(key), before = await revisions(key)
+      if (known && sameRevisions(before, known.revisions)) return {changed:false}
+      const loaded = await current(key, validators.get(key))
+      if (known?.previous && loaded && loaded.generation <= known.previous.generation) return {changed:false}
+      const checked = validatedRevisions.get(key)
+      // Validation is not adoption: reconciliation/account guards may still
+      // reject this candidate. Retain the prior proof until the caller commits.
+      // Give each offer its own identity so a late acknowledgement cannot undo
+      // a newer read, save, removal, or unconfirmed offer for this account.
+      const pending = known ? {...known} : {validate:validators.get(key),revisions:null,previous:null}
+      validatedRevisions.set(key,pending)
+      return {changed:true,value:loaded?.value ?? null,...(checked ? {confirm:()=>{
+        if (validatedRevisions.get(key) !== pending) return false
+        validatedRevisions.set(key,checked)
+        return true
+      }} : {})}
+    }),
     save: async (key, value, {isCurrent = () => true} = {}) => queued(key, async () => {
       const currentWrite = () => {if (!isCurrent()) throw failure('The cache write was cancelled.', 'CANCELLED')}
       currentWrite()
@@ -118,7 +161,7 @@ export function createSlotCache(files, {maxBytes = DEFAULT_MAX_BYTES} = {}) {
         await files.write(target, text)
         currentWrite()
         const after = await revisions(key), targetSlot = previous ? 1 - previous.slot : 0
-        if (known && after && after[1-targetSlot].size === known.revisions[1-targetSlot].size && after[1-targetSlot].revision === known.revisions[1-targetSlot].revision) {
+        if (known?.revisions && after && after[1-targetSlot].size === known.revisions[1-targetSlot].size && after[1-targetSlot].revision === known.revisions[1-targetSlot].revision) {
           validatedRevisions.set(key, {validate, revisions: after, previous: {slot: targetSlot, generation}})
         } else validatedRevisions.delete(key)
       } catch (error) {

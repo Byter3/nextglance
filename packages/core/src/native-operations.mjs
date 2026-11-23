@@ -17,7 +17,7 @@ export function canWriteNativeSource({source,connected,online,busy=false,loginWa
   if(statuses.some(status=>status.source===source&&status.permissionDenied))return false
   return nativeWriteSources!==undefined
     ? Array.isArray(nativeWriteSources)&&nativeWriteSources.includes(source)
-    : statuses.some(status=>status.source===source&&status.state==='connected')
+    : statuses.some(status=>status.source===source&&status.state==='connected'&&!status.cached)
 }
 
 /** Select the existing native completion operation without broadening other

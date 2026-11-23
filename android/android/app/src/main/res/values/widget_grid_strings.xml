@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_timeline_work">Tasks &amp; cards</string>
+    <string name="widget_timeline_status">Status</string>
+    <string name="widget_timeline_due">Due</string>
+    <string name="widget_enlarge_month">Enlarge for month grid</string>
+    <string name="widget_open_day">Open day</string>
+    <string name="widget_open_day_named">Open %1$s in Calendar</string>
+    <string name="widget_month_selected">Selected</string>
+    <string name="widget_month_no_items">No items on this day</string>
+    <string name="widget_month_items_in_calendar">Open day to see these items</string>
+    <string name="widget_month_more">%1$d more in Calendar</string>
+    <plurals name="widget_month_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+</resources>

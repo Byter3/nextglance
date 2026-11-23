@@ -6,9 +6,9 @@ Visible branding is **NextGlance**. A display-name change must preserve the exis
 
 ## Stack and boundaries
 
-Current milestone RELEASE-18 targets Windows 0.6.18/build20 with the SYNC-13 bounded calendar refresh repair after fast checks and source freeze. The owner authorized this Windows package and a source push; Android and Web remain at 0.6.17/build19. Preserve native/package identities, the approved BRAND-01 icon and previous releases. Native Deck moves use the target stack locator and fresh readback; shared UI owns floating Board drag feedback, unified dependency presentation and the independent Timeline Unscheduled sidebar.
+Current milestone RELEASE-27 targets Windows 0.6.27/build29 after fast checks and source freeze. Windows file version is 0.6.27.29. Android and Web use the same product version. The owner authorized local packages and a privacy-reviewed source push to the existing GitHub repository. Preserve native/package identities, the approved BRAND-01 icon and previous releases. Preserve HISTORY-02 identity isolation and VIEW-18 weekend shading. Keep native freshness separate from planner metadata errors. Update the permanent Windows shortcut EXE after successful packaging.
 
-Private pnpm workspace package `@nextspace/windows`, version 0.6.18, build 20. Electron 44, Vue 3.5, TypeScript 5.9, Vite 7, electron-builder 26. Shared UI uses Tiptap, Markdown-it, DOMPurify and Lucide. Use installed/locked versions; do not upgrade frameworks as incidental cleanup.
+Private pnpm workspace package `@nextspace/windows`, version 0.6.27, build 29. Electron 44, Vue 3.5, TypeScript 5.9, Vite 7, electron-builder 26. Shared UI uses Tiptap, Markdown-it, DOMPurify and Lucide. Use installed/locked versions; do not upgrade frameworks as incidental cleanup.
 
 `electron/main.cjs` owns host operations; the preload exposes the typed WorkspaceApi. The sandboxed renderer must not receive Node access, credentials or unrestricted IPC. The host owns secure credential storage, networking, account-local durable storage and scheduling recovery. Operation lanes coordinate background reads, native mutations and account changes.
 
@@ -32,6 +32,8 @@ pnpm typecheck
 ```
 
 `dotnet test --no-restore --filter "..."` is the owner's example for a .NET client; this client is not .NET. Use the targeted Node tests above rather than introducing .NET. Keep fixture profiles isolated; never use the owner's live account. Both root aliases and client packaging commands target `win/release/`; final portable executables and unpacked verification output stay there. Knowing that path is not authorization to run a build.
+
+After every successful portable package, update the permanent shortcut target `win/release/NextGlance-Latest.exe` with that versioned EXE. The `package:win` script performs the update. Keep versioned artifacts. If Windows locks the shortcut target, close the running copy and run `node win/scripts/update-latest.mjs` from the repository root to finish the update without rebuilding.
 
 ## UI conventions
 

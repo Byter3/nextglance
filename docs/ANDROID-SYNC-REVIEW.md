@@ -1,4 +1,28 @@
-**Android sync and responsiveness review — 2026-11-17**
+**Android sync and responsiveness review — updated 2026-11-22**
+
+**Current investigation: local startup before synchronization**
+
+The Android 0.6.17 source still contained three gaps despite earlier improvements: restored source status forced another content refresh on each process start; cold cache restoration read both full slot bodies even when the newest was valid; and a suspended controller did not adopt a newer headless background generation on resume. The native background reader also requested collection tokens without comparing them. The earlier claim of complete native token checks was too broad; foreground token reuse existed, native background reuse did not.
+
+The relevant lesson from OpenSync/DAVx⁵ is separation of storage, presentation and synchronization. [OpenSync's surviving source](https://github.com/jn7163/opensync) identifies it as a DAVdroid 1.5.0.3-ose fork. [DAVx⁵](https://www.davx5.com/faq/system-integration) stores events/tasks in Android content providers consumed by other apps; their UI need not wait for DAVx⁵ to finish a network pass. Google's [offline-first guidance](https://developer.android.com/topic/architecture/data-layer/offline-first) likewise makes local data the immediate read source. NextGlance can apply that design using its existing shared projections and private store; replacing them with CalendarProvider would not by itself handle Deck, planner relationships or exact native edit baselines.
+
+[DAVx⁵'s algorithm](https://manual.davx5.com/technical_information.html) checks collection CTag/sync-token, skips unchanged collections, fetches changed bodies in batches where supported, and saves progress only after processing it. It uses conditional writes to protect concurrent server changes. Our foreground portable reader already implements much of this. Files sign-in still delegates requests to the Nextcloud Files service and does not offer REPORT through that provider; direct browser sign-in uses our native HTTP transport. Keep both supported paths and their actual capabilities. No transport change or account reset is needed for the host corrections below.
+
+SYNC-14 specifies this implementation plan:
+
+- Verify Tasks/Calendar/Deck access through a small collection/board discovery, separately from body synchronization. Preserve current-target write checks; fresh permissions are not fresh content.
+- Respect recent successful content timestamps instead of forcing a bulk refresh merely because a new process restored cached data. Manual refresh and expired intervals still reconcile normally.
+- Read the newest valid launch/source slot first using revision-bound ordering hints. Keep complete validation, corrupt-slot fallback and stricter acknowledged-edit recovery.
+- Adopt a newer validated background generation on resume without overwriting live drafts, organization or newer edits.
+- Certify unchanged background inventories before reusing them. Keep shared headless publication for each completed pass so saved freshness stays accurate; skipping the entire projection is deferred until its freshness handoff can be verified separately.
+
+Replacing JobScheduler with WorkManager alone would not fix these data-path costs. [DAVx⁵ uses WorkManager and the Android sync framework](https://manual.davx5.com/settings.html), while NextGlance already has persistent constrained JobScheduler jobs. Android may delay both during [Doze](https://developer.android.com/training/monitoring-device-state/doze-standby); a selected interval is not an exact delivery guarantee. Keep background passes bounded and local browsing independent of their timing.
+
+Verification separates cached first content, durable restoration, access verification and final freshness, following [Android startup metrics](https://developer.android.com/topic/performance/issues/launch-time). Delayed-port and fictional large-cache tests can establish ordering, request counts and bytes saved; they cannot establish physical-phone cold-start time, heat, battery usage or the cause of a Files-process crash. Packaging and fresh evidence are recorded in the SYNC-14 parity entry when completed. No newly available dedicated Android skill was installed; the official profiler skill identified below remains useful for later physical-device traces.
+
+Implementation checks on **2026-11-22** passed: 187 Android regressions, 170 protocol checks, 366 shared cases per client and 44 targeted native JVM tests. The real controller/protocol integration creates an event while a source inventory is held unresolved. A 4,000-row cache reads one full slot instead of two, and an unchanged resume reads no full slot. A 512-resource cold native inventory check needs zero raw file opens and three discovery requests instead of four; final headless validation/publication still processes its raw data. The device needs no data reset or new account identity. These results establish the corrected work paths, not a measured phone speedup.
+
+**Historical investigation and implementation evidence**
 
 **Implementation update for 0.6.15/build17**
 

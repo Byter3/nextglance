@@ -13,22 +13,25 @@ import {taskCreationOptions} from '@nextspace/core/card-tasks.mjs'
 import {createSchedulingJournal} from './scheduling.mjs'
 import {createSourceEdits} from './source-edits.mjs'
 import {normalizeSyncSettings, validateSyncSettings, dueSyncSources} from '@nextspace/core/sync-policy.mjs'
+import {calendarPreferences,calendarHistoryEvidence,checkedCalendarHistoryDays} from './calendar-history.mjs'
+import {restoreSourceStatuses} from '@nextspace/core/cached-sources.mjs'
 import {checkedLaunchCheckpoint, launchCheckpoint} from './launch-cache.mjs'
 import {createPerformanceDiagnostics} from '@nextspace/core/performance-diagnostics.mjs'
 import {eventEditOperation,eventDeleteOperation,eventRespondOperation} from '@nextspace/core/native-operations.mjs'
 import {plannerExportDocument} from './planner-export.mjs'
 import {ViewPreferencesClient} from '@nextspace/nextcloud-client/view-preferences.mjs'
+import {createWidgetPublisher,resolveWidgetAction} from './widgets.mjs'
 
 const sources = SOURCES
 const clone = value => structuredClone(value)
-const empty = () => ({...createEmptyState(), metadata: {ready: false}, deviceState: {}, storage: {syncStatus: 'local', message: 'Connect through Nextcloud to load your sources and saved Spaces.'}})
+const empty = () => ({...createEmptyState(), calendarHistoryDays:null, metadata: {ready: false}, deviceState: {}, storage: {syncStatus: 'local', message: 'Connect through Nextcloud to load your sources and saved Spaces.'}})
 import {cacheKey,metadataKey,schedulingKey,launchKey,syncSettingsKey,sourceEditsKey} from './account-cache-keys.mjs'
 export {cacheKey,metadataKey,schedulingKey,launchKey,syncSettingsKey,sourceEditsKey} from './account-cache-keys.mjs'
 const sameAccount = (a, b) => Boolean(a && b && cacheKey(a) === cacheKey(b))
 const unavailable = async () => { throw problem('This Android milestone is read-only. Open the source in Nextcloud to edit it.', 'UNAVAILABLE') }
 
 /** Account and request generations keep late results out of a newly selected account. */
-export function createMobileController({native, cache, openExternal, isNative = true, hostAvailable = isNative, timers = globalThis, now = Date.now, performanceNow = () => globalThis.performance?.now() ?? Date.now(), appVersion = 'Development', saveDiagnostics, copyDiagnostics, exportPlanner, diagnostics: suppliedDiagnostics, makeMetadataStore = createMetadataStore, makeClient = undefined, makeResourceCache, launchHints = /** @type {any} */ (undefined), deferRestoration = () => new Promise(resolve => globalThis.setTimeout(resolve, 0)), networkStatus = async () => ({connected: true, connectionType: 'unknown'})}) {
+export function createMobileController({native, cache, openExternal, widgets, timeZone='UTC', locale='en', isNative = true, hostAvailable = isNative, timers = globalThis, now = Date.now, performanceNow = () => globalThis.performance?.now() ?? Date.now(), appVersion = 'Development', saveDiagnostics, copyDiagnostics, exportPlanner, diagnostics: suppliedDiagnostics, makeMetadataStore = createMetadataStore, makeClient = undefined, makeResourceCache, launchHints = /** @type {any} */ (undefined), deferRestoration = () => new Promise(resolve => globalThis.setTimeout(resolve, 0)), networkStatus = async () => ({connected: true, connectionType: 'unknown'})}) {
   const diagnostics = suppliedDiagnostics || createPerformanceDiagnostics({now: performanceNow, platform: isNative ? 'android' : 'preview', appVersion, canSaveFile: typeof saveDiagnostics === 'function'})
   const measure = async (event, operation, outcome = () => ({success: true})) => {
     if (!diagnostics.summary().recording) return operation()
@@ -41,21 +44,26 @@ export function createMobileController({native, cache, openExternal, isNative = 
   let mutationQueue = Promise.resolve(), sourceEdits = new Map(), noteTagEdits = new Map(), collectionLabelEdits = new Map(), scheduler = null
   let diskQueue = Promise.resolve(), cloudTimer, syncPending, disposed = false
   let loginEpoch = 0, currentFlow = null, sourceReadGeneration = 0
-  let restoredDavCheckpoint
+  let restoredDavCheckpoint, completedCalendarHistory, settingsWrite=Promise.resolve()
+  const changeSettings = operation => {const result=settingsWrite.then(operation,operation);settingsWrite=result.catch(()=>{});return result}
   let acknowledgedEdits, acknowledgedSequence = 0, sourceArchiveFingerprint
   let launchPending, launchTimer
   let lastReconciliation
   let authorizationPending, plannerPass, hydrationPending, settingsPending, resumePending, pendingEntry = false, appActive = true, authorized = false, lastForegroundEntry = -Infinity
+  let deferredEntry = false, pendingOnline = false
+  let backgroundReadPending = false
+  let sourceAccessGeneration = 0
   let lastAttempts = {}, requestedSources = new Set(), activePass, resumePass
   // Session authority is deliberately separate from source completeness and is
   // never restored from either cache. A fresh inventory can precede a long scan.
   const nativeWriteSources = new Set()
+  const independentAccessSources = ['tasks','calendar','deck']
   const stamp = () => new Date(now()).toISOString()
   const syncState = () => state.deviceSync ||= {settings: normalizeSyncSettings(), restoring: false, background: {supported: false, scheduled: false}}
   // Stop read continuation without invalidating an in-flight native mutation.
   // Account changes still pass through the existing operation barrier.
   const cancelPlanner = () => { plannerPass?.cancel(); metadata?.cancelSync?.(); if (syncState().plannerSyncing) syncState().plannerSyncing = false }
-  const cancelSourceReads = (code = 'CANCELLED') => { ++sourceReadGeneration; activePass?.cancel(code); resumePass?.cancel(); delete syncState().activity }
+  const cancelSourceReads = (code = 'CANCELLED') => { ++sourceReadGeneration; ++sourceAccessGeneration; activePass?.cancel(code); resumePass?.cancel(); delete syncState().activity }
   const authAvailable = () => { if (!hostAvailable || typeof native.beginLogin !== 'function') throw problem('Nextcloud sign-in is unavailable in this host. Start the trusted Android preview or use the Android app.', 'UNAVAILABLE') }
   const adoptAuthorization = async result => {
     if (!result?.account) return false
@@ -67,6 +75,8 @@ export function createMobileController({native, cache, openExternal, isNative = 
       state.connection = {...state.connection, reconnectRequired: false, recoveryOnly: false, restoreError: undefined}
     } else await setAccount(selected, epoch, result.capabilities, {readDenials:result.readDenials})
     authorized = true
+    deferredEntry = false; pendingOnline = false
+    delete syncState().foregroundError
     lastForegroundEntry = now()
     void gate.run(() => syncMetadata({automatic: true})).catch(() => {})
     return true
@@ -82,6 +92,11 @@ export function createMobileController({native, cache, openExternal, isNative = 
   }
   const writableSession = () => account && !syncState().restoring && !acknowledgedEdits?.invalid && authorized && !state.connection.reconnectRequired && !state.connection.recoveryOnly
   const snapshot = () => publicSnapshot({...state, ...(acknowledgedEdits?.invalid ? {storage:{...state.storage,syncStatus:'error',errorCode:'CACHE_UNREADABLE',errorStage:'local-cache',message:'Saved native edits could not be recovered. Files are preserved and native editing is disabled.'}} : {}), nativeWriteSources: writableSession() ? [...nativeWriteSources] : [], nativeOperations: writableSession() && capabilities.nativeEdits === 'notes-dates-scheduling' ? [...NATIVE_OPERATIONS] : [], pendingSchedules: (scheduler?.pending() || []).map(pending => ({...pending, recordId: resolveId(pending.recordId)}))})
+  const widgetPublisher=widgets?createWidgetPublisher({host:widgets,now,timeZone,locale,timers,current:()=>{
+    if(disposed||!account||syncState().restoring||acknowledgedEdits?.invalid||state.storage.errorCode==='CACHE_UNREADABLE')return null
+    const active=account,epoch=generation,records=state.records,collections=state.collections,statuses=state.statuses,workspace=state.workspace,revision=state.revision,sequence=acknowledgedSequence,fingerprint=sourceArchiveFingerprint
+    return {state,accountKey:cacheKey(active),sourceRevision:fingerprint,acknowledgedEditWatermark:sequence,isCurrent:()=>!disposed&&account===active&&generation===epoch&&state.records===records&&state.collections===collections&&state.statuses===statuses&&state.workspace===workspace&&state.revision===revision&&acknowledgedSequence===sequence&&sourceArchiveFingerprint===fingerprint}
+  }}):undefined
   const emit = () => { if (!disposed) for (const listener of listeners) { try { listener(snapshot()) } catch { /* A view listener cannot fail persistence. */ } } }
   const emitSync = () => { if (!disposed) for (const listener of syncListeners) { try { listener(clone(syncState())) } catch { /* A progress listener cannot fail a source read. */ } } }
   const clearCloudTimer = () => { if (cloudTimer !== undefined) timers.clearTimeout(cloudTimer); cloudTimer = undefined }
@@ -90,6 +105,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
     cancelSourceReads('RECONNECT_REQUIRED')
     ++generation; refreshPending = null; clearCloudTimer()
     authorized = false; nativeWriteSources.clear(); syncState().plannerSyncing = false; emitSync()
+    deferredEntry = false; pendingOnline = false
     state.connection = {...state.connection, connected: false, reconnectRequired: true, restoreError: message}
     state.statuses = state.statuses.map(status => ({...status, state: 'unavailable', message: 'Saved data · authorization is required to refresh.'}))
     emit()
@@ -147,6 +163,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
     account = active
     client = null
     restoredDavCheckpoint = undefined
+    completedCalendarHistory = undefined
     acknowledgedSequence = 0; sourceArchiveFingerprint = undefined
     acknowledgedEdits = active ? createSourceEdits({cache,key:sourceEditsKey(active),accountKey:cacheKey(active),serverUrl:active.serverUrl}) : undefined
     launchPending = undefined; timers.clearTimeout(launchTimer); launchTimer = undefined
@@ -161,6 +178,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
     state = empty()
     nativeWriteSources.clear()
     authorized = false; lastAttempts = {}; requestedSources.clear(); lastForegroundEntry = -Infinity
+    deferredEntry = false; pendingOnline = false; pendingEntry = false
     syncState().restoring = Boolean(account)
     if (!account) return
     state.mode = 'live'
@@ -202,7 +220,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
     const restorationStart = deferRestoration()
     // Read the tiny network policy independently. Foreground authorization can
     // overlap the much larger source archive without bypassing Wi-Fi-only rules.
-    settingsPending = Promise.resolve(restorationStart).then(() => epoch === generation && account === active ? cache.load(syncSettingsKey(active)) : undefined).then(value => normalizeSyncSettings(value), () => normalizeSyncSettings())
+    settingsPending = Promise.resolve(restorationStart).then(() => epoch === generation && account === active ? cache.load(syncSettingsKey(active)) : undefined).then(value => calendarPreferences(value), () => calendarPreferences())
     hydrationPending = (async () => {
       // Yield past the initial checkpoint publication before parsing private stores.
       await restorationStart
@@ -233,22 +251,25 @@ export function createMobileController({native, cache, openExternal, isNative = 
         saved = applyReadDenials(saved,readDenials,active.serverUrl)
         state.records = saved.records; state.collections = saved.collections
         restoredDavCheckpoint = saved.davCheckpoint
+        completedCalendarHistory = calendarHistoryEvidence(saved.calendarHistoryDays)
         if (restoredDavCheckpoint) client.primeDavState?.({accountKey: cacheKey(active), records: state.records, collections: state.collections, checkpoint: restoredDavCheckpoint})
         if (saved.theme) state.theme = saved.theme
-        state.statuses = sources.map(source => {
-          const timestamps = [saved.statuses.find(status => status?.source === source)?.lastSyncedAt,state.statuses.find(status => status?.source === source)?.lastSyncedAt].filter(value=>typeof value==='string'&&Number.isFinite(Date.parse(value))).sort((a,b)=>Date.parse(b)-Date.parse(a))
-          const denied = saved.statuses.find(status => status.source === source && (status.permissionDenied || status.revokedCollectionIds?.length))
-          return denied || {source, state:'unavailable',count:state.records.filter(record=>record.source===source).length,lastSyncedAt:timestamps[0],message:'Saved on this device · checking for updates.'}
-        })
+        state.statuses = restoreSourceStatuses(sources.map(source => {
+          const archivedStatus=saved.statuses.find(status=>status?.source===source),launchStatus=state.statuses.find(status=>status?.source===source)
+          const timestamps = [archivedStatus?.lastSyncedAt,launchStatus?.lastSyncedAt].filter(value=>typeof value==='string'&&Number.isFinite(Date.parse(value))).sort((a,b)=>Date.parse(b)-Date.parse(a))
+          return {...(archivedStatus||launchStatus||{source,state:'unavailable'}),lastSyncedAt:timestamps[0]}
+        }),state.records)
       }
       if (plannerResult.status === 'fulfilled') state = {...state, ...plannerResult.value}
       else state.storage = {...state.storage, syncStatus: 'error', errorCode: 'CACHE_UNREADABLE', errorStage: 'local-cache', message: 'Saved planner data could not be loaded. Its files are preserved; retry before editing.'}
       syncState().settings = normalizeSyncSettings(settingsResult.status === 'fulfilled' ? settingsResult.value : undefined)
+      state.calendarHistoryDays = calendarPreferences(settingsResult.status === 'fulfilled' ? settingsResult.value : undefined).calendarHistoryDays
       if (sourceResult.status === 'rejected') state.storage = {...state.storage, syncStatus: 'error', errorCode: 'CACHE_UNREADABLE', errorStage: 'local-cache', message: 'The local source cache could not be read. Saved files are preserved; refresh to reload sources.'}
       if (editsResult.status === 'rejected') state.storage = {...state.storage, syncStatus: 'error', errorCode: 'CACHE_UNREADABLE', errorStage: 'local-cache', message: 'Saved native edits could not be recovered. Files are preserved and native editing is disabled.'}
       syncState().restoring = false
       diagnostics.record({kind:'restore',stage:'full-restore',durationMs:performanceNow()-restoreStarted,count:state.records.length,success:true})
       launchHints?.save?.(cacheKey(active), state.theme)
+      widgetPublisher?.schedule()
       emit()
     })().catch(error => {
       if (epoch === generation && account === active) {
@@ -279,7 +300,8 @@ export function createMobileController({native, cache, openExternal, isNative = 
     const references = record => [record.id, record.identity, record.nativeDependencies, record.nativeDependents, record.nativeRelatedIds]
     const changed = records.length !== recordsAtStart.length || records.some((record, index) => JSON.stringify(references(record)) !== JSON.stringify(references(recordsAtStart[index])))
     state = {...state, ...metadataState, records, recordIdAliases: Object.fromEntries(remap), statuses: state.statuses.map(status => ({...status, count: records.filter(record => record.source === status.source).length}))}
-    lastReconciliation = {store, epoch, records, revision: state.revision, ready: state.metadata.ready}
+    lastReconciliation = state.storage.syncStatus === 'error' ? undefined : {store, epoch, records, revision: state.revision, ready: state.metadata.ready}
+    if (state.storage.syncStatus === 'error') diagnostics.record({kind:'planner',stage:'error',success:false,code:state.storage.errorCode||'UNKNOWN'})
     return changed
   }
   async function syncMetadata({automatic = false} = {}) {
@@ -366,6 +388,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
             authorized = true; emit(); return false
           }
           updateTransport(restored.capabilities); authorized = true
+          delete syncState().foregroundError
           state.connection = {...state.connection, reconnectRequired: false, recoveryOnly: false, restoreError: undefined}
           return true
         } finally {timers.clearTimeout(timeout)}
@@ -379,7 +402,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
     if (!active || epoch !== generation || syncState().restoring || !isCurrent()) return
     launchHints?.save?.(cacheKey(active), state.theme)
     const value = launchCheckpoint(state, cacheKey(active))
-    try {await disk(async () => { if (epoch === generation && account === active && isCurrent()) await cache.save(launchKey(active), value, {isCurrent}) })}
+    try {await disk(async () => { if (epoch === generation && account === active && isCurrent()) await cache.save(launchKey(active), value, {isCurrent}) });if(epoch===generation&&account===active&&isCurrent())widgetPublisher?.schedule()}
     catch {
       if (epoch === generation && account === active && isCurrent()) state.storage = {...state.storage, syncStatus: 'error', errorCode: 'CACHE_UNREADABLE', errorStage: 'local-cache', message: 'Changes are saved, but the quick-launch cache could not be updated. Check device storage; the durable planner is preserved.'}
     }
@@ -393,7 +416,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
     }, 100)
     launchTimer?.unref?.()
   }
-  const archiveValue = (active, sequence = acknowledgedSequence) => compactSourceCache({accountKey:cacheKey(active), acknowledgedSequence:sequence, records:state.records,collections:state.collections,statuses:state.statuses,...(client?.davCheckpoint ? {davCheckpoint:client.davCheckpoint()} : {}),...(state.theme ? {theme:normalizeTheme(state.theme)} : {})})
+  const archiveValue = (active, sequence = acknowledgedSequence) => compactSourceCache({accountKey:cacheKey(active), acknowledgedSequence:sequence, records:state.records,collections:state.collections,statuses:state.statuses,...(completedCalendarHistory!==undefined?{calendarHistoryDays:completedCalendarHistory}:{}),...(client?.davCheckpoint ? {davCheckpoint:client.davCheckpoint()} : {}),...(state.theme ? {theme:normalizeTheme(state.theme)} : {})})
   const archiveFingerprint = sourceCacheFingerprint
   const saveCache = async (active, epoch, strict = false, isCurrent = () => true) => {
     try {
@@ -435,6 +458,50 @@ export function createMobileController({native, cache, openExternal, isNative = 
     }
     if (account === active) {acknowledgedEdits = createSourceEdits({cache,key:sourceEditsKey(active),accountKey:cacheKey(active),serverUrl:active.serverUrl}); await acknowledgedEdits.load()}
   })
+  const adoptCollections = (discovery, selected, isCurrent, startTime) => {
+    if (!isCurrent() || !Array.isArray(discovery?.sources) || !discovery.sources.length || !Array.isArray(discovery.collections)) return
+    const subset = discovery.sources
+    if (new Set(subset).size !== subset.length || subset.some(source => !selected.includes(source) || !independentAccessSources.includes(source))) return
+    if (discovery.collections.some(collection => !validCollection(collection) || !subset.includes(collection.source)) || new Set(discovery.collections.map(collection => collection.id)).size !== discovery.collections.length) return
+    const previousCollections = new Map(state.collections.map(collection => [collection.id, collection]))
+    const discovered = clone(discovery.collections).map(collection => {
+      const prior = previousCollections.get(collection.id)
+      return collection.source === 'deck' && collection.stacks === undefined && prior?.source === 'deck' && prior.stacks ? {...collection, stacks: clone(prior.stacks)} : collection
+    })
+    state.collections = [...state.collections.filter(collection => !subset.includes(collection.source)), ...discovered]
+    state.statuses = state.statuses.map(status => subset.includes(status.source) && (status.permissionDenied || status.revokedCollectionIds?.length || ['AUTH','PERMISSION'].includes(status.errorCode)) ? {...status, state:'unavailable', permissionDenied:undefined, revokedCollectionIds:undefined, errorCode:undefined, errorStage:undefined, message:'Source permissions verified · checking for updates.'} : status)
+    for (const source of subset) {
+      if (discovery.collections.some(collection => collection.source === source)) nativeWriteSources.add(source)
+      else nativeWriteSources.delete(source)
+    }
+    state.connection = {...state.connection, connected: true, restoreError: undefined}
+    diagnostics.record({kind:'source',stage:'discovery',durationMs:Math.max(0,now()-startTime),count:discovery.collections.length,success:true})
+    emit()
+  }
+  async function verifySourceAccess(isCurrent) {
+    if (typeof client?.readSourceAccess !== 'function') return
+    const active=account,epoch=generation,readingClient=client,started=now(),accessEpoch=sourceAccessGeneration
+    let valid=true, timer
+    const current=()=>valid&&accessEpoch===sourceAccessGeneration&&isCurrent()&&account===active&&epoch===generation&&client===readingClient&&!state.connection.reconnectRequired
+    try {
+      const result=await Promise.race([readingClient.readSourceAccess({sources:independentAccessSources,isActive:current,onCollections:value=>adoptCollections(value,independentAccessSources,current,started)}),new Promise((_,reject)=>{timer=timers.setTimeout(()=>reject(problem('Checking source access timed out. Cached items remain available.','TIMEOUT')),30_000);timer?.unref?.()})])
+      if (!current()) return
+      for(const error of result?.errors||[]) {
+        if(error.code==='AUTH'){await deniedAuthentication({active,epoch},problem('Nextcloud denied authorization.','AUTH'));return}
+        if(error.code==='IDENTITY'){requireReconnection({active,epoch},'Nextcloud returned a different account. Reconnect to verify the selected account; saved data is preserved.');return}
+        if(!independentAccessSources.includes(error.source))continue
+        if(error.permissionDenied||error.code==='PERMISSION') {
+          nativeWriteSources.delete(error.source)
+          state=applyReadDenials(state,[{source:error.source,code:'PERMISSION',collection:null}],active.serverUrl)
+          await purgeCache(active)
+          if(!current())return
+          await saveCache(active,epoch,false,current)
+        }
+        state.statuses=state.statuses.map(status=>status.source===error.source?{...status,state:'error',errorCode:error.code,errorStage:'discovery',message:error.message}:status)
+      }
+      emit()
+    } finally {valid=false;timers.clearTimeout(timer)}
+  }
   async function refresh(selected = sources, {verified = false} = {}) {
     await initialize()
     await hydrationPending
@@ -444,11 +511,11 @@ export function createMobileController({native, cache, openExternal, isNative = 
       for (const source of selected) if (!activePass?.sources.includes(source)) requestedSources.add(source)
       return refreshPending
     }
-    const active = account, epoch = generation, readGeneration = sourceReadGeneration
+    const active = account, epoch = generation, readGeneration = sourceReadGeneration, calendarHistoryDays=state.calendarHistoryDays
     let valid = true, deadline, cancel, lastProgress = -Infinity, persistAfterTimeout = false, partialRevocation = false
     let revocationCleanup = Promise.resolve()
     const finishedSources = new Set()
-    const currentRead = () => valid && !disposed && epoch === generation && account === active && readGeneration === sourceReadGeneration
+    const currentRead = () => valid && !disposed && epoch === generation && account === active && readGeneration === sourceReadGeneration && calendarHistoryDays===state.calendarHistoryDays
     const startTime = now()
     diagnostics.record({kind:'source',stage:'start',count:selected.length})
     let terminalRecorded = false
@@ -497,41 +564,19 @@ export function createMobileController({native, cache, openExternal, isNative = 
             else if (status.state === 'connected') nativeWriteSources.add(status.source)
           }
         }
-        const onCollections = discovery => {
-          if (!isActive() || !Array.isArray(discovery?.sources) || !discovery.sources.length || !Array.isArray(discovery.collections)) return
-          const subset = discovery.sources
-          if (new Set(subset).size !== subset.length || subset.some(source => !selected.includes(source) || !['tasks','calendar','deck'].includes(source))) return
-          if (discovery.collections.some(collection => !validCollection(collection) || !subset.includes(collection.source)) || new Set(discovery.collections.map(collection => collection.id)).size !== discovery.collections.length) return
-          const previousCollections = new Map(state.collections.map(collection => [collection.id, collection]))
-          const discovered = clone(discovery.collections).map(collection => {
-            const prior = previousCollections.get(collection.id)
-            // Board discovery certifies board access, not its expensive card
-            // listing. Keep known stacks as choices; creation preflights them.
-            return collection.source === 'deck' && collection.stacks === undefined && prior?.source === 'deck' && prior.stacks ? {...collection, stacks: clone(prior.stacks)} : collection
-          })
-          state.collections = [...state.collections.filter(collection => !subset.includes(collection.source)), ...discovered]
-          state.statuses = state.statuses.map(status => subset.includes(status.source) && (status.permissionDenied || status.revokedCollectionIds?.length || ['AUTH','PERMISSION'].includes(status.errorCode)) ? {...status, state:'unavailable', permissionDenied:undefined, revokedCollectionIds:undefined, errorCode:undefined, errorStage:undefined, message:'Source permissions verified · checking for updates.'} : status)
-          for (const source of subset) {
-            if (discovery.collections.some(collection => collection.source === source)) nativeWriteSources.add(source)
-            else nativeWriteSources.delete(source)
-          }
-          // The account has answered discovery. Data freshness remains untouched;
-          // each write still preflights its target and captured native validator.
-          state.connection = {...state.connection, connected: true, restoreError: undefined}
-          diagnostics.record({kind:'source',stage:'discovery',durationMs:Math.max(0,now()-startTime),count:discovery.collections.length,success:true})
-          emit()
-        }
+        const onCollections = discovery => adoptCollections(discovery,selected,isActive,startTime)
         const onSource = partial => {
           if (!isActive() || !partial?.statuses?.length) return
           const subset=partial.statuses.map(status=>status.source).filter(source=>selected.includes(source))
           if (!subset.length || subset.length!==partial.statuses.length) return
-          partial.statuses=partial.statuses.map(status=>status.state==='connected'?status:{...status,lastSyncedAt:state.statuses.find(old=>old.source===status.source)?.lastSyncedAt})
+          partial.statuses=partial.statuses.map(({cached,...status})=>status.state==='connected'?status:{...status,lastSyncedAt:state.statuses.find(old=>old.source===status.source)?.lastSyncedAt})
           const merged=mergeEditedRefresh(state,partial,editsAtStart,sourceEdits,tagsAtStart,noteTagEdits,subset,labelsAtStart,collectionLabelEdits)
           for(const source of subset) finishedSources.add(source)
           certifySources(partial.statuses)
           state={...state,...merged,connection:{...state.connection,connected:nativeWriteSources.size>0||merged.statuses.some(status=>status.state==='connected')}}
           lastReconciliation=undefined
           if (partial.statuses.some(status => status.permissionDenied || status.revokedCollectionIds?.length)) {
+            ++sourceAccessGeneration
             partialRevocation = true
             // Revocation is already authoritative even if another source never
             // finishes. Queue both-slot invalidation before any replacement save;
@@ -546,9 +591,10 @@ export function createMobileController({native, cache, openExternal, isNative = 
           }
           emit()
         }
-        const result = await Promise.race([readingClient.readAll({sources: selected, isActive, onProgress, onSource, onCollections}), stopped])
+        const result = await Promise.race([readingClient.readAll({sources: selected, calendarHistoryDays, isActive, onProgress, onSource, onCollections}), stopped])
         if (!isActive()) return snapshot()
-        result.statuses = result.statuses.map(status => status.state === 'connected' ? status : {...status, lastSyncedAt: state.statuses.find(old => old.source === status.source)?.lastSyncedAt})
+        if(result.statuses.some(status=>status.source==='calendar'&&status.state==='connected'))completedCalendarHistory=calendarHistoryDays
+        result.statuses = result.statuses.map(({cached,...status}) => status.state === 'connected' ? status : {...status, lastSyncedAt: state.statuses.find(old => old.source === status.source)?.lastSyncedAt})
         const {records, collections, statuses} = mergeEditedRefresh(state, result, editsAtStart, sourceEdits, tagsAtStart, noteTagEdits, selected, labelsAtStart, collectionLabelEdits)
         certifySources(result.statuses)
         const connected = nativeWriteSources.size>0||statuses.some(status => status.state === 'connected')
@@ -635,6 +681,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
     cancelSourceReads('AUTH')
     const epoch = ++generation; refreshPending = null; clearCloudTimer()
     authorized = false; nativeWriteSources.clear(); syncState().plannerSyncing = false; emitSync()
+    deferredEntry = false; pendingOnline = false
     state.records = []; state.collections = []; delete state.theme; client = null
     state.connection = {...state.connection, connected: false, reconnectRequired: true, restoreError: 'Nextcloud access was revoked. Sign in again to reconnect.'}
     state.statuses = state.statuses.map(status => ({...status, state: 'error', permissionDenied: true, count: 0, message: 'Nextcloud denied access.'}))
@@ -678,7 +725,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
   async function saveLocalWorkspace(workspace, revision) {
     if (!metadata || !state.metadata.ready) throw problem('Load your saved Spaces before changing planner links.', 'METADATA_NOT_READY')
     const store = metadata, epoch = generation
-    await store.saveWorkspace(workspace, revision)
+    await store.saveWorkspace(workspace, revision, state.records)
     if (epoch !== generation || metadata !== store) throw problem('The selected Nextcloud account changed.', 'CANCELLED')
     state = {...state, ...store.getState()}
     queueLaunch(account, epoch)
@@ -773,51 +820,129 @@ export function createMobileController({native, cache, openExternal, isNative = 
     try {return await Promise.race([operation, new Promise((_, reject) => {timer = timers.setTimeout(() => reject(problem(message, 'TIMEOUT')), 10_000); timer?.unref?.()})])}
     finally {timers.clearTimeout(timer)}
   }
-  async function configureBackground(active, epoch) {
+  async function configureBackground(active, epoch, settings = syncState().settings) {
     if (!isNative || typeof native.configureSync !== 'function') {
       syncState().background = {supported: false, scheduled: false}; return
     }
     try {
-      const result = await boundedLocal(native.configureSync({accountName: active.name, settings: clone(syncState().settings)}), 'Android background scheduling timed out.')
+      const result = await boundedLocal(native.configureSync({accountName: active.name, settings: normalizeSyncSettings(settings)}), 'Android background scheduling timed out.')
       if (epoch === generation && account === active) syncState().background = result.background
     } catch {
       if (epoch === generation && account === active) syncState().background = {supported: true, scheduled: false, error: 'Android could not schedule background checks. Retry in Settings.'}
     }
     emitSync()
   }
+  function dueSources(scheduling) {
+    const settings=syncState().settings,selected=dueSyncSources(settings,state.statuses,lastAttempts,now(),scheduling)
+    const last=lastAttempts.caldav
+    if(settings.caldavMinutes>0&&completedCalendarHistory!==state.calendarHistoryDays&&(!Number.isFinite(last)||last>now()||now()-last>=settings.caldavMinutes*60_000)&&!selected.includes('calendar'))selected.push('calendar')
+    return selected
+  }
+  async function adoptBackgroundRead(isCurrent) {
+    if (!backgroundReadPending || typeof cache.loadChanged !== 'function' || typeof native.getSavedAccount !== 'function') return
+    backgroundReadPending = false
+    const active=account, epoch=generation, watermark=acknowledgedSequence, history=state.calendarHistoryDays
+    let recordsBefore=state.records
+    const current=()=>isCurrent()&&account===active&&epoch===generation&&state.calendarHistoryDays===history&&state.records===recordsBefore&&acknowledgedSequence===watermark&&!acknowledgedEdits?.invalid
+    const descriptor=await native.getSavedAccount()
+    if (!current()) return
+    if (!sameAccount(checkedAccount(descriptor.account),active)) {requireReconnection({active,epoch},'The selected Nextcloud account changed. Reconnect to verify it; saved data is preserved.');return}
+    // Native background denial evidence is applied even if the projector could
+    // not publish a new archive. It must precede both cached display and access.
+    let denied
+    try {denied=applyReadDenials({...state},descriptor.readDenials,active.serverUrl)}
+    catch(error) {
+      nativeWriteSources.clear();++sourceAccessGeneration
+      state.storage={...state.storage,syncStatus:'error',errorCode:'CACHE_UNREADABLE',errorStage:'local-cache',message:'Saved source access restrictions could not be read. Cached items are preserved; refresh to verify access before editing.'}
+      emit();throw error
+    }
+    if (descriptor.readDenials?.length) {
+      ++sourceAccessGeneration
+      for(const entry of descriptor.readDenials)nativeWriteSources.delete(entry.source)
+      state={...state,records:denied.records,collections:denied.collections,statuses:denied.statuses}
+      recordsBefore=state.records
+      emit()
+    }
+    const changed=await cache.loadChanged(cacheKey(active))
+    if (!current()) return
+    if (!changed.changed || !changed.value || (changed.value.acknowledgedSequence||0)!==watermark) return
+    let saved=cache.validatedLoads?changed.value:checkedSourceCache(changed.value,cacheKey(active),active.serverUrl)
+    const savedHistory=calendarHistoryEvidence(saved.calendarHistoryDays)
+    if(savedHistory!==history&&savedHistory!==completedCalendarHistory)return
+    saved=applyReadDenials(acknowledgedEdits.apply(saved),descriptor.readDenials,active.serverUrl)
+    // Reconcile against the current authoritative workspace; never replace it,
+    // pending requests or local navigation from a background launch checkpoint.
+    const resolved=await metadata.reconcileRecords(saved.records,{isCurrent:current})
+    if (!current()) return
+    const {records,remap,...metadataState}=resolved
+    state={...state,...metadataState,records,collections:saved.collections,statuses:restoreSourceStatuses(saved.statuses,records),recordIdAliases:Object.fromEntries(remap)}
+    if(saved.theme)state.theme=saved.theme
+    restoredDavCheckpoint=saved.davCheckpoint
+    completedCalendarHistory=calendarHistoryEvidence(saved.calendarHistoryDays)
+    if(restoredDavCheckpoint)client?.primeDavState?.({accountKey:cacheKey(active),records:state.records,collections:state.collections,checkpoint:restoredDavCheckpoint})
+    sourceArchiveFingerprint=sourceCacheFingerprint(changed.value)
+    lastReconciliation=undefined
+    changed.confirm?.()
+    diagnostics.record({kind:'restore',stage:'publication',count:records.length,success:true})
+    emit()
+  }
   async function resumeSync(reason) {
     if (!['open', 'resume', 'timer', 'online'].includes(reason)) throw problem('Invalid refresh trigger.', 'VALIDATION')
     await initialize()
-    if (disposed || !appActive || !hostAvailable || !account) return snapshot()
+    if (disposed || !appActive || !hostAvailable || !account || state.connection.reconnectRequired || state.connection.recoveryOnly) return snapshot()
     const entering = reason === 'open' || reason === 'resume'
-    if (resumePending) {if (entering && lastForegroundEntry === -Infinity) pendingEntry = true; return snapshot()}
+    if (resumePending) {
+      if (entering && lastForegroundEntry === -Infinity) pendingEntry = true
+      if (reason === 'online' && deferredEntry) pendingOnline = true
+      return snapshot()
+    }
     if (entering && now() - lastForegroundEntry < 30_000) return snapshot()
-    if (entering) lastForegroundEntry = now()
+    if (entering) {lastForegroundEntry = now(); deferredEntry = true}
+    const entryWork = entering || reason === 'online' && deferredEntry
     const active = account, epoch = generation, foregroundGeneration = sourceReadGeneration
     const currentEntry = () => appActive && epoch === generation && account === active && sourceReadGeneration === foregroundGeneration
     let cancel
     const stopped = new Promise((_, reject) => {cancel = () => reject(problem('Foreground checking was cancelled.', 'CANCELLED'))})
     const pass = resumePass = {cancel}
     const wait = value => Promise.race([value, stopped])
+    let checkStage = 'network'
     const operation = (async () => {
       try {
-        const settings = await wait(entering ? settingsPending : hydrationPending)
+        const settings = await wait(entryWork ? settingsPending : hydrationPending)
         if (disposed || !currentEntry()) return
-        if (!entering && !dueSyncSources(syncState().settings, state.statuses, lastAttempts, now()).length) return
+        // Restoring the saved job policy is local work. It must not depend on
+        // connectivity, a responsive SSO provider or the larger source archive.
+        if (entering) void configureBackground(active, epoch, settings)
+        if (entering && backgroundReadPending) {
+          await wait(hydrationPending)
+          let adopting = true
+          try {await wait(boundedLocal(adoptBackgroundRead(()=>adopting&&currentEntry()),'Checking saved background updates timed out.'))}
+          catch (error) {if(error?.code==='CANCELLED')throw error;diagnostics.record({kind:'restore',stage:'publication',success:false,code:error?.code||'CACHE_UNREADABLE'})}
+          finally {adopting = false}
+          if (!currentEntry()) return
+        }
+        const scheduling={independentAccessSources:typeof client?.readSourceAccess==='function'?independentAccessSources:[]}
+        if (!entryWork && !dueSources(scheduling).length) return
         const network = await wait(boundedLocal(networkStatus(), 'Network availability could not be checked.'))
-        if (!network.connected || (entering ? settings : syncState().settings).wifiOnly && network.connectionType !== 'wifi') return
+        const policy = syncState().restoring && entryWork ? settings : syncState().settings
+        if (!network.connected || policy.wifiOnly && network.connectionType !== 'wifi') return
+        checkStage = 'authorization'
         syncState().activity = {sources: [], stage: 'authorization', startedAt: stamp(), lastProgressAt: stamp(), completed: 0, message: 'Checking Nextcloud authorization.'}
         emitSync()
         const [verified] = await Promise.all([wait(verifyAuthorization(currentEntry)), wait(hydrationPending)])
         if (!verified || !currentEntry()) return
-        const selected = dueSyncSources(syncState().settings, state.statuses, lastAttempts, now())
-        delete syncState().activity; emitSync()
-        if (entering) void configureBackground(active, epoch)
-        if (entering) void gate.run(() => syncMetadata({automatic: true})).catch(() => {})
+        const selected = dueSources(scheduling)
+        delete syncState().activity; delete syncState().foregroundError; emitSync()
+        if (entryWork) {deferredEntry = false; pendingOnline = false}
+        if (entryWork) void gate.run(() => syncMetadata({automatic: true})).catch(() => {})
+        if (entryWork) void gate.run(()=>verifySourceAccess(currentEntry)).catch(error=>{
+          if(currentEntry()&&error?.code!=='CANCELLED')diagnostics.record({kind:'source',stage:'discovery',code:error?.code||'UNKNOWN',success:false})
+        })
         if (selected.length) await wait(gate.run(() => refresh(selected, {verified: true})))
       } catch (error) {
         if (epoch !== generation || account !== active || !appActive || error?.code === 'CANCELLED') return
-        syncState().background = {...syncState().background, error: error?.code === 'TIMEOUT' ? 'Nextcloud authorization check timed out. Retry when connected; saved data is preserved.' : 'Nextcloud could not be checked. Retry or reconnect in Settings.'}
+        if (expiredAuthorization({active, epoch}, error)) return
+        syncState().foregroundError = error?.code === 'TIMEOUT' ? `${checkStage === 'authorization' ? 'Nextcloud authorization' : 'Network availability'} check timed out. Retry when connected; saved data is preserved.` : 'Nextcloud could not be checked. Retry or reconnect in Settings.'
       } finally {
         if (resumePass === pass) resumePass = undefined
         if (epoch === generation && account === active && !activePass) {delete syncState().activity; emitSync()}
@@ -827,6 +952,10 @@ export function createMobileController({native, cache, openExternal, isNative = 
     void operation.finally(() => {
       if (resumePending === operation) resumePending = undefined
       if (pendingEntry && appActive && !disposed) {pendingEntry = false; void resumeSync('resume').catch(() => {})}
+      else if (pendingOnline && currentEntry() && !disposed) {
+        pendingOnline = false
+        if (deferredEntry) void resumeSync('online').catch(() => {})
+      }
     }).catch(() => {})
     return snapshot()
   }
@@ -860,26 +989,61 @@ export function createMobileController({native, cache, openExternal, isNative = 
       return result
     }),
     refresh: () => gate.run(refresh), retryConnection: () => gate.run(refresh),
+    takeWidgetAction: async()=>{
+      if(!widgets)return null
+      await initialize();await hydrationPending
+      if(!account||syncState().restoring||acknowledgedEdits?.invalid)return null
+      const active=account,epoch=generation,value=await widgets.consumeAction({accountKey:cacheKey(active)})
+      if(account!==active||generation!==epoch)throw problem('The selected account changed. Open the widget again.','CANCELLED')
+      if(value?.readDenials?.length){
+        const denied=applyReadDenials({...state},value.readDenials,active.serverUrl)
+        ++sourceAccessGeneration
+        for(const entry of value.readDenials)nativeWriteSources.delete(entry.source)
+        state={...state,records:denied.records,collections:denied.collections,statuses:denied.statuses}
+        emit()
+      }
+      const resolved=resolveWidgetAction(value,state,{accountKey:cacheKey(active),now:now(),timeZone,locale})
+      return resolved&&value?.readDenials?.length?{...resolved,state:snapshot()}:resolved
+    },
     subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener) } },
     subscribeSync: listener => {syncListeners.add(listener); return () => {syncListeners.delete(listener)}},
     resumeSync,
     setAppActive: async active => {
       if (typeof active !== 'boolean') throw problem('Invalid app activity state.', 'VALIDATION')
       appActive = active
-      if (!active) {cancelSourceReads(); diagnostics.stop('background'); cancelPlanner(); requestedSources.clear(); lastForegroundEntry = -Infinity; emitSync()}
+      if (!active) {deferredEntry=false;pendingOnline=false;pendingEntry=false;backgroundReadPending=true;cancelSourceReads(); diagnostics.stop('background'); cancelPlanner(); requestedSources.clear(); lastForegroundEntry = -Infinity; emitSync()}
     },
-    setSyncSettings: settings => gate.run(async () => {
+    setSyncSettings: settings => gate.run(()=>changeSettings(async () => {
       const checked = validateSyncSettings(settings)
       await initialize(); await hydrationPending
       if (!account) throw problem('Connect an account before changing sync settings.', 'UNAVAILABLE')
       const active = account, epoch = generation
-      await cache.save(syncSettingsKey(active), checked)
+      await cache.save(syncSettingsKey(active), {...checked,calendarHistoryDays:state.calendarHistoryDays})
       if (epoch !== generation || account !== active) throw problem('The account changed.', 'CANCELLED')
       syncState().settings = checked
       await configureBackground(active, epoch); emit()
       return snapshot()
-    }),
-    dispose: () => { timers.clearTimeout(launchTimer); launchPending = undefined; cancelSourceReads(); diagnostics.stop('background'); disposed = true; ++generation; cancelPlanner(); refreshPending = null; clearCloudTimer(); listeners.clear(); syncListeners.clear() },
+    })),
+    setCalendarHistoryDays: async days => {
+      const checked=checkedCalendarHistoryDays(days)
+      await initialize();await hydrationPending
+      if(!account)throw problem('Connect an account before changing Calendar history.','UNAVAILABLE')
+      const active=account,epoch=generation
+      cancelSourceReads()
+      return gate.run(()=>changeSettings(async()=>{
+        if(epoch!==generation||active!==account)throw problem('The account changed.','CANCELLED')
+        if(state.calendarHistoryDays===checked)return snapshot()
+        cancelSourceReads()
+        await cache.save(syncSettingsKey(active),{...syncState().settings,calendarHistoryDays:checked})
+        if(epoch!==generation||active!==account)throw problem('The account changed.','CANCELLED')
+        state.calendarHistoryDays=checked
+        state.statuses=state.statuses.map(status=>status.source==='calendar'?{...status,state:'unavailable',cached:true,message:'Calendar history changed. Refreshing the selected coverage.'}:status)
+        emit()
+        if(appActive)void gate.run(()=>refresh(['calendar'])).catch(()=>{})
+        return snapshot()
+      }))
+    },
+    dispose: () => { widgetPublisher?.close();timers.clearTimeout(launchTimer); launchPending = undefined; cancelSourceReads(); diagnostics.stop('background'); disposed = true; ++generation; cancelPlanner(); refreshPending = null; clearCloudTimer(); listeners.clear(); syncListeners.clear() },
     selectAccount: async () => {
       await initialize()
       if (!isNative) throw new Error('Install the Android app to connect through Nextcloud Files.')
@@ -1138,7 +1302,7 @@ export function createMobileController({native, cache, openExternal, isNative = 
       checkExpectedAccount(expectedAccount)
       if (!hostAvailable || !account || !metadata) return unavailable()
       const store = metadata, epoch = generation
-      await store.saveWorkspace(workspace, expectedRevision)
+      await store.saveWorkspace(workspace, expectedRevision, state.records)
       if (epoch !== generation || metadata !== store) throw new Error('The selected Nextcloud account changed. Your edit remains saved for its original account.')
       const saved = store.getState()
       state = {...state, ...saved}

@@ -45,6 +45,28 @@ Use targeted unit tests and no-emit/syntax checks only during iterations. Exampl
 
 ## Current owner decisions
 
+- RELEASE-27 authorizes WIDGET-09 and final local Windows, Android and Nextcloud packages at **0.6.27/build29**, with Windows file version **0.6.27.29** and Android versionCode **29**. Freeze after fast checks, preserve existing identities and prior builds, refresh `NextGlance-Latest.exe`, then push reviewed source to the existing GitHub repository. Do not install, deploy, or upload binaries.
+
+- RELEASE-26 authorizes HISTORY-02, VIEW-18 and WIDGET-05 and final local Windows, Android and Nextcloud packages at **0.6.26/build28** after fast checks and source freeze. Preserve prior artifacts, storage/signing identities and the stable Windows shortcut target. No deployment, push or real-account writes.
+
+- RELEASE-25 authorizes HISTORY-01 and final local Windows, Android and Nextcloud packages at **0.6.25/build27** after fast checks and source freeze. Windows file version is 0.6.25.27 and Android versionCode is 27. Preserve prior packages, identities and the stable Windows shortcut target. No push, deployment or live account writes.
+
+- Windows portable packaging must update `win/release/NextGlance-Latest.exe` after every successful build. Use this stable shortcut target and retain all versioned release executables. If the target is in use, close the running copy and retry the update from the built versioned executable.
+
+- RELEASE-24 (2026-11-23) authorizes the WIDGET-04 native presentation correction and a final local Android APK at **0.6.24/versionCode26** after fast verification and source freeze. Preserve prior artifacts and technical/signing/storage identities. No emulator, installation, deployment or push.
+
+- RELEASE-23 (2026-11-23) packages VIEW-17 weekend appearance for all three clients at **0.6.23/build25** after fast checks and source freeze. Windows file version 0.6.23.25, Android versionCode 25, Nextcloud app 0.6.23. Preserve prior packages and technical/signing/storage identities. No deployment or push.
+
+- RELEASE-22 (2026-11-23) packages Android **0.6.22/versionCode24** with WIDGET-03 grouping, time grids, readability and navigation plus SYNC-16 foreground connectivity recovery. Complete fast checks and freeze the source before packaging. Preserve earlier APKs and current Windows/Web packages. No installation, emulator, deployment or push.
+
+- SYNC-15 (2026-11-22): audit/fix Android background restore, preserve historical cached source outcomes without write authority, reconcile jobs offline, expose per-family publication evidence and use hourly fallback defaults while retaining saved choices. Include with WIDGET-02 in the pending RELEASE-21 Android 0.6.21/versionCode23 after fast checks and a fresh source freeze. Earlier packaging was stopped before producing an APK. Windows/Web packages unchanged; no installation, emulator, publication or push.
+
+- RELEASE-21 / WIDGET-02 (2026-11-22): the owner explicitly requested the corrected widget APK. Package Android **0.6.21/versionCode23** after the completed fast checks and source freeze. Preserve prior APKs, signing/application/account/storage identities and Windows/Web packages. Verify the distinct native widget layouts, packaged shared projection, icon notices and existing assets. No installation, emulator, publication, deployment or push is authorized.
+
+- RELEASE-20 / WIDGET-01 (2026-11-22): implement independently configurable Android home widgets from the approved research/design, with transparent surfaces, cached native rendering and contextual creation. Package Android **0.6.20/versionCode22** only after fast verification/source freeze. Preserve prior APKs and Windows/Web versions/packages. No installation, emulator, publication, deployment or push. The existing shared composer is the initial safe creation path; a separate native capture write runtime remains follow-up work.
+
+- RELEASE-19 (2026-11-22): after SYNC-14 investigation, implementation, fast checks and source freeze, package Android **0.6.19/versionCode21**. Preserve the prior APK, technical/signing/account/storage identities and current Windows/Web packages. This authorizes the requested final local APK, not device installation, publication, deployment or a new GitHub push.
+
 - RELEASE-18 (2026-11-18): after SYNC-13 fast checks, the owner explicitly requested a corrected Windows build and GitHub push. Package Windows **0.6.18/build20** (file version0.6.18.20), preserve prior artifacts and technical identities, then push the reviewed source to `Byter3/nextglance`. Android and Web packages remain 0.6.17/build19. This authorizes the final Windows package and source push, not store submission, server deployment or publishing binary release assets.
 
 - RELEASE-17 (2026-11-17): rebuild all clients with the approved BRAND-01 project icon at 0.6.17/build19 after source freeze. Windows file version0.6.17.19, Android versionCode19, Web app0.6.17. Preserve prior artifacts and technical/signing/storage identities. No deployment/publication.

@@ -11,7 +11,7 @@ export function canWriteNativeSource(input?: {
   online?:boolean
   busy?:boolean
   loginWaiting?:boolean
-  statuses?:{source:string;state:string;permissionDenied?:boolean}[]
+  statuses?:{source:string;state:string;permissionDenied?:boolean;cached?:boolean}[]
   nativeWriteSources?:readonly import('@nextspace/contracts').Source[]
 }):boolean
 export function completionOperation(record:import('@nextspace/contracts').WorkspaceRecord,collections?:import('@nextspace/contracts').Collection[]):'setTaskCompleted'|'setCardCompleted'|null

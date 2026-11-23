@@ -16,13 +16,14 @@ const deferred = () => { let resolve; const promise = new Promise(done => { reso
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const sourceStatuses = state => state.statuses.filter(status => ['tasks', 'calendar'].includes(status.source))
 const downloads = calls => calls.filter(call => call.url.endsWith('.ics') && call.method === 'GET')
+const historicalTitles = Array.from({length: 300}, (_, index) => `Historical ${index}`)
 
 async function fixture(mode, {isNative = false, incremental = false, checkpoint = false, canonicalIds = false} = {}) {
   const today = new Date().toISOString().slice(0, 10).replaceAll('-', '')
   const resources = [
     {name: '000-task.ics', body: ics(['BEGIN:VTODO', 'UID:work', 'SUMMARY:Current task', 'END:VTODO'])},
     {name: '001-event.ics', body: event('Current event', today)},
-    ...Array.from({length: 300}, (_, i) => ({name: `history-${i}.ics`, body: event(`Historical ${i}`, '20200101')})),
+    ...historicalTitles.map((title, index) => ({name: `history-${index}.ics`, body: event(title, '20200101')})),
     {name: 'zzz-task.ics', body: ics(['BEGIN:VTODO', 'UID:later-work', 'SUMMARY:Task after historical files', 'END:VTODO'])},
   ]
   let time = 0
@@ -80,7 +81,7 @@ test('concurrent Deck maintenance, Notes and CalDAV complete through the real re
   await f.api.getState(); f.api.startDiagnostics()
   const state=await f.api.refresh()
   assert.deepEqual(state.statuses.filter(status=>['tasks','calendar','deck','notes'].includes(status.source)).map(status=>[status.source,status.state]),[['tasks','connected'],['calendar','connected'],['deck','connected'],['notes','connected']])
-  assert.equal(state.records.length,5)
+  assert.equal(state.records.length, f.resources.length + 2)
   assert.ok(f.resourceCalls.some(call=>call.name==='prune'&&call.kind==='dav'))
   assert.ok(f.resourceCalls.some(call=>call.name==='retainCollections'&&call.kind==='deck'))
   const terminal=JSON.parse(f.api.readDiagnostics()).events.filter(event=>event.kind==='source'&&['finish','error'].includes(event.stage)&&!event.source)
@@ -107,9 +108,9 @@ test('SSO completes more than 250 resources, reuses verified bodies, and prunes 
   const state = await f.api.refresh()
   assert.equal(f.calls.filter(call => call.method === 'REPORT').length, 0)
   assert.equal(downloads(f.calls).length, f.resources.length, 'Tasks and Calendar share one download for each resource')
-  assert.deepEqual(state.records.map(record => record.title).sort(), ['Current event', 'Current task', 'Task after historical files'])
+  assert.deepEqual(state.records.map(record => record.title).sort(), ['Current event', 'Current task', 'Task after historical files', ...historicalTitles].sort())
   assert.ok(sourceStatuses(state).every(status => status.state === 'connected'))
-  assert.deepEqual(sourceStatuses(state).map(status => [status.source, status.count]).sort(), [['calendar', 1], ['tasks', 2]])
+  assert.deepEqual(sourceStatuses(state).map(status => [status.source, status.count]).sort(), [['calendar', historicalTitles.length + 1], ['tasks', 2]])
 
   const firstDownloads = downloads(f.calls).length
   const refreshed = await f.api.refresh()
@@ -119,9 +120,10 @@ test('SSO completes more than 250 resources, reuses verified bodies, and prunes 
 
   f.resources.splice(f.resources.findIndex(resource => resource.name === 'zzz-task.ics'), 1)
   const pruned = await f.api.refresh()
-  assert.deepEqual(pruned.records.map(record => record.title).sort(), ['Current event', 'Current task'])
+  const remaining = ['Current event', 'Current task', ...historicalTitles].sort()
+  assert.deepEqual(pruned.records.map(record => record.title).sort(), remaining)
   assert.equal(pruned.statuses.find(status => status.source === 'tasks').count, 1)
-  assert.deepEqual(f.cache.get(cacheKey(f.account)).records.map(record => record.title).sort(), ['Current event', 'Current task'])
+  assert.deepEqual(f.cache.get(cacheKey(f.account)).records.map(record => record.title).sort(), remaining)
   assert.equal(downloads(f.calls).length, firstDownloads)
 })
 
@@ -131,7 +133,7 @@ test('same-account Files reauthorization keeps transient reuse while allowing th
   const count = downloads(f.calls).length
   const reauthorized = await f.api.selectAccount()
   assert.ok(sourceStatuses(reauthorized).every(status => status.state === 'connected'))
-  assert.equal(reauthorized.records.length, 3)
+  assert.equal(reauthorized.records.length, f.resources.length)
   assert.equal(downloads(f.calls).length, count)
 })
 

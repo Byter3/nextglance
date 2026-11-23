@@ -8,7 +8,7 @@ import { DAV_SCAN_LIMITS, davDownloadReservation, roundRobinDavJobs, DavResource
 import { syncDiagnostic } from './sync-diagnostics.mjs';
 import {sourceSelection, checkedResourceEntry, validResourceLocator, httpEtag, completeDeckStacks} from './resource-cache-policy.mjs';
 import {sanitizeDiagnosticInput} from '@nextspace/core/performance-diagnostics.mjs';
-import {davProjectionWindow, checkedDavToken, checkedDavCheckpoint, davCheckpointCompatible, davInventoryCompatible, checkedDavResourceIndex} from './dav-checkpoint-policy.mjs';
+import {DAV_PROJECTION_VERSION, davProjectionWindow, checkedDavToken, checkedDavCheckpoint, davCheckpointCompatible, davInventoryCompatible, checkedDavResourceIndex} from './dav-checkpoint-policy.mjs';
 import {calendarContentEquivalent} from './calendar-representation.mjs';
 import {normalizeEventDetails} from '@nextspace/core/event-details.mjs';
 import {eventAlarmDetails, replaceEventReminders} from './event-alarms.mjs';
@@ -27,7 +27,7 @@ function mobileDavContext(isActive = () => true, extra = {}) {
     if (this.cancelError) throw this.cancelError;
     if (this.authError) throw this.authError;
     if (this.isActive() !== true) throw fail('The calendar refresh was cancelled.', 'CANCELLED');
-    if (this.deadline && Date.now() >= this.deadline) throw fail('Source refresh reached its two-minute time budget. Completed resources are saved; retry to continue.', 'TIMEOUT');
+    if (this.deadline && Date.now() >= this.deadline) throw fail(this.timeoutMessage || 'Source refresh reached its two-minute time budget. Completed resources are saved; retry to continue.', 'TIMEOUT');
   }, ...extra};
 }
 const xml = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true, parseTagValue: false, trimValues: false, processEntities: true });
@@ -415,6 +415,13 @@ function dateValue(value) {
   return value.isDate ? value.toString() : value.toJSDate().toISOString();
 }
 
+function completionDate(value) {
+  try {
+    const timestamp = typeof value === 'string' ? value : value && !value.isDate ? dateValue(value) : undefined;
+    if (typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(timestamp) && Number.isFinite(Date.parse(timestamp))) return new Date(timestamp).toISOString();
+  } catch { /* An invalid timestamp does not make a completed item disappear. */ }
+}
+
 function tagsOf(component) {
   return component.getAllProperties('categories').flatMap(property => property.getValues()).map(String);
 }
@@ -624,7 +631,7 @@ export class NextcloudClient {
       if(collections.length>=64||resources+value.checkpoint.resources.length>50000||['tasks','calendar'].some(source=>counts[source]+value.flat[source].length>10000))continue;
       collections.push(structuredClone(value.checkpoint));resources+=value.checkpoint.resources.length;for(const source of ['tasks','calendar'])counts[source]+=value.flat[source].length;
     }
-    return {version: 1, projectionVersion: 3, accountKey: this.#davAccountKey, collections};
+    return {version: 1, projectionVersion: DAV_PROJECTION_VERSION, accountKey: this.#davAccountKey, collections};
   }
 
   primeFileMetadata(records) {
@@ -803,7 +810,7 @@ export class NextcloudClient {
     return transientFailure ? {} : { theme: Object.keys(theme).length ? theme : undefined };
   }
 
-  async discover(context) {
+  async discover(context, {includeTheme = true} = {}) {
     const identity = ocsData(await this.sourceRequest(context, this.url('ocs/v2.php/cloud/user?format=json')));
     if (typeof identity?.id !== 'string' || !identity.id) throw fail('Nextcloud did not return your account identity.', 'FORMAT');
     if (this.#accountUser && identity.id !== this.#accountUser) throw fail('Saved sign-in information now identifies a different Nextcloud account. Reconnect before syncing.', 'IDENTITY');
@@ -811,10 +818,72 @@ export class NextcloudClient {
     this.#accountUser = identity.id;
     const themeAvailable = await this.refreshCapabilities(context);
     this.discovered = true;
-    return { username: this.username, capabilities: this.capabilities, ...(themeAvailable ? await this.readTheme(context) : {}) };
+    return { username: this.username, capabilities: this.capabilities, ...(themeAvailable && includeTheme ? await this.readTheme(context) : {}) };
   }
 
-  async readAll({sources, isActive = () => true, onProgress, onSource, onCollections} = {}) {
+  davCollections(sources, available) {
+    return sources.flatMap(source => available.filter(calendar => calendar.components.includes(source === 'tasks' ? 'VTODO' : 'VEVENT')).map(calendar => ({
+      id: this.id(source, calendar.href), source, title: calendar.title, readonly: Boolean(calendar.readonly),
+      ...(hexColor(calendar.color) ? {color: hexColor(calendar.color)} : {}),
+      remote: {href: calendar.href}, ...calendarSchedulingFields(calendar, source),
+    })));
+  }
+
+  /** Verify current targets without reading source bodies or certifying content.
+   * The host still needs durable records and native per-write revision checks. */
+  async readSourceAccess({sources = ['tasks', 'calendar', 'deck'], isActive = () => true, onCollections} = {}) {
+    const selected = sourceSelection(sources);
+    if (selected.some(source => !['tasks', 'calendar', 'deck'].includes(source))) throw fail('Choose Calendar, Tasks or Deck to verify current source access.', 'VALIDATION');
+    const context = mobileDavContext(isActive, {deadline: Date.now() + 30_000, timeoutMessage: 'Checking source access timed out. Saved data is preserved; retry to verify access.'});
+    const failure = async (names, error) => {
+      if (error.code === 'CANCELLED') throw error;
+      if (['AUTH', 'IDENTITY'].includes(error.code)) context.authError ||= error;
+      else if (error.code === 'PERMISSION') {
+        // Tasks and Calendar share one DAV authority boundary and cache.
+        if (names.some(source => ['tasks', 'calendar'].includes(source))) await this.revokeSourceResources('calendar');
+        if (names.includes('deck')) await this.revokeSourceResources('deck');
+      }
+      const code = error.code === 'IDENTITY' ? 'IDENTITY' : syncDiagnostic(error, 'discovery').errorCode || 'UNKNOWN';
+      return {sources: names, collections: [], errors: names.map(source => ({source, code, message: code === 'UNKNOWN' ? 'Source access could not be verified. Retry when the connection is available.' : error.message, ...(['AUTH', 'IDENTITY', 'PERMISSION'].includes(code) ? {permissionDenied: true} : {})}))};
+    };
+    const verify = async (names, discover) => {
+      try {
+        context.checkActive();
+        const collections = await discover();
+        context.checkActive();
+        if (new Set(collections.map(collection => collection.id)).size !== collections.length) throw fail('Nextcloud returned duplicate source collections. Retry to verify current access.', 'FORMAT');
+        if (typeof onCollections === 'function') {try {onCollections({sources: names, collections});} catch { /* Observers cannot fail access verification. */ }}
+        return {sources: names, collections, errors: []};
+      } catch (error) {return failure(names, error);}
+    };
+    let results;
+    try {
+      context.checkActive();
+      // Recheck identity on each foreground access pass; a prior process or
+      // public launch checkpoint cannot certify the current authorized user.
+      await this.discover(context, {includeTheme: false});
+      context.checkActive();
+      const davSources = selected.filter(source => ['tasks', 'calendar'].includes(source));
+      results = await Promise.all([
+        ...(davSources.length ? [verify(davSources, async () => this.davCollections(davSources, await this.discoverCalendars(() => context.checkActive(), context)))] : []),
+        ...(selected.includes('deck') ? [verify(['deck'], async () => (await this.discoverDeckBoards(context)).map(board => this.deckCollection(board)))] : []),
+      ]);
+    } catch (error) {results = [await failure(selected, error)];}
+    if (!isActive()) throw fail('The source access check was cancelled.', 'CANCELLED');
+    if (context.authError) {
+      this.discovered = false;
+      await this.revokeResources();
+      return {collections: [], verifiedSources: [], errors: (await failure(selected, context.authError)).errors};
+    }
+    const errors = results.flatMap(result => result.errors);
+    return {
+      collections: selected.flatMap(source => results.flatMap(result => result.collections.filter(collection => collection.source === source))),
+      verifiedSources: selected.filter(source => !errors.some(error => error.source === source)),
+      errors: selected.flatMap(source => errors.filter(error => error.source === source)),
+    };
+  }
+
+  async readAll({sources, isActive = () => true, onProgress, onSource, onCollections, calendarHistoryDays, calendarWindow} = {}) {
     const selected = sourceSelection(sources);
     let lastProgress = 0;
     const progress = (group, stage, completed, total, message, force = false) => {
@@ -827,7 +896,8 @@ export class NextcloudClient {
         try { onCollections(value); } catch { /* Observers cannot change native authority. */ }
       }
     };
-    const davContext = mobileDavContext(isActive, {deadline: Date.now() + 120_000, selected, progress, publishCollections});
+    const projectionWindow = calendarHistoryDays !== undefined || calendarWindow !== undefined ? davProjectionWindow(this.#now().getTime(), {calendarHistoryDays, calendarWindow}) : undefined;
+    const davContext = mobileDavContext(isActive, {deadline: Date.now() + 120_000, selected, progress, publishCollections, projectionWindow});
     davContext.checkActive();
     const stamp = this.#now().toISOString();
     const errorStatus = (source, error, stage = 'source-read') => {
@@ -883,11 +953,7 @@ export class NextcloudClient {
       // scans. Publish only authority, never pretend the content is refreshed.
       if (typeof onCollections === 'function') {
         const sources = selected.filter(source => ['tasks', 'calendar'].includes(source));
-        const collections = sources.flatMap(source => available.filter(calendar => calendar.components.includes(source === 'tasks' ? 'VTODO' : 'VEVENT')).map(calendar => ({
-          id: this.id(source, calendar.href), source, title: calendar.title, readonly: Boolean(calendar.readonly),
-          ...(hexColor(calendar.color) ? {color: hexColor(calendar.color)} : {}),
-          remote: {href: calendar.href}, ...calendarSchedulingFields(calendar, source),
-        })));
+        const collections = this.davCollections(sources, available);
         publishCollections({sources, collections});
       }
       return available;
@@ -1093,7 +1159,7 @@ export class NextcloudClient {
     context.scan = (async () => {
       context.checkActive();
       const epoch = this.#davEpoch;
-      const window = davProjectionWindow(this.#now().getTime());
+      const window = context.projectionWindow ?? davProjectionWindow(this.#now().getTime());
       const unique = new Map();
       for (const calendar of available) if (calendar.components.some(component => ['VTODO', 'VEVENT'].includes(component))) {
         if (!unique.has(calendar.href)) unique.set(calendar.href, {...calendar, components: [...calendar.components]});
@@ -1384,7 +1450,7 @@ export class NextcloudClient {
     const errorCounts = transfer && [...transfer.errorCounts].sort(([left], [right]) => left.localeCompare(right)).map(([code, count]) => `${code}: ${count}`).join(', ');
     const details = transfer ? ` Shared Tasks/Calendar scan: ${(transfer.knownBytes / 1048576).toFixed(2)} MiB received in bounded responses; ${(transfer.unknownReservedBytes / 1048576).toFixed(2)} MiB reserved for transfers with unknown sizes; ${transfer.failedRequests} failed resource requests${errorCounts ? ` (${errorCounts})` : ''}.` : '';
     const commonCode = failureCodes.size === 1 ? syncDiagnostic({code: [...failureCodes][0]}, 'source-read').errorCode : undefined;
-    return {records, collections, revokedCollectionIds, ...(limits.size ? {errorCode: 'LIMIT', warning: `Calendar refresh could not finish within its safety limits (${[...limits].join('; ')}). Only part of this source is loaded. Open Nextcloud to see all items.${details}`} : failures ? {...(commonCode ? {errorCode: commonCode} : {}), warning: `${failures} calendar collection(s) or item(s) could not be read. Other data is available; open Nextcloud for the affected items.${details}`} : {message: source === 'calendar' ? 'Agenda includes the previous 14 days and next 90 days.' : undefined})};
+    return {records, collections, revokedCollectionIds, ...(limits.size ? {errorCode: 'LIMIT', warning: `Calendar refresh could not finish within its safety limits (${[...limits].join('; ')}). Only part of this source is loaded. Open Nextcloud to see all items.${details}`} : failures ? {...(commonCode ? {errorCode: commonCode} : {}), warning: `${failures} calendar collection(s) or item(s) could not be read. Other data is available; open Nextcloud for the affected items.${details}`} : {message: source === 'calendar' && !context?.projectionWindow ? 'Agenda includes the previous 14 days and next 90 days.' : undefined})};
   }
 
   async readDav(source, available, context = undefined) {
@@ -1395,8 +1461,8 @@ export class NextcloudClient {
     const component = source === 'tasks' ? 'VTODO' : 'VEVENT';
     const calendars = available.filter(c => c.components.includes(component));
     const collections = calendars.map(c => ({ id: this.id(source, c.href), source, title: c.title, readonly: Boolean(c.readonly), ...(hexColor(c.color) ? { color: hexColor(c.color) } : {}), remote: { href: c.href },...calendarSchedulingFields(c,source) }));
-    const from = new Date(this.#now().getTime() - 14 * DAY);
-    const to = new Date(this.#now().getTime() + 90 * DAY);
+    const from = new Date(context?.projectionWindow?.from ?? this.#now().getTime() - 14 * DAY);
+    const to = new Date(context?.projectionWindow?.to ?? this.#now().getTime() + 90 * DAY);
     const compact = date => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
     const range = source === 'calendar' ? `<c:time-range start="${compact(from)}" end="${compact(to)}"/>` : '';
     const body = `<?xml version="1.0"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="${component}">${range}</c:comp-filter></c:comp-filter></c:filter></c:calendar-query>`;
@@ -1431,7 +1497,7 @@ export class NextcloudClient {
         failures++;
       }
     }
-    return { records, collections: collections.filter(c => !revokedCollectionIds.includes(c.id)), revokedCollectionIds, ...(failures ? { warning: `${failures} calendar collection(s) or item(s) could not be read. Other data is available; open Nextcloud for the affected items.` } : { message: source === 'calendar' ? 'Agenda includes the previous 14 days and next 90 days.' : undefined }) };
+    return { records, collections: collections.filter(c => !revokedCollectionIds.includes(c.id)), revokedCollectionIds, ...(failures ? { warning: `${failures} calendar collection(s) or item(s) could not be read. Other data is available; open Nextcloud for the affected items.` } : { message: source === 'calendar' && !context?.projectionWindow ? 'Agenda includes the previous 14 days and next 90 days.' : undefined }) };
   }
 
   calendarRecords(raw, href, etag, collection, from, to) {
@@ -1474,9 +1540,11 @@ export class NextcloudClient {
         const percent = todo.getFirstPropertyValue('percent-complete');
         // Nextcloud Tasks treats either COMPLETED or STATUS:COMPLETED as done.
         // A percentage alone is progress, and CANCELLED remains a separate state.
-        const completed = Boolean(todo.getFirstPropertyValue('completed')) || status === 'COMPLETED';
+        const nativeCompleted = todo.getFirstPropertyValue('completed');
+        const completed = Boolean(nativeCompleted) || status === 'COMPLETED';
+        const completedAt = completionDate(nativeCompleted);
         const percentComplete = Number.isInteger(percent) && percent >= 0 && percent <= 100 ? percent : undefined;
-        records.push({ ...common, id: originalId, source: 'tasks', kind: 'task', title: String(todo.getFirstPropertyValue('summary') || 'Untitled task'), body: String(todo.getFirstPropertyValue('description') || ''), url: this.url('index.php/apps/tasks/'), due: dateValue(todo.getFirstPropertyValue('due')), start: dateValue(todo.getFirstPropertyValue('dtstart')), completed, ...(status ? { status } : {}), ...(percentComplete !== undefined ? { percentComplete } : {}), priority: todo.getFirstPropertyValue('priority') || 0, color: normalizeColor(todo.getFirstPropertyValue('color')), tags: tagsOf(todo), readonly: Boolean(collection.readonly) || !etag || isComplexTask(calendar, todo), identity, remote: { href, raw, uid } });
+        records.push({ ...common, id: originalId, source: 'tasks', kind: 'task', title: String(todo.getFirstPropertyValue('summary') || 'Untitled task'), body: String(todo.getFirstPropertyValue('description') || ''), url: this.url('index.php/apps/tasks/'), due: dateValue(todo.getFirstPropertyValue('due')), start: dateValue(todo.getFirstPropertyValue('dtstart')), completed, ...(completedAt ? {completedAt} : {}), ...(status ? { status } : {}), ...(percentComplete !== undefined ? { percentComplete } : {}), priority: todo.getFirstPropertyValue('priority') || 0, color: normalizeColor(todo.getFirstPropertyValue('color')), tags: tagsOf(todo), readonly: Boolean(collection.readonly) || !etag || isComplexTask(calendar, todo), identity, remote: { href, raw, uid } });
       }
       return records;
     }
@@ -1489,7 +1557,8 @@ export class NextcloudClient {
     const records = new Map(), eventDetails = new WeakMap();
     const put = (event, start, end, occurrenceId) => {
       if (!start || event.component.getFirstPropertyValue('status') === 'CANCELLED') return;
-      if (end?.toJSDate().getTime() < from.getTime() || start.toJSDate().getTime() >= to.getTime()) return;
+      const first = start.toJSDate().getTime(), last = end?.toJSDate().getTime();
+      if (first >= to.getTime() || (last > first ? last <= from.getTime() : first < from.getTime())) return;
       const id = this.id('calendar', `${href}:${event.uid}${occurrenceId ? `:${occurrenceId}` : ''}`);
       const identity = this.identity('calendar', JSON.stringify([collection.id, event.uid, occurrenceId || '']), href, [id, this.id('calendar', JSON.stringify(['uid', event.uid, occurrenceId || '']))]);
       if (!eventDetails.has(event.component)) eventDetails.set(event.component, {location: String(event.component.getFirstPropertyValue('location') || ''), ...eventAlarmDetails(event.component),...eventSchedulingDetails(calendar,event.component,collection.remote?.scheduling,occurrenceId)});
@@ -1524,21 +1593,28 @@ export class NextcloudClient {
     return [...records.values()];
   }
 
-  async readDeck(context) {
+  async discoverDeckBoards(context) {
     const base = 'index.php/apps/deck/api/v1.0';
     const headers = { 'Content-Type': 'application/json' };
     const boards = jsonBody(assertStatus(await this.sourceRequest(context, this.url(`${base}/boards?details=true`), { headers })));
     if (!Array.isArray(boards)) throw fail('Deck returned an unexpected board list.', 'FORMAT');
     if (boards.some(board => !board || !nativeNumber(board.id))) throw fail('Deck returned an incomplete board inventory.', 'FORMAT');
-    const visibleBoards = boards.filter(b => !b.deletedAt && !b.archived);
-    const boardCollection = board => {
-      const color = hexColor(String(board.color || '').startsWith('#') ? board.color : `#${board.color || ''}`);
-      return {id: this.id('deck', board.id), source: 'deck', title: board.title || 'Untitled board', readonly: board.permissions?.PERMISSION_EDIT !== true, labels: deckLabels(board.labels), ...(color ? {color} : {}), remote: {nativeId: board.id}};
-    };
+    return boards.filter(b => !b.deletedAt && !b.archived);
+  }
+
+  deckCollection(board) {
+    const color = hexColor(String(board.color || '').startsWith('#') ? board.color : `#${board.color || ''}`);
+    return {id: this.id('deck', board.id), source: 'deck', title: board.title || 'Untitled board', readonly: board.permissions?.PERMISSION_EDIT !== true, labels: deckLabels(board.labels), ...(color ? {color} : {}), remote: {nativeId: board.id}};
+  }
+
+  async readDeck(context) {
+    const base = 'index.php/apps/deck/api/v1.0';
+    const headers = { 'Content-Type': 'application/json' };
+    const visibleBoards = await this.discoverDeckBoards(context);
     context?.checkActive();
     // Stacks intentionally remain absent until read. A current board inventory
     // certifies access; it does not certify old cached stack choices or content.
-    context?.publishCollections?.({sources: ['deck'], collections: visibleBoards.map(boardCollection)});
+    context?.publishCollections?.({sources: ['deck'], collections: visibleBoards.map(board => this.deckCollection(board))});
     await this.resourceOperation('retainCollections', {kind: 'deck', collections: visibleBoards.map(board => this.url(`${base}/boards/${encode(board.id)}`))}, context);
     const collections = [];
     const records = [];
@@ -1552,7 +1628,7 @@ export class NextcloudClient {
       this.#revokedResources.delete(locator.collection);
       const collectionId = this.id('deck', board.id);
       const editable = board.permissions?.PERMISSION_EDIT === true;
-      const collection = {...boardCollection(board), stacks: []};
+      const collection = {...this.deckCollection(board), stacks: []};
       collections.push(collection);
       try {
         let saved = await this.cachedResource(locator, context);
@@ -1568,7 +1644,7 @@ export class NextcloudClient {
           context?.checkActive();
           if (!nativeNumber(card.id)) continue;
           const nativeDependencies = Array.isArray(card.dependentCards) ? [...new Set(card.dependentCards.filter(nativeNumber).map(id => this.id('deck', id)))] : [];
-          const record = { id: this.id('deck', card.id), source: 'deck', kind: 'card', title: card.title || 'Untitled card', body: card.description || '', url: this.url(`index.php/apps/deck/board/${encode(board.id)}/card/${encode(card.id)}`), collectionId, collectionTitle: board.title, status: stack.title, stackId: String(stack.id), start: card.startdate || undefined, due: card.duedate || undefined, completed: Boolean(card.done), tags: deckLabels(card.labels).map(label => label.title), tagDetails: deckLabels(card.labels), color: normalizeColor(card.color), updatedAt: isoSeconds(card.lastModified), readonly: !editable || card.permissions?.PERMISSION_EDIT === false, etag: card.ETag ? String(card.ETag) : undefined, ...deckAssignments(card), nativeDependencies, identity: this.identity('deck', card.id, this.url(`${base}/boards/${encode(board.id)}/stacks/${encode(stack.id)}/cards/${encode(card.id)}`)), remote: { nativeId: card.id, boardId: board.id, stackId: stack.id, lastModified: card.lastModified, snapshot: card } };
+          const record = { id: this.id('deck', card.id), source: 'deck', kind: 'card', title: card.title || 'Untitled card', body: card.description || '', url: this.url(`index.php/apps/deck/board/${encode(board.id)}/card/${encode(card.id)}`), collectionId, collectionTitle: board.title, status: stack.title, stackId: String(stack.id), start: card.startdate || undefined, due: card.duedate || undefined, completed: Boolean(card.done), completedAt: completionDate(card.done), tags: deckLabels(card.labels).map(label => label.title), tagDetails: deckLabels(card.labels), color: normalizeColor(card.color), updatedAt: isoSeconds(card.lastModified), readonly: !editable || card.permissions?.PERMISSION_EDIT === false, etag: card.ETag ? String(card.ETag) : undefined, ...deckAssignments(card), nativeDependencies, identity: this.identity('deck', card.id, this.url(`${base}/boards/${encode(board.id)}/stacks/${encode(stack.id)}/cards/${encode(card.id)}`)), remote: { nativeId: card.id, boardId: board.id, stackId: stack.id, lastModified: card.lastModified, snapshot: card } };
           if (Number(card.attachmentCount) > 0 || card.attachments?.length > 0 || this.#deckAttachments.has(String(card.id)) || this.#knownDeckAttachments.has(String(card.id))) {
             try {
               const {attachments} = await this.readDeckAttachments(record, {cached: true, context});
@@ -1998,7 +2074,7 @@ export class NextcloudClient {
       if (!stack) throw fail('The saved Deck card moved to an unknown stack. Refresh the board.', 'UNAVAILABLE');
       const nativeDependencies = Array.isArray(card.dependentCards) ? [...new Set(card.dependentCards.filter(nativeNumber).map(id => this.id('deck', id)))] : record.nativeDependencies ?? record.nativeDependents ?? record.nativeRelatedIds ?? [];
       const { nativeRelatedIds: legacyLinks, nativeDependents: legacyDependents, ...currentRecord } = record;
-      return { ...currentRecord, title: card.title || 'Untitled card', body: card.description || '', status: stack.title, stackId: String(card.stackId), start: card.startdate || undefined, due: card.duedate || undefined, completed: Boolean(card.done), tags: deckLabels(card.labels).map(label => label.title), tagDetails: deckLabels(card.labels), color: normalizeColor(card.color), updatedAt: isoSeconds(card.lastModified), readonly: Boolean(collection.readonly) || card.permissions?.PERMISSION_EDIT === false || card.relatedBoard?.permissions?.PERMISSION_EDIT === false, etag: card.ETag ? String(card.ETag) : undefined, ...deckAssignments(card), nativeDependencies, identity: this.identity('deck', card.id, this.deckCardUrl({ ...record, remote: { ...record.remote, stackId: card.stackId } })), remote: { ...record.remote, stackId: card.stackId, lastModified: card.lastModified, snapshot: card } };
+      return { ...currentRecord, title: card.title || 'Untitled card', body: card.description || '', status: stack.title, stackId: String(card.stackId), start: card.startdate || undefined, due: card.duedate || undefined, completed: Boolean(card.done), completedAt: completionDate(card.done), tags: deckLabels(card.labels).map(label => label.title), tagDetails: deckLabels(card.labels), color: normalizeColor(card.color), updatedAt: isoSeconds(card.lastModified), readonly: Boolean(collection.readonly) || card.permissions?.PERMISSION_EDIT === false || card.relatedBoard?.permissions?.PERMISSION_EDIT === false, etag: card.ETag ? String(card.ETag) : undefined, ...deckAssignments(card), nativeDependencies, identity: this.identity('deck', card.id, this.deckCardUrl({ ...record, remote: { ...record.remote, stackId: card.stackId } })), remote: { ...record.remote, stackId: card.stackId, lastModified: card.lastModified, snapshot: card } };
     }
     throw fail('This source cannot be edited here.', 'VALIDATION');
   }

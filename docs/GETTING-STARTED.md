@@ -8,6 +8,8 @@ On **Windows or Android**, open **Settings & connection** and connect your Nextc
 
 **My overview** brings your accessible sources together. Its filters still apply. If an item seems missing, check source visibility, assignments and status filters. To organize this overview without making a Space, use **My overview → ⋯ → Group sources**.
 
+In 0.6.23 and later, use **Settings & connection → Appearance → Weekend days** to change which dates are shaded. Saturday and Sunday are selected by default. Each installation remembers its own choice.
+
 ## 1. Space: choose which sources belong together
 
 Open navigation, choose **+ beside Spaces**, name the Space **Work**, and select Work tasks, Work Deck and Work calendar.
@@ -44,6 +46,8 @@ Project A and Project B can share a calendar or Deck board while showing differe
 
 Enable **Group linked tasks** in the Board toolbar (or its menu on smaller screens). Tasks the card waits for appear above it, such as **Gather reference images**; tasks that need the card appear below it, such as **Share design summary**.
 
+Under **Board → Filters → Completed items**, choose how long completed tasks and cards stay visible. The default is 14 days. You can set another number of days, hide completed items, or show them all.
+
 ![Board shows linked tasks stacked around Deck cards, including an expanded stack and a clearly crossed-out completed task.](images/guide/05-board-linked-tasks.png)
 
 Tasks peek out from behind the card until you hover or select it; the stack then expands so you can read them. Completed tasks are crossed out. Completed Deck cards stay visible; archived cards are hidden. Completed tasks linked to a visible card remain visible even when other completed tasks are hidden. On touch, hold the card before dragging it—the card follows your finger and highlights its destination.
@@ -51,6 +55,7 @@ Tasks peek out from behind the card until you hover or select it; the stack then
 ## Everyday planning
 
 - **Choose a page:** Overview combines a work timeline and calendar; Calendar offers **Day / Week / Month**; Timeline shows work ranges and dependencies; Board uses status columns; List gives a compact item list. On phones, tap the current page name to switch.
+- **Calendar history:** Windows and Android default to **All history** under **Settings & connection → Calendar sync → Calendar history**. You can set a past-day limit there. In the Nextcloud app, pick an earlier date to load that part of the calendar when you need it. [DAVx⁵ past event limit](https://manual.davx5.com/settings.html#past-event-time-limit)
 - **Unscheduled work:** open **Not scheduled** on Overview, Calendar or Timeline. Hide the sidebar with its header button or drag its left edge to resize. On Timeline, **Hide unscheduled items in timeline** controls chart rows independently of the sidebar. Calendar and Overview’s dated panes already omit undated work.
 - **Dates and bookings:** **Edit dates** changes a task/card’s work range. On Windows/Android, **Schedule in calendar** creates a linked booking with an editable title, description, location and reminder (15 minutes before by default). On Web, create the event first, then **Link existing event**. Moving a booking does not automatically move the work deadline.
 - **Events:** open an event to edit its details or use **Delete event**. Supported invitations offer attendee controls or Accept/Tentative/Decline. Restricted recurring/delegated edits open in Nextcloud.

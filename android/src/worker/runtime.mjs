@@ -58,6 +58,7 @@ export function installWorkerRuntime(port,{makeController=createMobileController
     const preview=!message.isNative?createBrowserHost({identityStore:{load:async()=>{const text=await files.read('selected-account');return text?JSON.parse(text):null},save:account=>files.write('selected-account',JSON.stringify(account)),clear:()=>files.remove('selected-account')}}):undefined
     let hint=message.hint
     controller=makeController({isNative:message.isNative,hostAvailable:message.hostAvailable,appVersion:message.appVersion,diagnostics,
+      timeZone:message.timeZone||'UTC',locale:message.locale||'en',widgets:message.isNative?{state:args=>effect('widgets.state',args),publish:args=>effect('widgets.publish',args),consumeAction:args=>effect('widgets.consumeAction',args)}:undefined,
       cache:createSlotCache(files),native:message.isNative?Object.fromEntries(EFFECTS.filter(name=>name.startsWith('native.')).map(name=>[name.slice(7),(...args)=>effect(name,...args)])):{...preview,chooseAttachment:args=>effect('native.chooseAttachment',args),uploadAttachment:args=>effect('native.uploadAttachment',args)},
       launchHints:{read:key=>hint?.accountKey===key?hint.theme:undefined,save(accountKey,theme){hint={accountKey,theme};void effect('hints.save',accountKey,theme).catch(()=>{})},clear(key){if(!key||hint?.accountKey===key)hint=undefined;void effect('hints.clear',key).catch(()=>{})}},
       deferRestoration:()=>new Promise(resolve=>timers.setTimeout(resolve,0)),

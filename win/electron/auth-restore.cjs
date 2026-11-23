@@ -58,7 +58,7 @@ async function restoreSavedAccount({ credentialPath, credentialDirectory, accoun
       if (typeof credentials[key] !== 'string' || !credentials[key].trim() || credentials[key].length > limit || credentials[key].includes('\0')) return offline()
     }
     if (accountScope(serverUrl, credentials.accountUser) !== scope) return offline()
-    const client = createClient({ ...credentials, serverUrl })
+    const client = createClient({ ...credentials, serverUrl }, store)
     return { kind: 'restored', store, client, accountPath, connection: { connected: true, serverUrl, username: credentials.accountUser } }
   } catch { return offline() }
 }

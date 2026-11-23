@@ -7,10 +7,18 @@ const decode = text => {if(typeof text!=='string'||text.length>Math.ceil(CHUNK/3
 export function createChunkCacheFiles(call){
   const operation=(operation,path,args={})=>{checkPath(path);return call({operation,path,...args})}
   return {
-    async stat(path){const {size,revision}=await operation('size',path);if(size!==null&&(!Number.isSafeInteger(size)||size<0||size>MAX||typeof revision!=='string'))throw fail('Invalid cache revision.','CACHE_TOO_LARGE');return {size,revision:size===null?null:revision}},
+    async stat(path){
+      const {size,revision,prefix}=await operation('size',path)
+      if(size!==null&&(!Number.isSafeInteger(size)||size<0||size>MAX||typeof revision!=='string'))throw fail('Invalid cache revision.','CACHE_TOO_LARGE')
+      // Native code exposes bounded bytes, not an authority over JSON semantics.
+      // Unknown/legacy headers simply use the normal complete-slot inspection.
+      const match=typeof prefix==='string'&&prefix.length<=256?prefix.match(/^\{"version":1,"generation":([1-9]\d*),"value":/):null
+      const generation=match?Number(match[1]):undefined
+      return {size,revision:size===null?null:revision,...(size!==null&&Number.isSafeInteger(generation)?{generation}:{})}
+    },
     async size(path){const {size}=await operation('size',path);if(size!==null&&(!Number.isSafeInteger(size)||size<0||size>MAX))throw fail('The saved cache exceeds its limit.','CACHE_TOO_LARGE');return size},
-    async read(path){
-      const {size,revision}=await operation('size',path);if(size===null)return null
+    async read(path,expected){
+      const {size,revision}=expected||await operation('size',path);if(size===null)return null
       if(!Number.isSafeInteger(size)||size<0||size>MAX||typeof revision!=='string')throw fail('Invalid cache size.')
       const decoder=new TextDecoder('utf-8',{fatal:true});let text=''
       for(let offset=0;offset<size;){const length=Math.min(CHUNK,size-offset),result=await operation('read',path,{offset,length,size,revision});const bytes=decode(result.chunk);if(bytes.length!==length)throw fail('The saved cache changed while being read.');text+=decoder.decode(bytes,{stream:true});offset+=length}

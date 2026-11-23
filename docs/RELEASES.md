@@ -4,6 +4,130 @@ These are dated records of local builds, not public download links. Artifact pat
 
 Packages listed here are local development artifacts. Outputs stay in `win/release/`, `android/release/` and `web/release/`, outside source control. The reviewed source is published in [Byter3/nextglance](https://github.com/Byter3/nextglance); source publication does not publish these binary packages. Application/account/storage identities remain unchanged.
 
+## 0.6.27 — Windows, Android and Nextcloud
+
+Built on **2026-11-23** for WIDGET-09 / RELEASE-27. Windows file version is `0.6.27.29`, Android versionCode is `29`, and Nextcloud app version is `0.6.27`.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `win/release/NextGlance-0.6.27-Windows.exe` | 101,267,511 bytes | `41969160f2c60cdeb217ac7f4b943358a4bec447a1137f730a867a040d3abb7c` |
+| `android/release/NextGlance-0.6.27-Android-debug.apk` | 13,244,151 bytes | `840ab0addc88dad4860764403d4430ddedaa90bfb1985de2a8d6da563d48078f` |
+| `web/release/NextGlance-0.6.27-Nextcloud.tar.gz` | 2,022,610 bytes | `5c2e710d742afba01f5dad084aae5f1a3bc0095f573197e729e7348b681e7015` |
+
+Overview and Timeline widgets use denser rows and connect scheduled bars with arrows inside the date grid. See the [release notes](RELEASE-NOTES-0.6.27.md) and [illustrated examples](WIDGET-EXAMPLES.md).
+
+Windows passed isolated unpacked and portable launch checks. The stable shortcut target `win/release/NextGlance-Latest.exe` matches the versioned package byte for byte. The Android APK retains its signing identity and passed 216 JVM tests. The Nextcloud archive contains matching production assets and 492 files from the frozen workspace. The 946 shared and 1,840 client JavaScript tests passed. All 778 frozen source paths and 50 previous packages matched their prebuild checksums. Physical Android launcher and live Nextcloud server checks remain open.
+
+## 0.6.26 — Windows, Android and Nextcloud
+
+Built on **2026-11-23** for HISTORY-02, VIEW-18 and WIDGET-05. Windows file version is `0.6.26.28`, Android versionCode is `28`, and Nextcloud app version is `0.6.26`.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `win/release/NextGlance-0.6.26-Windows.exe` | 101,268,026 bytes | `20ff464a08ec4590d8d0a835c5cc70a40089191fb78b49c97a23d3f7a64a255f` |
+| `android/release/NextGlance-0.6.26-Android-debug.apk` | 13,197,178 bytes | `e9bd32c944556bbf7e91ca9226daabb1240aa43319b6479a96621ac7119b7e83` |
+| `web/release/NextGlance-0.6.26-Nextcloud.tar.gz` | 2,015,444 bytes | `f5d04f3f882893c64ed45a41074fea94dd04532b8ca75738610ff40a6142bc6c` |
+
+Reading Calendar history no longer registers every occurrence in cloud planner metadata. Verified source data can be saved independently when planner metadata validation fails. Weekend shading is softer. Android widgets use clearer chart surfaces and show linked tasks under their parent Deck card. [Widget presentation and launcher limits](ANDROID-WIDGET-PLAN.md#reading-widgets-over-wallpaper)
+
+Windows passed the unpacked and portable launch checks. The shortcut target `win/release/NextGlance-Latest.exe` matches the versioned package byte for byte. Android passed 185 JVM tests and the APK retains its signing identity. The Nextcloud archive contains the verified assets and 492 files matching the frozen source. The Web archive privacy scan found only previously reviewed fictional and security fixtures. All 762 frozen source paths and 47 previous packages matched their prebuild hashes. Physical Android launcher and live-account sync checks remain open.
+
+## 0.6.25 — Windows, Android and Nextcloud
+
+Built on **2026-11-23** for HISTORY-01 / RELEASE-25. Windows file version is `0.6.25.27`, Android versionCode is `27`, and Nextcloud app version is `0.6.25`.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `win/release/NextGlance-0.6.25-Windows.exe` | 101,269,437 bytes | `b31ad459178952c546f176cc3369c6854a41e984922fef282b13e9ba77e5e0a7` |
+| `android/release/NextGlance-0.6.25-Android-debug.apk` | 13,185,582 bytes | `331f90e466d228a03eb5dd73847bbb6a463872071bcb0d96c9b4301942246cd2` |
+| `web/release/NextGlance-0.6.25-Nextcloud.tar.gz` | 2,009,477 bytes | `2ac488bb320b46bba79bc4044d54873c1d412f4c7869acab20bb8c9787ef6002` |
+
+Board filters show the past 14 days of completed work by default. Windows and Android let you choose how much Calendar history to sync, with All history selected by default. Both reuse unchanged files between refreshes. The Nextcloud app loads a bounded Calendar range on date navigation. [Usage guide](GETTING-STARTED.md)
+
+`win/release/NextGlance-Latest.exe` was updated and matches the versioned package byte for byte. The Android build passed 181 JVM tests and retained its signing identity. The Nextcloud archive includes the current assets and 491 matching source files. All 752 frozen source paths and 44 prior packages matched their prebuild hashes.
+
+## 0.6.24 — Android build 26
+
+Built on **2026-11-23** for WIDGET-04 / RELEASE-24. Android versionCode is `26`. The application ID and signing certificate match 0.6.23.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `android/release/NextGlance-0.6.24-Android-debug.apk` | 13,180,966 bytes | `9e8d7061ef0f09bcd4da1be419b6a39114f2441b0a0e06ec3ee31faf1dcf7c2c` |
+
+Charts retain their proportions during rasterization and launcher sizing. Calendar and Overview use clearer dates and event blocks. Overview aligns work ranges and bookings on one date axis. Board, Timeline, Agenda and List have clearer labels and spacing. The widget picker has a separate fictional preview. [Widget presentation notes](ANDROID-WIDGET-PLAN.md#responsive-presentation-in-0624)
+
+The final build passed **180** JVM tests in **20** suites. The APK contains both launcher layouts, the revised native widget classes, and matching UI and headless assets. All 478 frozen source files and 23 prior APKs matched their prebuild hashes. Physical launcher visual and touch checks remain open.
+
+## 0.6.23 — Windows, Android and Nextcloud
+
+Built on **2026-11-23** for VIEW-17 / RELEASE-23. Windows file version is `0.6.23.25`, Android versionCode is `25`, and the Nextcloud app version is `0.6.23`. The Android APK uses the same application ID and signing certificate as 0.6.22. [Release notes](RELEASE-NOTES-0.6.23.md)
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `win/release/NextGlance-0.6.23-Windows.exe` | 101,260,792 bytes | `8e7369d8697bd10a6d531b9639f6b56ab9d1ef51aa12bd615c8cc176b4e19490` |
+| `android/release/NextGlance-0.6.23-Android-debug.apk` | 13,166,437 bytes | `392e14b5770e27b8681c803288e91ac494db8e52c381e82cd515ee2f4a3bd775` |
+| `web/release/NextGlance-0.6.23-Nextcloud.tar.gz` | 1,991,959 bytes | `e0ba819c520e92543305b591685df49b760560ecc521e822155f3dea2cb2f978` |
+
+Fast verification passed **1,386** targeted tests including **424** shared vectors per client, three no-emit checks, PHP syntax and the mounted Nextcloud fixture. The fixture exercised weekend shading in all five planner views and verified contrast in both themes. Final Android packaging passed **169** JVM tests. Android signature, UI, headless assets and widget resource checks passed. Windows passed **24** packaged checks, including an isolated portable launch and weekend settings persistence. Windows executable versions, packaged assets, runtime code, notices and icons were verified. The Nextcloud package includes its built UI, manifests, licenses and byte-matched source. The 731 frozen paths and four baseline packages matched their prebuild hashes. Launcher appearance and installation on Nextcloud Server 34 or 35 still require device and server checks.
+
+## 0.6.22 — Android build 24
+
+Built on **2026-11-23** for WIDGET-03 and SYNC-16. Android versionCode is `24`. The application ID and signing certificate match 0.6.21. Windows remains 0.6.18/build20 and Nextcloud remains 0.6.17.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `android/release/NextGlance-0.6.22-Android-debug.apk` | 13,161,733 bytes | `8ed75eba066c840f2b4fc0e29e97f394257678dbf1d09b5ee35662ac2842dfc9` |
+
+Calendar widgets offer Today and Week time grids alongside Agenda and Month. Overview shows ongoing work ranges above a calendar grid. Board keeps eligible linked tasks with visible cards when their unified status differs. Board project grouping and Timeline planner hierarchy use the shared membership rules. Widget items open their details in the ordinary planner with its saved page filters. The native layout uses a separate item strip for narrow or crowded charts. [Widget behavior and platform limits](ANDROID-WIDGET-PLAN.md)
+
+Reopening offline can recover its access and metadata checks when an allowed network returns. Fresh source bodies stay cached. An interrupted application of saved background data leaves the generation eligible for another attempt. Widget presentation failures leave valid source publication intact. Connection settings show foreground errors beside background job results. [Android sync review](ANDROID-BACKGROUND-SYNC.md)
+
+Verification passed for **1,498** consolidated checks including **416** exact vectors per client, all client no-emit checks, the mounted widget route fixture, and **162** final JVM tests across **19** suites. The packaged native charts, widget layouts, icon assets, headless projection, UI files and licenses were inspected. The APK signature is valid and **398** frozen files and six prior artifacts match their prebuild hashes. One UI appearance, touch and device startup or sync timing await physical verification.
+
+## 0.6.21 — Android build 23
+
+Built on **2026-11-22** for SYNC-15 / WIDGET-02 / RELEASE-21. Android versionCode is `23`; application ID and APK signing certificate match the prior build. Windows remains 0.6.18/build20 and Nextcloud remains 0.6.17. The earlier interrupted packaging attempt produced no APK; this is the completed package.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `android/release/NextGlance-0.6.21-Android-debug.apk` | 13,127,502 bytes | `b456879df4778d3bc5073a0833e71e42589077222bf1011847672960da39c43b` |
+
+Saved sources retain their historical status while current access is checked separately. This avoids unnecessary first-sync presentation and recent-content scans. Jobs are reconciled even when opening offline. Foreground signaling and sandbox cancellation no longer wait on background disk publication/teardown on the Activity thread. Calendar/Tasks and Deck report independent download and usable-data timestamps. New/malformed interval settings default to one hour; valid saved choices, including Manual, remain unchanged. See [background sync](ANDROID-BACKGROUND-SYNC.md) for Android constraints and the source references.
+
+Widget presentation now has distinct Calendar time columns, Board cards and linked tasks, Overview summaries, List work rows and a shared Timeline date axis. Compact headers, project icons and transparency remain configurable. Existing widgets and accounts keep their settings.
+
+Fresh checks: **1,236** shared assertions including **402 exact vectors per client**, **227** targeted Android regressions, all-client no-emit checks, native compilation and **56** targeted JVM tests passed. Final packaging freshly passed **147 JVM tests across 18 suites**. All **387** frozen production/configuration files and five previous artifacts remained unchanged. The packaged 51 UI assets, shared headless code, 15 launcher PNGs, adaptive/themed icon layers, splash and manifest bindings match the frozen sources; there is no development-server URL.
+
+These are compiler, fixture, concurrency and package checks. Physical launcher appearance, reboot/Doze execution, cold-launch timing, provider stability and battery behavior still require device acceptance. Android can release the process and defer jobs; no permanently resident UI or exact-minute synchronization is promised. No emulator, device installation, live-account write, deployment or push occurred.
+
+## 0.6.20 — Android build 22
+
+Built on **2026-11-22** for WIDGET-01 / RELEASE-20. Android versionCode is `22`; application ID and signing identity are unchanged. Windows remains 0.6.18/build20 and Nextcloud remains 0.6.17.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `android/release/NextGlance-0.6.20-Android-debug.apk` | 13,100,785 bytes | `788ba82fda350e526f6c654874e12ac6b15c96a081c1b95b998ff71de2c3734c` |
+
+Adds native Overview, Calendar, Timeline, Board and List home widgets. Each instance has its own name, Space, sources, filters, creation destinations and transparency. Calendar supports an agenda and a month grid when space permits; Board includes linked tasks. Launcher rendering reads small private snapshots. **+** opens the existing app editor with eligible destinations; the full page uses temporary widget filters without replacing saved planner preferences. See the [short setup guide](../android/README.md#home-widgets).
+
+Fresh checks: **1,186** shared-vector/widget/planner assertions, **89** targeted Android regressions, all-client no-emit checks and the mounted shared-UI route fixture passed. Final packaging freshly ran **123 JVM tests across 15 suites**, all passing. The 366 frozen production/configuration files are unchanged. The APK's version, signing continuity, 50 UI assets, headless code, widget resources/classes/manifest entries, 15 launcher PNGs and adaptive/themed/splash bindings were verified. No development-server URL is included; previous 0.6.19 and 0.6.17 APKs remain intact.
+
+Install over the existing development APK, open NextGlance, then add **Widgets → NextGlance** from the home screen. Each widget can be reconfigured through its settings button. Background source updates use the existing account scheduler; planner metadata refreshes on normal app entry. API24/25 and unsupported background JavaScript providers retain their last valid widget snapshot. Physical launcher appearance, accessibility, cold-start and battery behavior remain unmeasured. No emulator, device installation, live-account writes, deployment, push or publication occurred.
+
+## 0.6.19 — Android build 21
+
+Built on **2026-11-22** for SYNC-14 / RELEASE-19. Android versionCode is `21`; the application ID and signing identity are unchanged. Windows remains 0.6.18/build20 and Nextcloud remains 0.6.17.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `android/release/NextGlance-0.6.19-Android-debug.apk` | 13,025,808 bytes | `f6ed7e29052dc19f6d33030fbbc9b596697cc55134a470c6126bf214769c31ab` |
+
+Android checks Tasks/Calendar/Deck access independently of bulk source refresh, respects recent saved content timestamps, adopts newer guarded background data on resume and reads only the newest valid cache slot when possible. Native background CalDAV now compares collection tokens and reuses a certified unchanged inventory. Corrupt/partial/denied data, changed resource revisions and newer acknowledged edits still invalidate unsafe reuse. Final headless validation/publication remains; this is not a claim that unchanged sync has zero processing cost.
+
+Fresh verification includes 187 Android regressions, 170 protocol checks, 366 shared cases per client and all-client no-emit checks. The final native test task executed, with **103 tests across 13 suites passing**. Packaged manifest/version, signing continuity, all 50 UI assets, the headless bundle, 15 launcher PNGs, adaptive/themed vectors and splash bindings were checked. No development-server URL is packaged. All 322 frozen production files and the prior 0.6.17 APK retained their hashes.
+
+Install over the existing development APK; no data reset is required. Physical-device cold-start time, thermal behavior, background scheduling and actual-account acceptance remain unmeasured. The tests use fictional local fixtures and do not diagnose a particular Nextcloud Files crash. See the [investigation](ANDROID-SYNC-REVIEW.md) for causes, research and bounded measurements. No emulator, installation, live-account writes, deployment, push or binary publication was performed.
+
 ## 0.6.18 — Windows build 20
 
 Built on **2026-11-18** for SYNC-13 / RELEASE-18. Windows file version is `0.6.18.20`. Android and Nextcloud packages remain at 0.6.17/build19.
@@ -58,7 +182,7 @@ Built and independently verified on **2026-11-17**. Windows file version is `0.6
 | `android/release/NextGlance-0.6.15-Android-debug.apk` | 13,139,117 bytes | `dbe0baa8a5275b22271611387f4523ce98ba5596505dc16e22f6a749f28b7659` |
 | `web/release/NextGlance-0.6.15-Nextcloud.tar.gz` | 1,805,639 bytes | `852ef3c264a3827647bdc412645177370f8d61da8fd68841980947a4df3fbfa9` |
 
-This release reduces repeated synchronization and rendering work. Android uses revision-aware caches, prioritized edits, metadata/token background checks and a guarded shared-core projector that refreshes usable saved data without an Activity or WebView. Unsupported JavaScript providers retain an explicit raw-cache-only fallback. Capable transports use DAV deltas and batched resource reads; Files SSO retains its supported request fallback. The link picker renders a bounded list, and checklist task creation uses one cloud reservation plus one final publication while saving each successful receipt durably.
+This release reduces repeated synchronization and rendering work. Android uses revision-aware caches, prioritized edits, metadata checks and a guarded shared-core projector that refreshes usable saved data without an Activity or WebView. Correction on 2026-11-22: native background token comparison was previously claimed here but was missing; SYNC-14 addresses it. Unsupported JavaScript providers retain an explicit raw-cache-only fallback. Capable transports use DAV deltas and batched resource reads; Files SSO retains its supported request fallback. The link picker renders a bounded list, and checklist task creation uses one cloud reservation plus one final publication while saving each successful receipt durably.
 
 Semantic filters now sync independently for each page and Space, including My overview, with conflict handling. Overview has a hideable/resizable Unscheduled sidebar; Timeline can keep undated rows inline or move them to the sidebar; Calendar shares the sidebar controls. Empty sidebars consume no space. Checklist selection now leads to a compact editable task form with touch-capable date controls.
 

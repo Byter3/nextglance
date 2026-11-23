@@ -203,7 +203,7 @@ test('real session clients read folder/native data, save a conditional note and 
   const metadataPut=fixture.requests.findLast(request=>request.path.endsWith('/core.json')&&request.method==='PUT')
   assert.match(metadataPut.headers.get('If-Match'),/^"file-\d+"$/)
   const identities=fixture.files.get(`${folder}${generation}/identities.json`).document.value.identities
-  assert.ok(identities.some(identity=>identity.id===note.id&&identity.source==='notes'))
+  assert.deepEqual(identities, [], 'Reading and editing a native note and renaming the workspace require no planner identity registration')
   assert.equal((await api.syncWorkspace()).workspace.name,'Renamed planning')
   assert.deepEqual(fixture.unexpected,[])
 })

@@ -2,7 +2,13 @@
 
 The Android client shares its planner interface, portable core and Nextcloud protocol with Windows and the Nextcloud web client. Current package evidence and artifact locations are recorded in [Releases](../docs/RELEASES.md). Generated APKs remain local under `android/release/` and are excluded from source control.
 
+The current release target is **0.6.27 / versionCode 29**. Overview and Timeline widgets fit more work rows, with dependency arrows drawn on the date grid and counts when arrows cannot fit. For packaged artifacts, signing, tests and remaining device checks, see [Releases](../docs/RELEASES.md).
+
+Calendar history defaults to All history. Settings & connection can limit the number of past days for this account on this device. Foreground and background reads reuse existing downloaded calendar files and surface safety limits if a projection cannot finish. Native source data can refresh independently when planner metadata needs attention.
+
 [BEHAVIOR_SPEC.md](../specs/BEHAVIOR_SPEC.md) defines behavior; [FEATURE_PARITY.md](../specs/FEATURE_PARITY.md) records actual verification and remaining acceptance checks. See the root [README](../README.md) for workspace setup.
+
+See [Android background sync](../docs/ANDROID-BACKGROUND-SYNC.md) for saved-state reopening, interval settings, per-source status and Android scheduling limits.
 
 ## Connect and use
 
@@ -18,11 +24,23 @@ Overview, Calendar, Timeline, Board, List, Spaces, source/tag groups and status 
 
 Permissions, complex recurrence and delegated scheduling restrictions remain explicit. Unsupported native behavior opens in Nextcloud instead of creating a different custom representation.
 
+## Home widgets
+
+Long-press an empty area of your Android home screen, choose **Widgets → NextGlance**, and add a widget. Choose its name, page (Overview, Calendar, Timeline, Board or List), Space and sources. Each widget has independent filters: for example, a Calendar with only calendar events and a Board with Tasks plus Deck. Configure dates, unified statuses, project tags, grouping, density, theme and transparency in its settings. The default translucent surface matches the app; a solid surface is available for stronger contrast.
+
+Tap an item to open its details in the regular planner. Tap the title to open the configured Space and page with your app filters. **+** opens the app editor with eligible widget destinations. Use **Today**, **Week**, **Month**, or **Agenda** for Calendar, or **Today** and **Week** for the split Overview. In Month, resize the widget to fit the grid and itinerary, then tap a date to see that day's items. **Open day** opens the full Calendar. For a short or overlapping time block, use the widget title to open the planner. Removing a widget removes its own settings and display.
+
+Widgets use saved data and the existing account sync schedule. They do not each start a network sync or keep a WebView running. Source and planner timestamps describe their last verified data. Planner organization is refreshed on ordinary app entry; background source refreshes currently retain the last verified planner metadata. On devices without a supported background JavaScript provider, opening NextGlance updates widget projections. Android decides background timing, so refreshes are not guaranteed at exact intervals.
+
+Choose weekend days in **Settings & connection → Appearance**. Saturday and Sunday are selected initially; any combination, including none, is allowed. The subtle date tint applies across all Spaces, planner pages and widgets on this device. Changing it repaints saved widgets without syncing sources. This appearance preference is local to the installation.
+
 ## Storage and synchronization
 
 Native snapshots, pending edit recovery and device preferences live in account-specific private device storage. Shared organization and cross-source links use workspace schema 2 / folder protocol 1 under `/Workspace/Nextspace/`. Source data stays native to Nextcloud. Identifiers, application ID `com.nextspace.app` and signing identity are preserved across upgrades.
 
 The first cached display is separate from authorization and data freshness. Verified current collection permissions enable target-checked edits during a longer source refresh. Reads/parsing/cache work run in the background worker; confirmed edits are persisted before success. Incremental scans reuse exact ETags and certified inventories. Partial reads never claim a complete source or delete unseen data.
+
+On opening, Tasks/Calendar/Deck access is checked separately from content refresh. Recently synchronized cached content follows the selected interval; it does not require a full refresh just to verify permissions. Returning to the app adopts newer validated background data while preserving drafts and acknowledged edits. Cache reads prefer the newest valid generation, with corruption fallback. See the [sync investigation](../docs/ANDROID-SYNC-REVIEW.md) for measured fixture results and remaining device checks.
 
 Background intervals and Wi-Fi preference are available in Settings. Android controls actual job timing. Native background reads use PROPFIND/GET with ETag reuse; foreground independent authorization also supports REPORT. On API 26+ with a capable JavaScriptSandbox provider, background reads update the usable private read/launch state without opening a WebView. Older or unsupported providers retain downloaded resources and report that projection is unavailable. See [SSO.md](android/SSO.md) for provider limitations.
 
@@ -61,4 +79,4 @@ BRAND-01 fixes the NextGlance symbol in [canonical artwork](../packages/ui/src/b
 
 `scripts/generate-branding.mjs` converts the canonical assets into Android vectors, density PNGs and the preview favicon. It accepts `--sharp-module=<installed sharp module path>` when the renderer is not available through normal module resolution. This is an asset-only conversion; it does not build or package the application. Resource compilation and image checks do not establish installed launcher or device acceptance.
 
-Future UI builds copy the maintained root notice, project license and Apache license into `dist/legal/`; Capacitor includes them at `assets/public/legal/` in the APK. The artwork's third-party provenance and modifications are recorded in [NOTICE.md](../NOTICE.md). Updating notices does not retroactively alter existing APKs.
+UI builds copy the maintained root notice, project license, Apache license and Lucide license into `dist/legal/`; Capacitor includes them at `assets/public/legal/` in the APK. The artwork's third-party provenance and modifications are recorded in [NOTICE.md](../NOTICE.md). Updating notices does not retroactively alter existing APKs.

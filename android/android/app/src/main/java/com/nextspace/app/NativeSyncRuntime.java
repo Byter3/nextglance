@@ -22,7 +22,7 @@ final class NativeSyncRuntime {
     static final int DAV_JOB = 671201, DECK_JOB = 671202;
     private static final NativeCacheEpoch EPOCH = new NativeCacheEpoch();
     private static final Map<Integer, Runnable> RUNNING = new ConcurrentHashMap<>();
-    private static volatile boolean foreground;
+    private static final NativePublicationCoordinator PUBLICATION = new NativePublicationCoordinator();
     private static final Gson GSON = new Gson();
     record Session(Context context, NativeLoginFlow.Account account, String selection, long epoch) {
         void checkEpoch() throws Exception {EPOCH.check(epoch);}
@@ -66,19 +66,22 @@ final class NativeSyncRuntime {
         if (invalidated) for (Runnable cancel : RUNNING.values()) cancel.run();
         return invalidated;
     }
-    static boolean isForeground() { return foreground; }
-    static synchronized void foreground(boolean value) {
-        foreground = value;
+    static boolean isForeground() { return PUBLICATION.isForeground(); }
+    static void foreground(boolean value) {
+        PUBLICATION.foreground(value);
         // Keep periodic jobs scheduled for later; only yield the current read-only pass.
         if (value) for (Runnable cancel : RUNNING.values()) cancel.run();
     }
     interface Commit {void run() throws Exception;}
-    static synchronized void commitBackground(Session session, Commit commit) throws Exception {
-        session.check();if(foreground)throw NativeSyncPolicy.failure("CANCELLED","Foreground editing resumed.");commit.run();
+    static void commitBackground(Session session, Commit commit) throws Exception {
+        PUBLICATION.background(session::check, commit::run);
     }
-    static void projection(Session session,String status,Long timestamp) throws Exception {
-        session.check();var edit=preferences(session.context).edit().putString(key(session)+":projection",status);
-        if(timestamp!=null)edit.putString(key(session)+":readGeneration",Instant.ofEpochMilli(timestamp).toString());
+    static <T> T cacheOperation(java.util.concurrent.Callable<T> operation) throws Exception {
+        return PUBLICATION.files(operation);
+    }
+    static void projection(Session session,String kind,String status,Long timestamp) throws Exception {
+        session.check();String prefix=key(session)+":"+kind+":";var edit=preferences(session.context).edit().putString(prefix+"projection",status);
+        if(timestamp!=null)edit.putString(prefix+"readGeneration",Instant.ofEpochMilli(timestamp).toString());
         if(!edit.commit())throw NativeSyncPolicy.failure("CACHE_WRITE","Background read status could not be saved.");
     }
     static com.google.gson.JsonArray readDenials(Context context,NativeLoginFlow.Account account)throws Exception {
@@ -90,6 +93,7 @@ final class NativeSyncRuntime {
         List<String> sources="AUTH".equals(code)?List.of("tasks","calendar","deck","notes","collectives"):"dav".equals(kind)?List.of("tasks","calendar"):List.of("deck");
         for(String source:sources){JsonObject value=new JsonObject();value.addProperty("source",source);value.addProperty("code",code);if(collection==null)value.add("collection",com.google.gson.JsonNull.INSTANCE);else value.addProperty("collection",collection);boolean found=false;for(var old:values)if(old.equals(value))found=true;if(!found)values.add(value);}
         if(!preferences(session.context).edit().putString(key(session)+":readDenials",values.toString()).commit())throw NativeSyncPolicy.failure("CACHE_WRITE","Source access restrictions could not be saved.");
+        try{new NativeWidgetStore(session.context).invalidateAccount(NativeWidgetStore.accountKey(session.context));}finally{NativeWidgetProvider.refreshAll(session.context);}
     }
     static synchronized void verifiedReads(Session session,Set<String> sources)throws Exception {
         session.check();if(!Set.of("tasks","calendar","deck","notes","collectives").containsAll(sources))throw NativeSyncPolicy.failure("VALIDATION","Invalid verified source set.");
@@ -120,7 +124,7 @@ final class NativeSyncRuntime {
         session.check();
         if (minutes == 0) { jobs.cancel(id); Runnable cancel = RUNNING.get(id); if (cancel != null) cancel.run(); return; }
         JobInfo current = jobs.getPendingJob(id);
-        if (current != null && current.getIntervalMillis() == minutes * 60_000L && current.getExtras().getBoolean("wifiOnly", false) == wifiOnly && session.selection.equals(current.getExtras().getString("selection"))) return;
+        if (NativeBackgroundStatus.matches(job(context,current),minutes,wifiOnly,session.selection,kind)) return;
         PersistableBundle extras = new PersistableBundle(); extras.putString("accountName", session.account.name()); extras.putString("selection", session.selection); extras.putString("kind", kind); extras.putBoolean("wifiOnly", wifiOnly);
         JobInfo.Builder builder = new JobInfo.Builder(id, new ComponentName(context, NativeSourceSyncService.class)).setExtras(extras).setPersisted(true)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPeriodic(minutes * 60_000L).setBackoffCriteria(60_000L, JobInfo.BACKOFF_POLICY_EXPONENTIAL);
@@ -128,26 +132,30 @@ final class NativeSyncRuntime {
         JobInfo info = builder.build();
         if (jobs.schedule(info) != JobScheduler.RESULT_SUCCESS) throw NativeSyncPolicy.failure("UNAVAILABLE", "Android could not schedule background source checks.");
     }
+    private static NativeBackgroundStatus.Job job(Context context,JobInfo value) {
+        if(value==null||!new ComponentName(context,NativeSourceSyncService.class).equals(value.getService()))return null;
+        return new NativeBackgroundStatus.Job(value.getIntervalMillis(),value.getExtras().getBoolean("wifiOnly",false),value.getExtras().getString("selection"),value.getExtras().getString("kind"),value.isPersisted());
+    }
     static JsonObject state(Context context, String name) throws Exception {
-        Session session = session(context, name); String key = key(session); SharedPreferences prefs = preferences(context); JobScheduler jobs = context.getSystemService(JobScheduler.class);
-        JsonObject state = new JsonObject(); state.addProperty("supported", true);
-        state.addProperty("scheduled", jobs != null && (matches(jobs.getPendingJob(DAV_JOB), session) || matches(jobs.getPendingJob(DECK_JOB), session)));
-        String latestAttempt = "", latestSuccess = ""; List<String> errors = new ArrayList<>();
-        for (String kind : List.of("dav", "deck")) {
-            String prefix = key + ":" + kind + ":"; String attempt = prefs.getString(prefix + "attempt", ""), success = prefs.getString(prefix + "success", ""), error = prefs.getString(prefix + "error", "");
-            if (attempt.compareTo(latestAttempt) > 0) latestAttempt = attempt; if (success.compareTo(latestSuccess) > 0) latestSuccess = success;
-            if (!error.isEmpty()) errors.add(("dav".equals(kind) ? "Tasks/Calendar: " : "Deck: ") + error);
-        }
-        String schedulerError = prefs.getString(key + ":schedulerError", ""); if (!schedulerError.isEmpty()) errors.add(schedulerError);
-        if (!latestAttempt.isEmpty()) state.addProperty("lastAttemptAt", latestAttempt); if (!latestSuccess.isEmpty()) state.addProperty("lastSuccessAt", latestSuccess);
-        if (!errors.isEmpty()) state.addProperty("error", String.join(" ", errors));
-        String projection=prefs.getString(key+":projection","pending");state.addProperty("projection",projection);
-        String readGeneration=prefs.getString(key+":readGeneration","");if(!readGeneration.isEmpty())state.addProperty("readGenerationAt",readGeneration);
-        if("unavailable".equals(projection))state.addProperty("message","Background downloads are available; this Android system does not support headless read-store projection. Open NextGlance to apply downloaded changes.");
-        else if("incomplete".equals(projection))state.addProperty("message","Background resources are saved, but the readable view could not be updated. The previous view is preserved.");
+        Session session=session(context,name);String key=key(session);SharedPreferences prefs=preferences(context);JobScheduler jobs=context.getSystemService(JobScheduler.class);
+        NativeSyncPolicy.Settings settings;
+        try{settings=NativeSyncPolicy.settings(JsonParser.parseString(prefs.getString(key+":settings","{}")).getAsJsonObject(),false);}catch(Exception invalid){settings=NativeSyncPolicy.Settings.defaults();}
+        JsonObject caldav=family(context,session,prefs,jobs,settings,"dav",DAV_JOB,settings.caldavMinutes());
+        JsonObject deck=family(context,session,prefs,jobs,settings,"deck",DECK_JOB,settings.deckMinutes());
+        JsonObject state=NativeBackgroundStatus.aggregate(caldav,deck);List<String> errors=new ArrayList<>();
+        if(caldav.has("error"))errors.add("Tasks/Calendar: "+caldav.get("error").getAsString());
+        if(deck.has("error"))errors.add("Deck: "+deck.get("error").getAsString());
+        String schedulerError=prefs.getString(key+":schedulerError","");if(!schedulerError.isEmpty())errors.add(schedulerError);
+        if(!errors.isEmpty())state.addProperty("error",String.join(" ",errors));
         return state;
     }
-    private static boolean matches(JobInfo job, Session session) { return job != null && session.selection.equals(job.getExtras().getString("selection")); }
+    private static JsonObject family(Context context,Session session,SharedPreferences prefs,JobScheduler jobs,NativeSyncPolicy.Settings settings,String kind,int id,int minutes)throws Exception {
+        String prefix=key(session)+":"+kind+":";
+        Map<String,String> saved=new java.util.LinkedHashMap<>();
+        saved.put("lastAttemptAt",prefs.getString(prefix+"attempt",""));saved.put("downloadedAt",prefs.getString(prefix+"success",""));
+        saved.put("readGenerationAt",prefs.getString(prefix+"readGeneration",""));saved.put("projection",prefs.getString(prefix+"projection","pending"));saved.put("error",prefs.getString(prefix+"error",""));saved.put("interrupted",String.valueOf(prefs.getBoolean(prefix+"interrupted",false)));
+        return NativeBackgroundStatus.family(minutes>0,jobs!=null&&NativeBackgroundStatus.matches(job(context,jobs.getPendingJob(id)),minutes,settings.wifiOnly(),session.selection,kind),saved);
+    }
     static void register(int job, Runnable cancel) { RUNNING.put(job, cancel); }
     static void unregister(int job, Runnable cancel) { RUNNING.remove(job, cancel); }
     static void progress(Session session, String kind, String stage, int completed, int total) throws Exception {
@@ -155,17 +163,26 @@ final class NativeSyncRuntime {
         // Progress checkpoints contain no refreshing flag, so process death cannot leave a permanent spinner.
         if (!preferences(session.context).edit().putString(prefix + "stage", stage).putInt(prefix + "completed", completed).putInt(prefix + "total", Math.max(completed, total)).commit()) throw NativeSyncPolicy.failure("CACHE_WRITE", "Background progress could not be saved.");
     }
-    static void started(Session session, String kind) throws Exception { session.check(); if (!preferences(session.context).edit().putString(key(session) + ":" + kind + ":attempt", Instant.now().toString()).commit()) throw NativeSyncPolicy.failure("CACHE_WRITE", "Background status could not be saved."); }
+    static synchronized String started(Session session, String kind) throws Exception { session.check();String prefix=key(session)+":"+kind+":";String attempt=java.util.UUID.randomUUID().toString(); if (!preferences(session.context).edit().putString(prefix+"attempt", Instant.now().toString()).putString(prefix+"attemptToken",attempt).putString(prefix+"stage","discovery").putString(prefix+"projection","pending").remove(prefix+"interrupted").commit()) throw NativeSyncPolicy.failure("CACHE_WRITE", "Background status could not be saved.");return attempt; }
+    static synchronized void interrupted(Session session,String kind,String attempt)throws Exception {
+        session.check();String prefix=key(session)+":"+kind+":";SharedPreferences prefs=preferences(session.context);
+        if(!NativeBackgroundStatus.interruptionMatches(attempt,prefs.getString(prefix+"attemptToken",""),prefs.getString(prefix+"projection","pending")))return;
+        if(!prefs.edit().putString(prefix+"projection","incomplete").putBoolean(prefix+"interrupted",true).commit())throw NativeSyncPolicy.failure("CACHE_WRITE","Background interruption status could not be saved.");
+    }
+    static void downloaded(Session session,String kind)throws Exception {
+        session.check();String prefix=key(session)+":"+kind+":";
+        if(!preferences(session.context).edit().putString(prefix+"success",Instant.now().toString()).remove(prefix+"error").commit())throw NativeSyncPolicy.failure("CACHE_WRITE","Background download status could not be saved.");
+    }
     static void finished(Session session, String kind, Exception failure) throws Exception {
         session.check(); String prefix = key(session) + ":" + kind + ":"; SharedPreferences.Editor edit = preferences(session.context).edit();
         boolean revoked = false, denied = false;
-        if (failure == null) edit.putString(prefix + "success", Instant.now().toString()).remove(prefix + "error");
+        if (failure == null) edit.remove(prefix + "error");
         else {
             String code = failure instanceof NativeLoginFlow.Failure known ? known.code : "NETWORK";
             if ("CANCELLED".equals(code)) return;
             String message = failure instanceof NativeLoginFlow.Failure ? failure.getMessage() : "Nextcloud could not complete the background check. Retry after checking its connection.";
             String stage = preferences(session.context).getString(prefix + "stage", "discovery");
-            edit.putString(prefix + "error", ("discovery".equals(stage) ? "Discovery: " : "Downloading sources: ") + message);
+            edit.putString(prefix + "error", ("discovery".equals(stage) ? "Discovery: " : "projection".equals(stage) ? "Updating saved planner: " : "Downloading sources: ") + message).putString(prefix+"projection","incomplete");
             revoked = "AUTH".equals(code); denied = "PERMISSION".equals(code);
             if (revoked) session.cache().clear();
         }

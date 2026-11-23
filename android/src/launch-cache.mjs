@@ -1,6 +1,7 @@
 import {validateWorkspace, jsonValue} from '@nextspace/core/planner-schema.mjs'
 import {normalizeTheme} from '@nextspace/core/theme-cache.mjs'
 import {normalizeDeviceState, SOURCES, validRecord, validCollection, problem} from './foundation.mjs'
+import {restoreSourceStatuses} from '@nextspace/core/cached-sources.mjs'
 
 const clone = value => structuredClone(value)
 const omitUndefined = value => Array.isArray(value) ? value.map(omitUndefined) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([, field]) => field !== undefined).map(([key, field]) => [key, omitUndefined(field)])) : value
@@ -32,7 +33,7 @@ export function checkedLaunchCheckpoint(input, accountKey) {
   if (value.statuses.some(status => !SOURCES.includes(status.source) || !['connected', 'unavailable', 'error'].includes(status.state))) fail()
   value.records = value.records.map(record => ({...record, readonly: true}))
   value.collections = value.collections.map(collection => ({...collection, readonly: true}))
-  value.statuses = value.statuses.map(status => ({...status, state: 'unavailable', message: 'Saved on this device · checking for updates.'}))
+  value.statuses = restoreSourceStatuses(value.statuses,value.records)
   value.deviceState = normalizeDeviceState(value.deviceState)
   const theme = normalizeTheme(value.theme)
   if (theme) value.theme = theme

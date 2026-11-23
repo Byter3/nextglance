@@ -1,0 +1,39 @@
+/* Keep the weekend light even on white themes by using an off-white weekday grid. */
+:root {
+  --weekday-tint: color-mix(in srgb, var(--text) 1.25%, transparent);
+  --weekend-tint: color-mix(in srgb, white 2%, transparent);
+  --weekend-label: var(--weekday-tint);
+}
+:root[data-theme=dark] {
+  --weekday-tint: transparent;
+  --weekend-label: var(--weekend-tint);
+}
+
+:is(.calendar-day-heading, .calendar-day-track, .all-day-cell,
+    .month-weekdays > span, .timeline-days > div, .timeline-grid-lines > div,
+    .dates-day-grid > div, .dates-grid-lines > span, .week-heading > div,
+    .week-all-day-cell, .week-day-track):not(.today, .active-day, .range-selected) {
+  background-color: var(--weekday-tint);
+}
+:is(.calendar-day-heading, .calendar-day-track, .all-day-cell,
+    .month-weekdays > span, .timeline-days > div, .timeline-grid-lines > div,
+    .dates-day-grid > div, .dates-grid-lines > span, .week-heading > div,
+    .week-all-day-cell, .week-day-track).weekend:not(.today, .active-day, .range-selected) {
+  background-color: var(--weekend-tint);
+}
+
+.month-cell:not(.outside, .today, .range-selected) {
+  background-color: color-mix(in srgb, var(--weekday-tint), var(--surface));
+}
+.month-cell.weekend:not(.outside, .today, .range-selected) {
+  background-color: color-mix(in srgb, var(--weekend-tint), var(--surface));
+}
+.month-cell.outside.weekend:not(.today, .range-selected) {
+  background-color: color-mix(in srgb, var(--weekend-tint), var(--canvas));
+}
+
+.weekend-date {
+  padding-inline: 3px;
+  border-radius: 4px;
+  background-color: var(--weekend-label);
+}

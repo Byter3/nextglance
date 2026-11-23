@@ -120,8 +120,8 @@ test('real folder reader warm pass uses validators and probes only fresh existin
   assert.deepEqual((await f.folder.readWorkspace()).workspace.identities,[])
   assert.equal(f.calls.filter(call=>call.method==='GET').length,0)
   const inventory=f.calls.filter(call=>call.method==='PROPFIND'&&call.headers.Depth==='1')
-  assert.deepEqual(inventory.map(call=>call.path),[`${ROOT}/${GENERATION}`,`${ROOT}/${GENERATION}`])
-  assert.equal(f.calls.length,5,'manifest/legacy/import validators plus two authoritative root inventories')
+  assert.deepEqual(inventory.map(call=>call.path),[`${ROOT}/${GENERATION}`])
+  assert.equal(f.calls.length,4,'manifest/legacy/import validators and one authoritative inventory for an unchanged folder')
   f.workspace.relations.push({id:'fixture-link',type:'reference',fromId:'work',toId:'note'})
   const link=[...splitWorkspace(f.workspace)].find(([path])=>path.startsWith('links/'));f.set(`${ROOT}/${GENERATION}/${link[0]}`,link[1]);f.calls.length=0
   const next=await f.folder.readWorkspace();assert.equal(next.workspace.relations.length,1)

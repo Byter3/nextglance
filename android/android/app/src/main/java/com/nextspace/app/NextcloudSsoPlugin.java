@@ -85,12 +85,12 @@ public class NextcloudSsoPlugin extends Plugin {
         try{numeric=NativeCacheArguments.from(call);}catch(Exception error){reject(call,error);return;}
         final String currentOwner=call.getString("owner");final long ownerEpoch=numeric.ownerEpoch();
         try{privateCache().owner(currentOwner,ownerEpoch);}catch(Exception error){reject(call,error);return;}
-        localWork(call,cacheRequests,"Private cache transfer",timed->{
+        localWork(call,cacheRequests,"Private cache transfer",timed->NativeSyncRuntime.cacheOperation(()->{
             NativeCacheFile cache=privateCache();String path=call.getString("path"),token=call.getString("token"),owner=call.getString("owner");
             NativeCacheFile.Guard guard=()->{timed.check();cache.checkOwner(currentOwner,ownerEpoch);synchronized(this){if(epoch!=accountGeneration)throw new BridgeFailure("CANCELLED","The selected account changed.");}};
             guard.check();JSObject result=new JSObject();
             switch(call.getString("operation","")){
-                case "size":{Long size=cache.size(path);result.put("size",size==null?JSONObject.NULL:size);result.put("revision",cache.revision(path));break;}
+                case "size":{var stat=cache.stat(path,guard);result.put("size",stat.size()==null?JSONObject.NULL:stat.size());result.put("revision",stat.revision());result.put("prefix",stat.prefix());break;}
                 case "read":result.put("chunk",Base64.encodeToString(cache.read(path,numeric.offset(),numeric.length(),numeric.size(),call.getString("revision"),guard),Base64.NO_WRAP));break;
                 case "beginWrite":result.put("token",cache.begin(path,numeric.size(),epoch,owner,guard));break;
                 case "append":{
@@ -103,7 +103,7 @@ public class NextcloudSsoPlugin extends Plugin {
                 default:throw new BridgeFailure("VALIDATION","Unknown private cache operation.");
             }
             return result;
-        });
+        }));
     }
     private String diagnosticExport;
     private boolean diagnosticChooserOpen;

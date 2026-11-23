@@ -9,14 +9,142 @@ const bootstrap={appId:'nextglance',appVersion:'0.6.12',userId:'example-user',di
 const record={id:uid,source:'tasks',kind:'task',title:'Review draft',collectionId:'tasks-main',body:'Private description',readonly:false,completed:false,identity:{source:'tasks',key:'fixture-key'},remote:{raw:'private native data'}}
 const collection={id:'tasks-main',source:'tasks',title:'Example tasks',readonly:false,remote:{href:`${serverUrl}/remote.php/dav/calendars/example-user/tasks/`}}
 const statuses=['tasks','calendar','deck','notes','collectives'].map(source=>({source,state:'connected',count:source==='tasks'?1:0}))
-function fixture({readError,writeError,beforeWrite,clientOverrides={},initialIdentities=[],bootstrapFor=()=>bootstrap}={}){
+const historyWindow={from:Date.parse('2001-01-01T00:00:00Z'),to:Date.parse('2001-02-01T00:00:00Z')}
+const otherWindow={from:Date.parse('2002-01-01T00:00:00Z'),to:Date.parse('2002-02-01T00:00:00Z')}
+const historyCalendar={id:'calendar-main',source:'calendar',title:'Studio bookings',readonly:false,remote:{href:`${serverUrl}/remote.php/dav/calendars/example-user/studio/`}}
+const historyEvent=(title,date)=>({id:title,source:'calendar',kind:'event',title,collectionId:historyCalendar.id,readonly:false,etag:'one',start:date,end:date,identity:{source:'calendar',key:title},eventAccess:{editDetails:true,editReminders:true,editAttendees:false,respond:false,delete:true},remote:{href:historyCalendar.remote.href+title+'.ics',uid:title}})
+const historyResult=(records,state='connected',extra={})=>({records,collections:[historyCalendar],statuses:[{source:'calendar',state,count:records.length,...extra}]})
+const primaryHistoryResult=()=>({records:[record,historyEvent('Recent','2026-11-23T10:00:00Z')],collections:[collection,historyCalendar],statuses})
+const historyNow=()=>new Date('2026-11-23T12:00:00Z')
+const tick=()=>new Promise(resolve=>setImmediate(resolve))
+function fixture({readError,writeError,beforeWrite,clientOverrides={},initialIdentities=[],bootstrapFor=()=>bootstrap,now}={}){
   let workspace=createPlannerWorkspace(),version=1,writeCalls=0
   workspace.identities=[{id:uid,source:'tasks',key:'fixture-key',aliases:[]},...initialIdentities]
   const native={readAll:async()=>({records:[record],collections:[collection],statuses}),savedRecord:async(previous,col,saved)=>({...previous,...saved}),setTaskCompleted:async input=>({completed:input.completed}),...clientOverrides}
-  const options={origin:'https://cloud.example.test',sessionUrl,requestToken:()=> 'fixture-token',fetch:async()=>new Response(JSON.stringify(bootstrapFor()),{headers:{'Content-Type':'application/json'}}),createClient:()=>native,createFolder:()=>({readWorkspace:async()=>{if(readError)throw readError;return {workspace:structuredClone(workspace),etag:String(version)}},writeWorkspace:async(next,etag)=>{writeCalls++;await beforeWrite?.(next,writeCalls);if(writeError)throw writeError;if(etag!==String(version))throw Object.assign(new Error('changed'),{code:'CONFLICT'});workspace=structuredClone(next);return {workspace,etag:String(++version)}}})}
+  const options={now,origin:'https://cloud.example.test',sessionUrl,requestToken:()=> 'fixture-token',fetch:async()=>new Response(JSON.stringify(bootstrapFor()),{headers:{'Content-Type':'application/json'}}),createClient:()=>native,createFolder:()=>({readWorkspace:async()=>{if(readError)throw readError;return {workspace:structuredClone(workspace),etag:String(version)}},writeWorkspace:async(next,etag)=>{writeCalls++;await beforeWrite?.(next,writeCalls);if(writeError)throw writeError;if(etag!==String(version))throw Object.assign(new Error('changed'),{code:'CONFLICT'});workspace=structuredClone(next);return {workspace,etag:String(++version)}}})}
   const api=createWebController(options)
   return {api,native,options,get writes(){return writeCalls},get cloud(){return workspace},changeCloud(fn){workspace=fn(structuredClone(workspace));version++}}
 }
+
+test('ordinary source reads leave planner metadata alone and explicit references retain their projected IDs',async()=>{
+  const event={...historyEvent('Studio planning','2026-11-23T10:00:00Z'),identity:{source:'calendar',key:'0123456789abcdef:calendar:studio-event',locator:'https://cloud.example.test/private.ics'}}
+  const task={...record,id:'native-task-row',identity:{source:'tasks',key:'0123456789abcdef:tasks:studio-task',locator:'https://cloud.example.test/private-task.ics',aliases:['old-task']}}
+  const f=fixture({clientOverrides:{readAll:async()=>{const value=historyResult([event]);return {records:[...value.records,task],collections:[...value.collections,collection],statuses:[...value.statuses,...statuses.filter(item=>item.source==='tasks')]}}}})
+  await f.api.getState();const current=await f.api.refresh()
+  const projected=current.records.find(item=>item.source==='calendar'), projectedTask=current.records.find(item=>item.source==='tasks')
+  assert.match(projected.id,/^native-[a-f0-9]{64}$/);assert.equal(projected.identity,undefined)
+  assert.deepEqual(projectedTask.identity,{source:'tasks',key:task.identity.key});assert.equal(f.writes,0)
+  const workspace=structuredClone(current.workspace)
+  workspace.relations.push({id:'studio-work-session',type:'scheduled_during',fromId:projectedTask.id,toId:projected.id})
+  const saved=await f.api.saveWorkspace(workspace,current.revision)
+  assert.equal(f.writes,1);assert.deepEqual(saved.workspace.relations,workspace.relations)
+  assert.ok(saved.workspace.identities.some(entry=>entry.id===projected.id&&entry.key===event.identity.key))
+  assert.ok(saved.workspace.identities.some(entry=>entry.id===projectedTask.id&&entry.key===task.identity.key));f.api.dispose()
+})
+
+test('Web historical navigation reads only Calendar, coalesces coverage and bounds retained ranges',async()=>{
+  const requests=[];const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>{requests.push(input);return input.sources?historyResult([historyEvent(input.calendarWindow.from===historyWindow.from?'Older':'Other','2001-01-12T10:00:00Z')]):primaryHistoryResult()}}})
+  await f.api.getState();await f.api.refresh();const baseReads=requests.length
+  await f.api.readCalendarWindow({from:Date.parse('2026-11-20T00:00:00Z'),to:Date.parse('2026-11-28T00:00:00Z')});assert.equal(requests.length,baseReads)
+  let state=await f.api.readCalendarWindow(historyWindow)
+  assert.deepEqual(requests.at(-1).sources,['calendar']);assert.deepEqual(requests.at(-1).calendarWindow,historyWindow)
+  assert.deepEqual(state.records.map(row=>row.title).sort(),['Older','Recent','Review draft']);const id=state.records.find(row=>row.title==='Recent').id
+  await f.api.readCalendarWindow({from:historyWindow.from+86400000,to:historyWindow.to-86400000});assert.equal(requests.length,baseReads+1)
+  state=await f.api.readCalendarWindow(otherWindow);assert.deepEqual(state.records.map(row=>row.title).sort(),['Other','Recent','Review draft'])
+  state=await f.api.readCalendarWindow({from:Date.parse('2026-11-20T00:00:00Z'),to:Date.parse('2026-11-28T00:00:00Z')})
+  assert.deepEqual(state.records.map(row=>row.title).sort(),['Recent','Review draft']);assert.equal(state.records.find(row=>row.title==='Recent').id,id)
+  assert.equal(state.records.find(row=>row.title==='Review draft').id,uid);f.api.dispose()
+})
+
+test('Web rejects oversized or invalid historical requests before reading sources',async()=>{
+  let reads=0;const f=fixture({clientOverrides:{readAll:async()=>{reads++;return primaryHistoryResult()}}})
+  for(const input of [{from:0,to:121*86400000},{from:4,to:3},{from:'0',to:4}])await assert.rejects(f.api.readCalendarWindow(input),{code:'VALIDATION'})
+  assert.equal(reads,0);f.api.dispose()
+})
+
+test('an unrelated native denial cannot retain an obsolete historical Calendar range',async()=>{
+  const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>!input.sources?primaryHistoryResult():historyResult([historyEvent('Older','2001-01-12T10:00:00Z')]),setTaskCompleted:async()=>{throw Object.assign(new Error('Destination read only'),{code:'PERMISSION',nativePermissionDenied:{source:'tasks',collectionId:collection.id}})}}})
+  await f.api.getState();await f.api.refresh();await f.api.readCalendarWindow(historyWindow)
+  await assert.rejects(f.api.setTaskCompleted({id:uid,completed:true}),{code:'PERMISSION'})
+  const state=await f.api.readCalendarWindow({from:Date.parse('2026-11-20T00:00:00Z'),to:Date.parse('2026-11-28T00:00:00Z')})
+  assert.ok(state.records.some(row=>row.title==='Recent'));assert.ok(!state.records.some(row=>row.title==='Older'));assert.equal(state.nativeWriteSources.includes('calendar'),true);f.api.dispose()
+})
+
+test('rapid historical navigation abandons the obsolete result and keeps only the latest range',async()=>{
+  let finish,rangeReads=0;const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>{if(!input.sources)return primaryHistoryResult();if(++rangeReads===1)return new Promise(resolve=>{finish=resolve});return historyResult([historyEvent('Latest','2002-01-12T10:00:00Z')])}}})
+  await f.api.getState();await f.api.refresh();const first=f.api.readCalendarWindow(historyWindow);while(!finish)await tick()
+  const latest=f.api.readCalendarWindow(otherWindow);finish(historyResult([historyEvent('Obsolete','2001-01-12T10:00:00Z')]))
+  await first;const state=await latest;assert.equal(rangeReads,2);assert.ok(state.records.some(row=>row.title==='Latest'));assert.ok(!state.records.some(row=>row.title==='Obsolete'));f.api.dispose()
+})
+
+test('partial history stays retryable and does not replace unrelated source status',async()=>{
+  let rangeReads=0;const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>!input.sources?primaryHistoryResult():historyResult([historyEvent('Older','2001-01-12T10:00:00Z')],++rangeReads===1?'error':'connected')}})
+  await f.api.getState();await f.api.refresh();let state=await f.api.readCalendarWindow(historyWindow)
+  assert.equal(state.statuses.find(value=>value.source==='calendar').state,'error');assert.equal(state.statuses.find(value=>value.source==='tasks').state,'connected')
+  state=await f.api.readCalendarWindow(historyWindow);assert.equal(rangeReads,2);assert.equal(state.statuses.find(value=>value.source==='calendar').state,'connected');f.api.dispose()
+})
+
+test('a thrown history timeout leaves recent data usable and retries without another full sync',async()=>{
+  let rangeReads=0,allReads=0;const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>{if(!input.sources){allReads++;return primaryHistoryResult()}if(++rangeReads===1)throw Object.assign(new Error('History timed out'),{code:'TIMEOUT'});return historyResult([historyEvent('Recovered','2001-01-12T10:00:00Z')])}}})
+  await f.api.getState();await f.api.refresh();const before=allReads;let state=await f.api.readCalendarWindow(historyWindow)
+  assert.equal(f.api.getHostState().phase,'ready');assert.equal(state.statuses.find(value=>value.source==='calendar').errorCode,'TIMEOUT');assert.ok(state.records.some(row=>row.title==='Recent'))
+  state=await f.api.readCalendarWindow(historyWindow);assert.equal(rangeReads,2);assert.equal(allReads,before);assert.ok(state.records.some(row=>row.title==='Recovered'));f.api.dispose()
+})
+
+test('a full refresh serializes against history and reloads the currently requested additional range',async()=>{
+  let finish,rangeReads=0,activeReads=0,maximumReads=0
+  const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>{activeReads++;maximumReads=Math.max(maximumReads,activeReads);try{if(!input.sources)return primaryHistoryResult();if(++rangeReads===1)return await new Promise(resolve=>{finish=resolve});return historyResult([historyEvent('After refresh','2001-01-12T10:00:00Z')])}finally{activeReads--}}}})
+  await f.api.getState();await f.api.refresh();const range=f.api.readCalendarWindow(historyWindow);while(!finish)await tick()
+  const refresh=f.api.refresh();await tick();assert.equal(maximumReads,1);finish(historyResult([historyEvent('Obsolete range','2001-01-12T10:00:00Z')]))
+  await refresh;await range;const state=await f.api.readCalendarWindow(historyWindow)
+  assert.equal(maximumReads,1);assert.equal(rangeReads,2);assert.ok(state.records.some(row=>row.title==='After refresh'));assert.ok(!state.records.some(row=>row.title==='Obsolete range'));f.api.dispose()
+})
+
+test('a changed recent event during history projection keeps its acknowledged edit and stable identity',async()=>{
+  let finish;const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>!input.sources?primaryHistoryResult():new Promise(resolve=>{finish=resolve}),updateEvent:async input=>({title:input.title,etag:'two'})}})
+  await f.api.getState();let state=await f.api.refresh();const id=state.records.find(row=>row.title==='Recent').id
+  const range=f.api.readCalendarWindow(historyWindow);while(!finish)await tick();await f.api.updateEvent({id,title:'Edited recent',etag:'one'})
+  finish(historyResult([historyEvent('Older','2001-01-12T10:00:00Z')]))
+  state=await range;assert.equal(state.records.find(row=>row.id===id).title,'Edited recent');assert.equal(state.records.find(row=>row.id===id).etag,'two')
+  state=await f.api.readCalendarWindow({from:Date.parse('2026-11-20T00:00:00Z'),to:Date.parse('2026-11-28T00:00:00Z')});assert.equal(state.records.find(row=>row.id===id).title,'Edited recent');f.api.dispose()
+})
+
+test('a stale range resource cannot remove a newer edit from the retained recent snapshot',async()=>{
+  let finish;const older=historyEvent('Older','2001-01-12T10:00:00Z')
+  const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>!input.sources?{...primaryHistoryResult(),records:[record,older]}:new Promise(resolve=>{finish=resolve}),updateEvent:async input=>({title:input.title,start:input.start,end:input.end,etag:'new'})}})
+  await f.api.getState();let state=await f.api.refresh();const id=state.records.find(row=>row.title==='Older').id
+  const range=f.api.readCalendarWindow(historyWindow);while(!finish)await tick()
+  await f.api.updateEvent({id,title:'Moved booking',start:'2026-11-23T09:00:00Z',end:'2026-11-23T10:00:00Z',etag:'one'})
+  finish(historyResult([older]));state=await range;assert.equal(state.records.find(row=>row.id===id).title,'Moved booking')
+  // Changing range drops only range-owned rows, even before its replacement request returns.
+  finish=undefined;const back=f.api.readCalendarWindow({from:Date.parse('2026-11-20T00:00:00Z'),to:Date.parse('2026-11-28T00:00:00Z')});while(!finish)await tick()
+  state=await f.api.getState();assert.equal(state.records.find(row=>row.id===id)?.title,'Moved booking')
+  finish(historyResult([{...older,title:'Moved booking',start:'2026-11-23T09:00:00Z',end:'2026-11-23T10:00:00Z',etag:'new'}]));await back
+  f.api.dispose()
+})
+
+test('historical completion cannot resurrect deletion or undo a concurrent task edit',async()=>{
+  let finish,rangeReads=0,deleted=false;const older=historyEvent('Older','2001-01-12T10:00:00Z')
+  const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>!input.sources?primaryHistoryResult():++rangeReads===1?historyResult([older],'error'):rangeReads===2?new Promise(resolve=>{finish=resolve}):historyResult(deleted?[]:[older]),deleteEvent:async()=>{deleted=true;return {deleted:true}}}})
+  await f.api.getState();await f.api.refresh();let state=await f.api.readCalendarWindow(historyWindow);const id=state.records.find(value=>value.title==='Older').id
+  const retry=f.api.readCalendarWindow(historyWindow);while(!finish)await tick()
+  await f.api.deleteEvent({id});await f.api.setTaskCompleted({id:uid,completed:true});finish(historyResult([older]))
+  state=await retry;assert.ok(!state.records.some(value=>value.title==='Older'));assert.equal(state.records.filter(value=>value.id===uid).length,1);assert.equal(state.records.find(value=>value.id===uid).completed,true)
+  await f.api.refresh();state=await f.api.readCalendarWindow(historyWindow);assert.ok(!state.records.some(value=>value.title==='Older'));f.api.dispose()
+})
+
+test('historical source denial clears Calendar ranges without hiding tasks',async()=>{
+  const f=fixture({now:historyNow,clientOverrides:{readAll:async input=>!input.sources?primaryHistoryResult():{records:[],collections:[],statuses:[{source:'calendar',state:'error',permissionDenied:true}]}}})
+  await f.api.getState();await f.api.refresh();const state=await f.api.readCalendarWindow(historyWindow)
+  assert.deepEqual(state.records.map(row=>row.title),['Review draft']);assert.ok(!state.nativeWriteSources.includes('calendar'));assert.ok(state.nativeWriteSources.includes('tasks'));f.api.dispose()
+})
+
+test('session expiry fences a delayed historical result and removes all private ranges',async()=>{
+  let finish,switched=false,last;const f=fixture({now:historyNow,bootstrapFor:()=>({...bootstrap,userId:switched?'other-user':'example-user'}),clientOverrides:{readAll:async input=>!input.sources?primaryHistoryResult():new Promise(resolve=>{finish=resolve})}})
+  f.api.subscribe(state=>last=state);await f.api.getState();await f.api.refresh();const pending=f.api.readCalendarWindow(historyWindow);while(!finish)await tick()
+  switched=true;await assert.rejects(f.api.setTaskCompleted({id:uid,completed:true}),{code:'AUTH'});finish(historyResult([historyEvent('Old session','2001-01-12T10:00:00Z')]))
+  await assert.rejects(pending,{code:'CANCELLED'});assert.equal(last.records.length,0);assert.equal(f.api.getHostState().phase,'expired');f.api.dispose()
+})
 test('authenticated initialization reads remote organization and refreshes actual source records',async()=>{
   const f=fixture();await f.api.getState();const state=await f.api.refresh()
   assert.equal(f.api.getHostState().phase,'ready');assert.equal(state.connection.username,'example-user');assert.equal(state.records[0].title,'Review draft');assert.equal(state.records[0].remote,undefined);assert.equal(state.collections[0].remote,undefined)

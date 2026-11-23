@@ -5,7 +5,8 @@ A planner for **Windows, Android and Nextcloud** that combines Calendar, Tasks, 
 This is an **early development project**, licensed **AGPL-3.0-or-later** for project-owned code. Source and the Nextcloud server app are intended to be free of charge; store clients may be paid. See [license](LICENSE) and [third-party obligations](NOTICE.md). Automated checks are available, but physical-device performance and real Nextcloud 34/35 acceptance remain in progress.
 
 - **Using the app:** [short illustrated guide](docs/GETTING-STARTED.md).
-- **Local packages and checksums:** [release evidence](docs/RELEASES.md). Windows artifacts live under `win/release/`; Android artifacts under `android/release/`.
+- **Android home screen:** [illustrated widget examples](docs/WIDGET-EXAMPLES.md).
+- **Version 0.6.27:** [release notes](docs/RELEASE-NOTES-0.6.27.md) and [local packages and checksums](docs/RELEASES.md#0627--windows-android-and-nextcloud).
 - **Development:** [architecture](docs/PLATFORM-ARCHITECTURE.md), [verification](docs/VERIFICATION.md), [Windows](win/README.md), [Android](android/README.md), [Nextcloud app](web/README.md), [manual server installation](web/DEPLOYMENT.md).
 - **Behavior authority:** [specification](specs/BEHAVIOR_SPEC.md), [feature parity](specs/FEATURE_PARITY.md), [shared test vectors](specs/TEST_VECTORS.json). Read [AGENTS.md](AGENTS.md) before changing clients.
 

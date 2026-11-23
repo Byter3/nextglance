@@ -16,11 +16,22 @@ function timestamp(value?:string){return value&&Number.isFinite(Date.parse(value
     <p class="field-hint">Saved items open first. Automatic checks download changed files. Refresh sources checks immediately, including on mobile data.</p>
     <p v-if="sync.background?.supported" class="field-hint">{{sync.background.scheduled?'Background checks are scheduled.':'Background checks are not scheduled.'}} Android chooses the exact run time and may defer checks to save battery. Force-stopping the app pauses them until you reopen it.</p>
     <p v-else class="field-hint">This preview checks while it is open. Background checks require the Android app.</p>
-    <p class="field-hint">Planner files check when you open or return to the app. Local changes upload automatically. Notes and Collectives check on opening and while the app is active.</p>
-    <p v-if="sync.background?.lastAttemptAt" class="sync-diagnostic">Last background check: {{timestamp(sync.background.lastAttemptAt)}}<br/>Last successful background download: {{timestamp(sync.background.lastSuccessAt)}}</p>
-    <p v-if="sync.background?.error" class="storage-message" role="status">{{sync.background.error}}</p>
-    <p v-if="sync.background?.message" class="field-hint" role="status">{{sync.background.message}}</p>
-    <p v-if="sync.background?.readGenerationAt" class="sync-diagnostic">Saved background planner: {{timestamp(sync.background.readGenerationAt)}}</p>
+    <p class="field-hint">Planner files check when you open or return to the app, or when an allowed connection returns after an offline opening. Local changes upload automatically. Notes and Collectives check while the app is active.</p>
+    <p v-if="sync.foregroundError" class="storage-message" role="status">{{sync.foregroundError}}</p>
+    <template v-if="sync.background?.sources">
+      <div v-for="(source,kind) in sync.background.sources" :key="kind" class="sync-diagnostic">
+        <strong>{{kind==='caldav'?'Calendar & Tasks':'Deck'}}</strong> · {{!source.enabled?'Manual only':source.scheduled?'Scheduled':'Not scheduled'}}<br/>
+        Last background check: {{timestamp(source.lastAttemptAt)}}<br/>
+        Downloaded: {{timestamp(source.downloadedAt)}}<br/>
+        Saved planner data: {{timestamp(source.readGenerationAt)}}
+        <p v-if="source.message" role="status">{{source.message}}</p>
+        <p v-if="source.error" class="storage-message" role="status">{{source.error}}</p>
+      </div>
+    </template>
+    <p v-else-if="sync.background?.lastAttemptAt" class="sync-diagnostic">Last background check: {{timestamp(sync.background.lastAttemptAt)}}<br/>Last successful background download: {{timestamp(sync.background.lastSuccessAt)}}</p>
+    <p v-if="!sync.background?.sources&&sync.background?.error" class="storage-message" role="status">{{sync.background.error}}</p>
+    <p v-if="!sync.background?.sources&&sync.background?.message" class="field-hint" role="status">{{sync.background.message}}</p>
+    <p v-if="!sync.background?.sources&&sync.background?.readGenerationAt" class="sync-diagnostic">Saved background planner: {{timestamp(sync.background.readGenerationAt)}}</p>
     <p v-if="error" class="storage-message" role="alert">{{error}}</p>
     <p v-if="busy" class="field-hint" role="status">Saving sync settings…</p>
   </section>

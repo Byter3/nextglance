@@ -1,5 +1,5 @@
 export const SYNC_INTERVALS = Object.freeze([0, 15, 30, 60, 240])
-const defaults = Object.freeze({caldavMinutes:15, deckMinutes:15, wifiOnly:false})
+const defaults = Object.freeze({caldavMinutes:60, deckMinutes:60, wifiOnly:false})
 const groups = Object.freeze({caldav:['tasks','calendar'], deck:['deck'], other:['notes','collectives']})
 const plain = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 
@@ -25,18 +25,19 @@ const successfulAt = (statuses, names) => {
 }
 
 /** Scheduling decisions use injected wall-clock time; no timers or UI imports. */
-export function dueSyncSources(settings, statuses, lastAttempts, now, {includeOthers = true} = {}) {
+export function dueSyncSources(settings, statuses, lastAttempts, now, {includeOthers = true, independentAccessSources = []} = {}) {
   if (!Number.isFinite(now)) return []
   const normalized = normalizeSyncSettings(settings), result = []
+  const independent = new Set(Array.isArray(independentAccessSources) ? independentAccessSources.filter(source => [...groups.caldav, ...groups.deck].includes(source)) : [])
   for (const [group, names] of Object.entries(groups)) {
     if (group === 'other' && !includeOthers) continue
     const minutes = group === 'other' ? 15 : normalized[`${group}Minutes`]
     if (!minutes) continue
     const attempted = instant(lastAttempts?.[group])
     const last = Math.max(successfulAt(statuses, names), Number.isFinite(attempted) ? attempted : 0)
-    // A prior process's successful timestamp is not fresh permission evidence.
-    // Verify restored sources once, then back off failed attempts normally.
-    const unverified = !Number.isFinite(attempted) && names.some(name => statuses?.find(status => status.source === name)?.state === 'unavailable')
+    // Current permissions are checked separately by opted-in hosts. That check
+    // does not make cached content fresh or force another body scan on open.
+    const unverified = !Number.isFinite(attempted) && names.some(name => !independent.has(name) && statuses?.find(status => status.source === name)?.state === 'unavailable')
     // A backwards clock must not suppress checks indefinitely.
     if (unverified || !last || last > now || now - last >= minutes * 60_000) result.push(...names)
   }

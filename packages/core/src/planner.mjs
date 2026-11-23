@@ -2,6 +2,7 @@
 import { normalizeStatusMapping, mappedBoardColumns, effectiveStatusMapping, filterUnifiedStatuses } from './status-mapping.mjs'
 import { normalizeArrangements } from './planning-order.mjs'
 import { organizationMembership, organizationSourcePool } from './organization-tags.mjs'
+import { boardCompletionVisible } from './history.mjs'
 const SOURCES = ['tasks', 'calendar', 'deck', 'notes', 'collectives']
 const VIEWS = ['overview', 'calendar', 'timeline', 'board', 'list']
 const ASSOCIATIONS = new Set(['for_event', 'scheduled_during', 'reference'])
@@ -334,6 +335,9 @@ export function selectPlanner(state, overrides = {}) {
   const workspace = state.workspace
   const settings = selectionSettings(workspace, overrides)
   const now = overrides.now && validDate(overrides.now) ? new Date(overrides.now) : new Date()
+  const filterCompletion = records => settings.view === 'board' && overrides.boardCompletedDays !== undefined
+    ? records.filter(record=>boardCompletionVisible(record,overrides.boardCompletedDays,+now,settings.showCompleted))
+    : filterCompletedWork(records,relations,settings.view,settings.showCompleted)
   const today = localDay(now)
   const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
   const query = String(overrides.query || '').trim().toLocaleLowerCase()
@@ -344,11 +348,13 @@ export function selectPlanner(state, overrides = {}) {
   const scopeIds = scopeRecordIds(workspace, base, settings.scopeId,membership)
   // Spaces are independent saved views, never visibility owners in My overview.
   // Keep accepting the old device field without letting stale exclusions hide work.
+  // Hosts may narrow an already authorized selection without removing graph
+  // members needed to resolve contextual scope, relations and status mapping.
   const inScope = base.filter(record => scopeIds.has(record.id))
   const relations = allRelations(workspace, records)
-  const openScope = filterCompletedWork(inScope,relations,settings.view,settings.showCompleted)
+  const openScope = filterCompletion(inScope)
   const eligible = inScope.filter(record => assignmentMatches(record, settings, state.connection?.username))
-  const selected = filterCompletedWork(filterUnifiedStatuses(eligible.filter(record => matchesQuery(record, query)),effectiveStatusMapping(workspace,settings.scopeId,state.collections),overrides.statusIds),relations,settings.view,settings.showCompleted)
+  const selected = filterCompletion(filterUnifiedStatuses(eligible.filter(record => matchesQuery(record, query)),effectiveStatusMapping(workspace,settings.scopeId,state.collections),overrides.statusIds))
   const primaryIds = settings.scopeId === 'all' ? scopeIds : baseScopeRecordIds(workspace, base, settings.scopeId,membership)
   const contextRecordIds = selected.filter(record => !primaryIds.has(record.id)).map(record => record.id)
   const actions = selected.filter(action)

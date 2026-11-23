@@ -6,5 +6,6 @@ methods.push('readNote', 'readNoteTags', 'setNoteTags', 'createDeckLabel', 'list
 methods.push('deleteEvent')
 methods.push('respondToEvent')
 methods.push('getViewPreferences', 'saveViewPreferences')
+methods.push('setCalendarHistoryDays')
 const api = Object.fromEntries(methods.map(method => [method, (...args) => ipcRenderer.invoke(`nextspace:${method}`, ...args)]))
 contextBridge.exposeInMainWorld('workspaceApi', Object.freeze(api))

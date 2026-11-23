@@ -1,3 +1,4 @@
+import {hasSavedSourceRead} from './cached-sources.mjs'
 const sourceNames = {tasks:'Tasks', calendar:'Calendar', deck:'Deck', notes:'Notes', collectives:'Collectives'}
 const notice = (kind, message, action, actionLabel, tone='warning') => ({kind, tone, message, action, actionLabel})
 
@@ -42,6 +43,7 @@ export function syncNotice({connection, storage={}, statuses=[], networkOnline=t
   }
   if (!networkOnline) return notice('connection', 'Offline. Loaded items remain available.', null, null)
   if (refreshing) return null
+  if (!connection.connected && hasSavedSourceRead(statuses)) return notice('source', 'Saved data is available. Checking Nextcloud access.', null, null, 'info')
   if (!connection.connected) return notice('source', 'Source data has not been checked yet.', 'retry-sources', 'Refresh', 'info')
   return null
 }

@@ -281,6 +281,61 @@ test('source identities reconcile to existing shared UUIDs and preserve unavaila
   assert.equal(store.getState().workspace.identities[0].id, 'shared-id')
 })
 
+test('large portable history projects without expanding planner metadata and promotes only referenced work', async () => {
+  const remote = await seed(cloud()), {store, storage} = await mobile(remote)
+  await store.sync()
+  const before = store.getState(), writesBefore = remote.writes.length
+  const records = Array.from({length: 9_750}, (_, index) => {
+    const source = index < 7_750 ? 'calendar' : 'tasks'
+    return {id: `source-${index}`, source, kind: source === 'calendar' ? 'event' : 'task', title: `Fictional item ${index}`,
+      identity: {source, key: `0123456789abcdef:${source}:fixture-${index}`, locator: `https://cloud.example.test/calendars/fixture/${'x'.repeat(900)}/${index}.ics`}}
+  })
+  const projected = await store.reconcileRecords(records)
+  assert.equal(projected.records.length, 9_750)
+  assert.deepEqual(projected.workspace, before.workspace)
+  assert.equal(projected.storage.syncStatus, 'synced')
+  assert.equal(projected.revision, before.revision)
+  const task = projected.records.at(-1)
+  assert.match(task.id, /^native-[a-f0-9]{64}$/)
+  const edited = clone(projected.workspace)
+  edited.properties[task.id] = {estimate: 30}
+  await store.saveWorkspace(edited, projected.revision, projected.records)
+  assert.equal(store.getState().workspace.identities.length, before.workspace.identities.length + 1)
+  assert.equal(store.getState().workspace.identities.at(-1).id, task.id)
+  await store.sync()
+  assert.equal(store.getState().storage.syncStatus, 'synced')
+  assert.ok(remote.writes.length > writesBefore)
+  const restart = (await mobile(remote, storage)).store
+  const again = await restart.reconcileRecords(records)
+  assert.equal(again.records.at(-1).id, task.id)
+  assert.equal(again.workspace.identities.length, 1)
+  assert.equal(again.storage.syncStatus, 'synced')
+})
+
+test('metadata cache rejection preserves valid projected rows and last valid workspace independently', async () => {
+  const remote = await seed(cloud()), storage = disk()
+  let rejectRegistry = false
+  const real = storage.cache()
+  const cache = {...real, save: async (key, value, options) => {
+    if (rejectRegistry && value.workspace.identities.length) throw Object.assign(new Error('Fictional storage rejection'), {code:'LIMIT'})
+    return real.save(key, value, options)
+  }}
+  const store = createMetadataStore({cache, key:KEY, client:remote, makeId:()=> '11111111-1111-4111-8111-111111111111'})
+  await store.load(); await store.sync()
+  const before = store.getState()
+  rejectRegistry = true
+  const records = [{id:'legacy-row', source:'tasks', kind:'task', title:'Legacy task', identity:{source:'tasks',key:'legacy-fixture'}}]
+  const resolved = await store.reconcileRecords(records)
+  assert.equal(resolved.records.length, 1)
+  assert.equal(resolved.records[0].id, '11111111-1111-4111-8111-111111111111')
+  assert.deepEqual(resolved.workspace, before.workspace)
+  assert.equal(resolved.revision, before.revision)
+  assert.equal(resolved.storage.syncStatus, 'error')
+  assert.equal(resolved.storage.errorStage, 'local-cache')
+  assert.equal(resolved.storage.errorCode, 'LIMIT')
+  assert.equal((await mobile(remote, storage)).store.getState().storage.errorCode, 'LIMIT')
+})
+
 test('either conflict choice preserves remote canonical UUIDs in curated project items', async () => {
   for (const choice of ['local', 'remote']) {
     const remote = await seed(cloud()), a = (await mobile(remote)).store, b = (await mobile(remote, disk(), OTHER_KEY)).store

@@ -28,7 +28,7 @@ test('public source snapshots preserve native fields and strip private locators 
   saved.collections = [{id:'board',source:'deck',title:'Board',readonly:false,remote:{boardId:4}}]
   const snapshot = publicSnapshot(saved)
   assert.equal(snapshot.records[0].readonly, false); assert.equal(snapshot.records[0].completed, false)
-  assert.equal(snapshot.records[0].remote, undefined); assert.equal(snapshot.records[0].identity, undefined)
+  assert.equal(snapshot.records[0].remote, undefined); assert.deepEqual(snapshot.records[0].identity, {source:'deck',key:'native-key'})
   assert.equal(snapshot.collections[0].remote, undefined)
   assert.deepEqual(snapshot.records[0].nativeDependencies, ['prerequisite'])
   snapshot.records[0].title = 'Caller edit'; assert.equal(saved.records[0].title, 'Native card')
@@ -48,6 +48,29 @@ test('public snapshots never visit private source bodies and isolate all nested 
   assert.deepEqual(second.records[0].tags, ['Work'])
   assert.equal(second.records[0].remote.category, 'Work')
   assert.deepEqual(saved.records[0].tags, ['Work'])
+})
+
+test('task/card receipt identities expose only their portable key and no native locators or aliases', () => {
+  const saved = state()
+  saved.records = ['tasks','deck','calendar'].map(source=>({id:source,source,kind:source==='tasks'?'task':source==='deck'?'card':'event',title:'Fixture',identity:{source,key:`0123456789abcdef:${source}:fixture`,locator:'https://cloud.example.test/private/item',aliases:['old-private-locator']}}))
+  const view = publicSnapshot(saved)
+  assert.deepEqual(view.records[0].identity,{source:'tasks',key:'0123456789abcdef:tasks:fixture'})
+  assert.deepEqual(view.records[1].identity,{source:'deck',key:'0123456789abcdef:deck:fixture'})
+  assert.equal(view.records[2].identity,undefined)
+  view.records[0].identity.key='caller-change'
+  assert.equal(saved.records[0].identity.key,'0123456789abcdef:tasks:fixture')
+})
+
+test('cached successful source history cannot grant public write authority through legacy status fallback',()=>{
+  const saved=state()
+  saved.statuses=saved.statuses.map(status=>({...status,cached:true,lastSyncedAt:'2026-11-12T12:00:00Z'}))
+  saved.records=[{id:'task',source:'tasks',kind:'task',title:'Saved task',collectionId:'tasks',readonly:false}]
+  saved.collections=[{id:'tasks',source:'tasks',title:'Tasks',readonly:false}]
+  const restored=publicSnapshot(saved)
+  assert.equal(restored.records[0].readonly,true);assert.equal(restored.collections[0].readonly,true)
+  assert.equal(restored.statuses[0].state,'connected');assert.equal(restored.statuses[0].cached,true)
+  const verified=publicSnapshot({...saved,nativeWriteSources:['tasks']})
+  assert.equal(verified.records[0].readonly,false);assert.equal(verified.collections[0].readonly,false)
 })
 
 test('refresh preserves only known optional metadata and honors explicit empty values', () => {

@@ -150,8 +150,8 @@ test('task completion matches Nextcloud timestamp and status semantics independe
   const { client } = fixture(() => assert.fail('No network required'));
   const cases = [
     { properties: ['STATUS:COMPLETED'], completed: true, status: 'COMPLETED' },
-    { properties: ['COMPLETED:20261022T120000Z'], completed: true },
-    { properties: ['STATUS:NEEDS-ACTION', 'COMPLETED:20261022T120000Z', 'PERCENT-COMPLETE:0'], completed: true, status: 'NEEDS-ACTION', percent: 0 },
+    { properties: ['COMPLETED:20261022T120000Z'], completed: true, completedAt: '2026-10-22T12:00:00.000Z' },
+    { properties: ['STATUS:NEEDS-ACTION', 'COMPLETED:20261022T120000Z', 'PERCENT-COMPLETE:0'], completed: true, completedAt: '2026-10-22T12:00:00.000Z', status: 'NEEDS-ACTION', percent: 0 },
     { properties: ['STATUS:COMPLETED', 'PERCENT-COMPLETE:25'], completed: true, status: 'COMPLETED', percent: 25 },
     { properties: ['PERCENT-COMPLETE:100'], completed: false, percent: 100 },
     { properties: ['STATUS:IN-PROCESS', 'PERCENT-COMPLETE:40'], completed: false, status: 'IN-PROCESS', percent: 40 },
@@ -166,6 +166,7 @@ test('task completion matches Nextcloud timestamp and status semantics independe
     const raw = ics(['BEGIN:VTODO', 'UID:completion-case', 'SUMMARY:Completion fixture', ...item.properties, 'END:VTODO']);
     const [record] = client.calendarRecords(raw, `${SERVER}/task.ics`, 'tag', { source: 'tasks', id: 'tasks', title: 'Work' }, NOW, NOW);
     assert.equal(record.completed, item.completed, item.properties.join(', '));
+    assert.equal(record.completedAt, item.completedAt);
     assert.equal(record.status, item.status);
     assert.equal(record.percentComplete, item.percent);
     assert.equal(record.remote.raw, raw, 'Reading completion must not rewrite the source');
@@ -578,8 +579,10 @@ test('Deck completion uses its native done flag independently of the stack name'
     ]));
   const { records } = await client.readDeck();
   assert.equal(records[0].completed, true);
+  assert.equal(records[0].completedAt, '2026-10-22T12:00:00.000Z');
   assert.equal(records[0].status, 'In review');
   assert.equal(records[1].completed, false);
+  assert.equal(records[1].completedAt, undefined);
   assert.equal(records[1].status, 'Done');
 });
 

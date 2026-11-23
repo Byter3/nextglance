@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {useIsWeekend} from './useWeekendDays'
 import {computed,nextTick,onBeforeUnmount,onMounted,ref,watch} from 'vue'
 import {CalendarDays,CircleCheck,PanelsTopLeft} from 'lucide-vue-next'
 import type {PlanSession,RecordTag,Relation,WorkspaceRecord} from '@nextspace/contracts'
@@ -16,6 +17,7 @@ import {clockTime,dayKey} from './planner-ui'
 import RecordTagMarkers from './RecordTagMarkers.vue'
 import './calendar-density.css'
 
+const isWeekend=useIsWeekend()
 const props=withDefaults(defineProps<{records:WorkspaceRecord[];plans:PlanSession[];anchor:Date;scopeId:string;selectedId?:string|null;colorFor:(record:WorkspaceRecord)=>string;sourceColorFor?:(record:WorkspaceRecord)=>string;tagsFor?:(record:WorkspaceRecord)=>RecordTag[];relations?:Relation[];contextRecordIds?:string[];canCreate?:boolean;canEditRecord?:(record:WorkspaceRecord)=>boolean;canEditPlans?:boolean;preferenceKey?:string;persistPresentation?:boolean}>(),{relations:()=>[],contextRecordIds:()=>[]})
 const emit=defineEmits<{open:[record:WorkspaceRecord];openDay:[day:string];create:[range:CreationRange];dateEdit:[edit:TimelineDateEdit];planEdit:[edit:{id:string;start:string;end:string}]}>()
 const root=ref<HTMLElement>(),viewport=ref<HTMLElement>()
@@ -133,9 +135,9 @@ defineExpose({changeDensity,resetDensity,revealRecord})
     <UnscheduledTray ref="unscheduledTray" class="month-layout" :records="unscheduled" :selected-id="selectedId" :preference-key="preferenceKey" :persist-presentation="persistPresentation" :color-for="colorFor" :source-color-for="sourceTint" :tags-for="tags" :hovered-id="activeId" :related-ids="selectedLinks" :highlighted-ids="linkedIds" @hover="(id,event)=>event.type.startsWith('focus')?focusId=id:hoverId=id" @open="emit('open',$event)">
       <div ref="viewport" class="month-scroll" tabindex="0" aria-label="Calendar month dates" @wheel="wheel" @scroll="pinSourceEdges">
         <div class="month-grid">
-          <div class="month-weekdays"><span v-for="date in weeks[0]?.days" :key="dayKey(date)">{{dateLabels.get(+date)?.weekday}}</span></div>
+          <div class="month-weekdays"><span v-for="date in weeks[0]?.days" :key="dayKey(date)" :data-date="dayKey(date)" :class="{weekend:isWeekend(date)}">{{dateLabels.get(+date)?.weekday}}</span></div>
           <div v-for="(week,index) in weeks" :key="week.start" class="month-week" :style="{gridTemplateRows:`30px repeat(${week.lanes}, 29px) minmax(8px,1fr)`}" @pointerdown="beginCreation">
-            <div v-for="(date,dayIndex) in week.days" :key="dayKey(date)" class="month-cell" :class="{outside:dayKey(date)<period.start||dayKey(date)>=period.end,today:dayKey(date)===today,'range-selected':selectedCell(index*7+dayIndex)}" :style="{gridColumn:dayIndex+1}" :data-date="dayKey(date)"></div>
+            <div v-for="(date,dayIndex) in week.days" :key="dayKey(date)" class="month-cell" :class="{weekend:isWeekend(date),outside:dayKey(date)<period.start||dayKey(date)>=period.end,today:dayKey(date)===today,'range-selected':selectedCell(index*7+dayIndex)}" :style="{gridColumn:dayIndex+1}" :data-date="dayKey(date)"></div>
             <button v-for="(date,dayIndex) in week.days" :key="'date-'+dayKey(date)" class="month-day-number" :class="{outside:dayKey(date)<period.start||dayKey(date)>=period.end,today:dayKey(date)===today}" :style="{gridColumn:dayIndex+1,gridRow:1}" :aria-label="'Open day '+dateLabels.get(+date)?.full" @click="emit('openDay',dayKey(date))">{{date.getDate()}}<span v-if="date.getDate()===1">{{dateLabels.get(+date)?.month}}</span></button>
             <button v-for="item in week.items" :key="item.id" class="month-item all-day-event" :class="{selected:item.record.id===selectedId,related:selectedLinks.has(item.record.id),'hover-linked':linkedIds.has(item.record.id),hovered:item.record.id===activeId,'can-move':canMove(item),moving:drag?.moved&&drag.item.id===item.id,planned:item.planned,'continues-before':item.continuesBefore,'continues-after':item.continuesAfter}" :style="segmentStyle(item)" :title="title(item)" :aria-label="title(item)" :data-record-id="item.record.id" @pointerenter="hoverId=item.record.id" @pointerleave="hoverId=null" @focus="focusId=item.record.id" @blur="focusId=null" @pointerdown.stop="beginMove($event,item)" @click="openItem(item.record)"><span class="month-source-edge" aria-hidden="true"></span><span class="month-pinned-label"><component :is="icon(item.record)" :size="12"/><span v-if="!item.allDay" class="month-item-time">{{itemPresentation.get(item)?.time}}</span><span v-else-if="item.point" class="month-item-kind">{{item.label}}</span><span class="month-item-title">{{item.record.title}}</span><RecordTagMarkers :tags="tags(item.record)" :compact="true" :limit="2"/></span></button>
           </div>

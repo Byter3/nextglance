@@ -4,6 +4,7 @@ import {parseScopePreferences} from '@nextspace/core/scope-preferences.mjs'
 import {normalizeServerUrl} from '@nextspace/nextcloud-client'
 import {checkedDavCheckpoint} from '@nextspace/nextcloud-client/dav-checkpoint-policy.mjs'
 import {normalizeTheme} from '@nextspace/core/theme-cache.mjs'
+import {publicTaskIdentity} from '@nextspace/core/identity.mjs'
 import {validEventDetails, validCalendarScheduling} from '@nextspace/core/source-refresh.mjs'
 export {validRecord, validCollection, mergeSourceRefresh} from '@nextspace/core/source-refresh.mjs'
 import {sha256} from '@nextspace/nextcloud-client/runtime.mjs'
@@ -27,11 +28,13 @@ export function checkedAccount(value) {
 /** Private adapter/cache data is never returned to presentation consumers. */
 export function publicSnapshot(state) {
   const explicit = Array.isArray(state.nativeWriteSources)
-  const verified = new Set(explicit ? state.nativeWriteSources : state.statuses.filter(status => status.state === 'connected').map(status => status.source))
+  const verified = new Set(explicit ? state.nativeWriteSources : state.statuses.filter(status => status.state === 'connected' && status.cached !== true).map(status => status.source))
   const collectionsById = new Map(state.collections.map(collection => [collection.id, collection]))
   // Source documents can be much larger than the visible records. Project them
   // out BEFORE copying, while still isolating every public snapshot from callers.
   const records = state.records.map(({remote, identity, ...record}) => {
+    const publicIdentity = publicTaskIdentity({...record, identity})
+    if (publicIdentity) record.identity = publicIdentity
     const category = record.source === 'notes' && typeof remote?.category === 'string' ? remote.category : undefined
     if (category !== undefined) record.remote = {category}
     const collection = collectionsById.get(record.collectionId)

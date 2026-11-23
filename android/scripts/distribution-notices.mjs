@@ -9,6 +9,7 @@ export function distributionNotices() {
         ['NOTICE.md', 'legal/NOTICE.md'],
         ['LICENSE', 'legal/LICENSE'],
         ['LICENSES/Apache-2.0.txt', 'legal/LICENSES/Apache-2.0.txt'],
+        ['LICENSES/Lucide.txt', 'legal/LICENSES/Lucide.txt'],
       ]) {
         this.emitFile({type: 'asset', fileName: output, source: readFileSync(new URL(`../../${input}`, import.meta.url))})
       }

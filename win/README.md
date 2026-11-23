@@ -14,7 +14,7 @@ Install the workspace once with `pnpm install` at the repository root. The estab
 | `pnpm build` | Checks and builds the Windows frontend into `win/dist`. |
 | `pnpm desktop` | Opens Electron using the existing frontend build. |
 | `pnpm start` | Builds the frontend, then opens Electron. |
-| `pnpm package:win` | Builds the portable executable into `win/release`. |
+| `pnpm package:win` | Builds the versioned portable EXE into `win/release` and updates `NextGlance-Latest.exe`. |
 | `pnpm package:win:dir` | Builds an unpacked app into `win/release/win-unpacked` for verification. |
 | `pnpm test` | Runs the workspace unit suite. |
 | `pnpm typecheck` | Checks the workspace TypeScript/Vue sources. |
@@ -35,6 +35,8 @@ pnpm --filter @nextspace/windows package:dir
 
 Both filtered packaging commands and root aliases use `win/release`. After an authorized package build, run `node tests/desktop-smoke.mjs --packaged`; the smoke test uses `win/release/win-unpacked`. Generated output is Git-excluded and is not part of source publication.
 
+Point your Windows shortcut at `win/release/NextGlance-Latest.exe`. Each successful portable package refreshes this file and keeps the versioned EXE. If Windows locks the shortcut target, close the running copy and run `node win/scripts/update-latest.mjs` from the repository root to update it from the existing package.
+
 The relevant integration commands run from the root:
 
 ```powershell
@@ -47,4 +49,10 @@ UI fixture tests need the development server running. The connected desktop test
 
 ## Profile and identity
 
-The visible application name is **NextGlance**. The host explicitly keeps `%APPDATA%/Nextspace` for account files, Windows-encrypted credentials and Chromium preferences; `NEXTSPACE_DATA_DIR` still selects an isolated profile when supplied. The `local.nextspace.workspace` app ID remains unchanged. The current release target is **0.6.17/build 19**, aligned with Android; the Windows executable's numeric file version is `0.6.17.19`. It includes the approved [project icon](../docs/BRANDING.md) in the executable, window, favicon and shared interface. Final packages follow `win/release/NextGlance-<version>-Windows.exe`. Close any running copy before opening a newer portable executable. Previous artifacts are retained. Do not reset the user's profile, delete encrypted credentials, move cloud metadata or introduce a different schema to accommodate display naming or source relocation.
+The visible application name is **NextGlance**. The host explicitly keeps `%APPDATA%/Nextspace` for account files, Windows-encrypted credentials and Chromium preferences; `NEXTSPACE_DATA_DIR` still selects an isolated profile when supplied. The `local.nextspace.workspace` app ID remains unchanged. The current release target is **0.6.27/build 29**, aligned with Android and Nextcloud; the Windows executable's numeric file version is `0.6.27.29`. It includes the approved [project icon](../docs/BRANDING.md) in the executable, window, favicon and shared interface. Final packages follow `win/release/NextGlance-<version>-Windows.exe`. Close any running copy before opening a newer portable executable. Previous artifacts are retained. Do not reset the user's profile, delete encrypted credentials, move cloud metadata or introduce a different schema to accommodate display naming or source relocation.
+
+In Settings & connection → Appearance, choose which weekdays receive weekend shading. Saturday and Sunday are selected initially; selecting no days is supported. The choice applies across this installation's pages and Spaces and stays local to this Windows profile.
+
+Calendar history in Settings & connection defaults to All history. Choose a number of days to limit past events on this device and account. The first complete history read may take longer; subsequent refreshes reuse private saved resources and collection revisions, downloading changes. A failed or limited read keeps prior usable records and reports the failure. Changing the setting refreshes Calendar independently of Tasks, Deck and planner metadata. Board options separately control the age of visible completed Tasks and Deck cards, initially 14 days.
+
+Loading native Calendar history does not expand synchronized planner metadata. Existing linked item IDs remain stable; new native items enter the planner identity registry when referenced by a customization. Native refresh results and planner metadata errors are reported independently, so a planner metadata limit does not discard a completed source read.

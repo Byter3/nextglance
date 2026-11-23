@@ -5,6 +5,8 @@ import {createMobileController, cacheKey, launchKey, syncSettingsKey} from '../s
 import {launchCheckpoint, checkedLaunchCheckpoint} from '../src/launch-cache.mjs'
 import {publicSnapshot, SOURCES, compactSourceCache, checkedSourceCache} from '../src/foundation.mjs'
 import {createSlotCache} from '../src/cache.mjs'
+import {createMetadataStore} from '../src/metadata.mjs'
+import {metadataKey} from '../src/account-cache-keys.mjs'
 
 const A = {name: 'fixture', serverUrl: 'https://cloud.example.test', username: 'fixture'}
 const clone = value => structuredClone(value)
@@ -12,7 +14,17 @@ const deferred = () => {let resolve; const promise = new Promise(yes => {resolve
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const flush = async () => {for (let i = 0; i < 8; i++) await tick()}
 const start = Date.parse('2026-11-12T12:00:00Z')
-function fixture({sourceBlocked, authBlocked, saveBlocked, reconcileBlocked, savedLaunch = true, settings, sourceRead, plannerBlocked, configureBlocked, deferRestore = tick, launchHints, cacheFactory, nativeClient = {}, networkStatus} = {}) {
+test('widget launch carries newly denied source state before its temporary UI selection without a source sync',async t=>{
+  const accountKey=cacheKey(A),config={version:1,widgetId:4,accountKey,generation:1,page:'list',scopeId:'all'}
+  const f=fixture({widgets:{consumeAction:async()=>({config,action:{widgetId:4,accountKey,generation:1,action:'open'},readDenials:[{source:'tasks',code:'PERMISSION',collection:null}]})}})
+  t.after(()=>f.api.dispose());await f.api.getState();await flush()
+  const result=await f.api.takeWidgetAction()
+  assert.equal(result.action.action,'open');assert.ok(result.state);assert.equal(result.state.records.some(row=>row.source==='tasks'),false)
+  assert.equal((await f.api.getState()).records.some(row=>row.source==='tasks'),false)
+  assert.equal(result.state.records.some(row=>row.source==='deck'),true)
+  assert.equal(f.counts().authReads,0);assert.deepEqual(f.counts().nativeReads,[])
+})
+function fixture({sourceBlocked, authBlocked, saveBlocked, reconcileBlocked, reconcileRecords, makeMetadataStore, savedLaunch = true, settings, sourceRead, plannerBlocked, configureBlocked, deferRestore = tick, launchHints, cacheFactory, nativeClient = {}, networkStatus, widgets} = {}) {
   let time = start, selected = A, plannerReads = 0, authReads = 0, configured = 0, nativeReads = []
   let data = {
     records: SOURCES.map(source => ({id: source, source, kind: {tasks: 'task', calendar: 'event', deck: 'card', notes: 'note', collectives: 'page'}[source], title: `${source} saved`, collectionId: source, ...(source === 'tasks' ? {remote: {href: 'task.ics', raw: 'BEGIN:VCALENDAR\nEND:VCALENDAR'}} : {})})),
@@ -20,7 +32,7 @@ function fixture({sourceBlocked, authBlocked, saveBlocked, reconcileBlocked, sav
     statuses: SOURCES.map(source => ({source, state: 'connected', count: 1, lastSyncedAt: new Date(start).toISOString()})),
   }
   const base = {...createEmptyState(), ...data, revision: 0, deviceState: {scopeId: 'all'}, storage: {syncStatus: 'synced'}}
-  const values = new Map([[cacheKey(A), {version: 1, accountKey: cacheKey(A), ...clone(data)}]])
+  const values = new Map([[cacheKey(A), {version: 1, accountKey: cacheKey(A), calendarHistoryDays:null, ...clone(data)}]])
   if (savedLaunch) values.set(launchKey(A), launchCheckpoint(publicSnapshot(base), cacheKey(A)))
   if (settings) values.set(syncSettingsKey(A), settings)
   const callbacks = new Map(); let timerId = 0
@@ -33,8 +45,8 @@ function fixture({sourceBlocked, authBlocked, saveBlocked, reconcileBlocked, sav
     selectAccount: async () => ({account: selected}), disconnect: async () => {selected = null},
   }
   const metadata = {workspace: base.workspace, revision: 0, metadata: {ready: true}, deviceState: {}, storage: {syncStatus: 'synced'}}
-  const api = createMobileController({native, cache, timers, launchHints, networkStatus, deferRestoration: deferRestore, now: () => time,
-    makeMetadataStore: () => ({load: async () => clone(metadata), getState: () => clone(metadata), sync: async () => {plannerReads++; if (plannerBlocked) await plannerBlocked.promise}, reconcileRecords: async records => {if (reconcileBlocked) await reconcileBlocked.promise; return {...clone(metadata), records: clone(records), remap: new Map()}}, saveWorkspace: async () => assert.fail('No planner write expected')}),
+  const api = createMobileController({native, cache, timers, launchHints, networkStatus, widgets, deferRestoration: deferRestore, now: () => time,
+    makeMetadataStore: makeMetadataStore || (() => ({load: async () => clone(metadata), getState: () => clone(metadata), sync: async () => {plannerReads++; if (plannerBlocked) await plannerBlocked.promise}, reconcileRecords: async records => {if (reconcileBlocked) await reconcileBlocked.promise; await reconcileRecords?.(records); return {...clone(metadata), records: clone(records), remap: new Map()}}, saveWorkspace: async () => assert.fail('No planner write expected')})),
     makeClient: () => ({...nativeClient, readAll: async input => {
       nativeReads.push(input.sources)
       if (sourceRead) return sourceRead(input)
@@ -59,6 +71,283 @@ test('launch checkpoint renders before full source hydration or authorization an
   sourceBlocked.resolve(); await flush(); assert.equal(f.counts().authReads, 1)
   assert.equal((await f.api.getState()).deviceSync.restoring, false)
   authBlocked.resolve(); await flush(); assert.equal(f.counts().plannerReads, 1)
+})
+
+test('cold saved launch and durable restore preserve historical status and counts without granting authority',async t=>{
+  const sourceBlocked=deferred(),f=fixture({sourceBlocked});t.after(()=>{sourceBlocked.resolve();f.api.dispose()})
+  f.values.get(launchKey(A)).state.statuses.forEach(status=>{status.count=999})
+  f.values.get(cacheKey(A)).statuses.forEach(status=>{status.count=888})
+  const launched=await f.api.getState()
+  assert.ok(launched.statuses.every(status=>status.state==='connected'&&status.cached===true&&status.count===1&&status.lastSyncedAt===new Date(start).toISOString()))
+  assert.equal(launched.connection.connected,false);assert.deepEqual(launched.nativeWriteSources,[]);assert.deepEqual(launched.nativeOperations,[])
+  sourceBlocked.resolve();await flush();const restored=await f.api.getState()
+  assert.deepEqual(restored.statuses,launched.statuses)
+  assert.ok(restored.records.every(record=>record.readonly));assert.equal(restored.connection.connected,false)
+  assert.deepEqual(restored.nativeWriteSources,[]);assert.deepEqual(restored.nativeOperations,[])
+  await f.api.resumeSync('open');await flush()
+  assert.deepEqual(f.counts().nativeReads,[],'Recent saved Notes and Collectives also avoid redundant content scans')
+  assert.equal(f.counts().authReads,1);assert.equal(f.counts().plannerReads,1)
+})
+
+test('offline startup schedules saved job preferences before stalled archive restoration or authorization',async t=>{
+  const sourceBlocked=deferred(),settings={caldavMinutes:0,deckMinutes:30,wifiOnly:true},f=fixture({sourceBlocked,settings,networkStatus:async()=>({connected:false,connectionType:'none'})})
+  t.after(()=>{sourceBlocked.resolve();f.api.dispose()});const scheduled=[]
+  f.native.configureSync=async input=>{scheduled.push(input);return {background:{supported:true,scheduled:true}}}
+  await f.api.getState();await f.api.resumeSync('open');await flush()
+  assert.deepEqual(scheduled,[{accountName:A.name,settings}])
+  const current=await f.api.getState();assert.equal(current.deviceSync.restoring,true);assert.equal(current.deviceSync.background.scheduled,true)
+  assert.equal(f.counts().authReads,0);assert.deepEqual(f.counts().nativeReads,[]);assert.equal(f.counts().plannerReads,0)
+  assert.deepEqual(current.nativeWriteSources,[])
+})
+
+for (const policy of ['offline','wifi']) for (const minutes of [0,60]) test(`${policy} entry resumes access and planner checks without scanning ${minutes}-minute fresh sources`,async t=>{
+  let network=policy==='offline'?{connected:false,connectionType:'none'}:{connected:true,connectionType:'cellular'},accesses=0
+  const auth=deferred(),f=fixture({authBlocked:auth,settings:{caldavMinutes:minutes,deckMinutes:minutes,wifiOnly:policy==='wifi'},networkStatus:async()=>network,nativeClient:{
+    readSourceAccess:async({onCollections})=>{accesses++;onCollections({sources:['tasks','calendar','deck'],collections:f.data.collections.filter(value=>['tasks','calendar','deck'].includes(value.source))});return {errors:[]}},
+  }})
+  t.after(()=>{auth.resolve();f.api.dispose()})
+  await f.api.getState();await f.api.resumeSync('open');await flush()
+  const saved=await f.api.getState()
+  assert.equal(f.counts().authReads,0);assert.equal(f.counts().plannerReads,0);assert.equal(accesses,0)
+  assert.deepEqual(saved.nativeWriteSources,[]);assert.deepEqual(saved.nativeOperations,[])
+  assert.equal(saved.deviceSync.foregroundError,undefined);assert.equal(saved.deviceSync.background.error,undefined)
+  network={connected:true,connectionType:'wifi'}
+  await Promise.all([f.api.resumeSync('online'),f.api.resumeSync('online')]);await flush()
+  assert.equal(f.counts().authReads,1);assert.deepEqual((await f.api.getState()).nativeWriteSources,[])
+  auth.resolve();await flush()
+  assert.equal(f.counts().plannerReads,1);assert.equal(accesses,1);assert.deepEqual(f.counts().nativeReads,[])
+  assert.deepEqual((await f.api.getState()).nativeWriteSources,['tasks','calendar','deck'])
+  await f.api.resumeSync('online');await f.api.resumeSync('timer');await flush()
+  assert.equal(f.counts().authReads,1);assert.equal(f.counts().plannerReads,1);assert.equal(accesses,1)
+})
+
+test('online callbacks queued during a stale disconnected response trigger one foreground recovery',async t=>{
+  const first=deferred();let checks=0,accesses=0
+  const f=fixture({settings:{caldavMinutes:0,deckMinutes:0,wifiOnly:false},networkStatus:async()=>++checks===1?first.promise:{connected:true,connectionType:'wifi'},nativeClient:{readSourceAccess:async()=>{accesses++;return {errors:[]}}}})
+  t.after(()=>{first.resolve({connected:false});f.api.dispose()})
+  await f.api.getState();await f.api.resumeSync('open');await flush()
+  await Promise.all([f.api.resumeSync('online'),f.api.resumeSync('online'),f.api.resumeSync('online')])
+  assert.equal(checks,1);first.resolve({connected:false});await flush()
+  assert.equal(checks,2);assert.equal(f.counts().authReads,1);assert.equal(f.counts().plannerReads,1);assert.equal(accesses,1)
+  assert.deepEqual(f.counts().nativeReads,[])
+})
+
+for (const wifiOnly of [false,true]) test(`deferred entry honors the latest ${wifiOnly?'Wi-Fi-only':'unrestricted'} policy`,async t=>{
+  let network={connected:false,connectionType:'none'},accesses=0
+  const f=fixture({settings:{caldavMinutes:0,deckMinutes:0,wifiOnly:!wifiOnly},networkStatus:async()=>network,nativeClient:{readSourceAccess:async()=>{accesses++;return {errors:[]}}}})
+  t.after(()=>f.api.dispose());await f.api.getState();await f.api.resumeSync('open');await flush()
+  await f.api.setSyncSettings({caldavMinutes:0,deckMinutes:0,wifiOnly})
+  network={connected:true,connectionType:'cellular'};await f.api.resumeSync('online');await flush()
+  assert.equal(f.counts().authReads,wifiOnly?0:1);assert.equal(accesses,wifiOnly?0:1)
+  if(wifiOnly){network={connected:true,connectionType:'wifi'};await f.api.resumeSync('online');await flush()}
+  assert.equal(f.counts().authReads,1);assert.equal(f.counts().plannerReads,1);assert.equal(accesses,1);assert.deepEqual(f.counts().nativeReads,[])
+})
+
+test('foreground check error survives background status publication and clears after recovery',async t=>{
+  const config=deferred();let fail=true
+  const f=fixture({configureBlocked:config,settings:{caldavMinutes:0,deckMinutes:0,wifiOnly:false},networkStatus:async()=>{if(fail)throw Object.assign(new Error('Fixture check timeout'),{code:'TIMEOUT'});return {connected:true,connectionType:'wifi'}},nativeClient:{readSourceAccess:async()=>({errors:[]})}})
+  t.after(()=>{config.resolve();f.api.dispose()})
+  await f.api.getState();await f.api.resumeSync('open');await flush()
+  assert.match((await f.api.getState()).deviceSync.foregroundError,/timed out/)
+  config.resolve();await flush()
+  const failed=await f.api.getState()
+  assert.equal(failed.deviceSync.background.scheduled,true);assert.equal(failed.deviceSync.background.error,undefined)
+  assert.match(failed.deviceSync.foregroundError,/timed out/)
+  fail=false;await f.api.resumeSync('online');await flush()
+  assert.equal((await f.api.getState()).deviceSync.foregroundError,undefined)
+  assert.equal(f.counts().plannerReads,1);assert.deepEqual(f.counts().nativeReads,[])
+})
+
+test('successful manual authorization clears an earlier foreground check error',async t=>{
+  const f=fixture({settings:{caldavMinutes:0,deckMinutes:0,wifiOnly:false},nativeClient:{readSourceAccess:async()=>({errors:[]})}})
+  const getAccount=f.native.getAccount;let fail=true
+  f.native.getAccount=async()=>{if(fail)throw Object.assign(new Error('Fixture provider timeout'),{code:'TIMEOUT'});return getAccount()}
+  t.after(()=>f.api.dispose());await f.api.getState();await f.api.resumeSync('open');await flush()
+  assert.match((await f.api.getState()).deviceSync.foregroundError,/authorization check timed out/)
+  fail=false;await f.api.refresh()
+  assert.equal((await f.api.getState()).deviceSync.foregroundError,undefined)
+})
+
+test('foreground exit clears a queued connectivity recovery until the next actual entry',async t=>{
+  const first=deferred();let checks=0
+  const f=fixture({settings:{caldavMinutes:0,deckMinutes:0,wifiOnly:false},networkStatus:async()=>++checks===1?first.promise:{connected:true,connectionType:'wifi'},nativeClient:{readSourceAccess:async()=>({errors:[]})}})
+  t.after(()=>{first.resolve({connected:false});f.api.dispose()})
+  await f.api.getState();await f.api.resumeSync('open');await flush();await f.api.resumeSync('online')
+  await f.api.setAppActive(false);first.resolve({connected:false});await flush()
+  await f.api.setAppActive(true);await f.api.resumeSync('online');await flush()
+  assert.equal(f.counts().authReads,0);assert.equal(checks,1)
+  await f.api.resumeSync('resume');await flush()
+  assert.equal(checks,2);assert.equal(f.counts().authReads,1);assert.equal(f.counts().plannerReads,1)
+})
+
+for (const invalid of ['result','exception']) test(`invalid authorization ${invalid} clears queued entry recovery and requires reconnection`,async t=>{
+  const auth=deferred();let connected=false,authReads=0
+  const f=fixture({settings:{caldavMinutes:0,deckMinutes:0,wifiOnly:false},networkStatus:async()=>({connected,connectionType:'wifi'}),nativeClient:{readSourceAccess:async()=>assert.fail('Invalid authorization cannot verify source access')}})
+  f.native.getAccount=async()=>{authReads++;await auth.promise;if(invalid==='exception')throw Object.assign(new Error('Fixture authorization expired'),{code:'RECONNECT_REQUIRED'});return {account:A,reconnectRequired:true}}
+  t.after(()=>{auth.resolve();f.api.dispose()})
+  await f.api.getState();await f.api.resumeSync('open');await flush();connected=true
+  await f.api.resumeSync('online');await flush();await f.api.resumeSync('online');auth.resolve();await flush()
+  const state=await f.api.getState();assert.equal(state.connection.reconnectRequired,true);assert.deepEqual(state.nativeWriteSources,[])
+  await f.api.resumeSync('online');await flush()
+  assert.equal(authReads,1);assert.equal(f.counts().plannerReads,0);assert.deepEqual(f.counts().nativeReads,[])
+})
+
+test('disconnect discards a deferred entry and its late network callback',async t=>{
+  const first=deferred();const f=fixture({networkStatus:()=>first.promise,nativeClient:{readSourceAccess:async()=>({errors:[]})}})
+  t.after(()=>{first.resolve({connected:false});f.api.dispose()})
+  await f.api.getState();await f.api.resumeSync('open');await flush();await f.api.resumeSync('online')
+  await f.api.disconnect();first.resolve({connected:false});await flush();await f.api.resumeSync('online');await flush()
+  assert.equal(f.counts().authReads,0);assert.equal(f.counts().plannerReads,0);assert.equal((await f.api.getState()).connection.serverUrl,undefined)
+})
+
+test('fresh source reads replace cached provenance without advancing untouched sources',async t=>{
+  const f=fixture();t.after(()=>f.api.dispose());await f.api.getState();await flush()
+  const saved=await f.api.getState();assert.ok(saved.statuses.every(status=>status.cached===true))
+  f.data.statuses=f.data.statuses.map(status=>({...status,cached:true}))
+  const refreshed=await f.api.refresh()
+  assert.ok(refreshed.statuses.every(status=>status.cached===undefined&&status.state==='connected'))
+  assert.deepEqual(refreshed.statuses.map(status=>status.lastSyncedAt),saved.statuses.map(status=>status.lastSyncedAt))
+})
+
+for (const minutes of [0,15]) test(`independent access enables preflighted creation with fresh cached content and ${minutes}-minute automatic reads`,async t=>{
+  const pendingOther=deferred();let accesses=0,attempts=0
+  const f=fixture({settings:{caldavMinutes:minutes,deckMinutes:minutes,wifiOnly:false},sourceRead:async()=>pendingOther.promise,nativeClient:{
+    readSourceAccess:async({onCollections})=>{accesses++;const collections=f.data.collections.filter(value=>['tasks','calendar','deck'].includes(value.source));onCollections({sources:['tasks','calendar','deck'],collections});return {collections,verifiedSources:['tasks','calendar','deck'],errors:[]}},
+    createEvent:async()=>{attempts++;throw Object.assign(new Error('Fixture target preflight'),{code:'FIXTURE_PREFLIGHT'})},
+  }})
+  t.after(()=>{pendingOther.resolve({records:[],collections:[],statuses:[]});f.api.dispose()})
+  await f.api.getState();await f.api.resumeSync('open');await flush()
+  assert.equal(accesses,1)
+  assert.deepEqual(f.counts().nativeReads,[],'Recent saved sources do not need a full scan solely to verify access')
+  const state=await f.api.getState();assert.deepEqual(state.nativeWriteSources,['tasks','calendar','deck'])
+  assert.equal(state.statuses.find(value=>value.source==='calendar').lastSyncedAt,new Date(start).toISOString())
+  assert.equal(state.statuses.find(value=>value.source==='calendar').state,'connected')
+  assert.equal(state.statuses.find(value=>value.source==='calendar').cached,true,'Permission discovery does not certify content freshness')
+  await assert.rejects(f.api.createEvent({collectionId:'calendar',title:'Fixture block',start:'2026-11-12T13:00:00Z',end:'2026-11-12T14:00:00Z'}),{code:'FIXTURE_PREFLIGHT'})
+  assert.equal(attempts,1)
+})
+
+test('warm offline resume adopts a guarded background generation without replacing workspace or navigation',async t=>{
+  let changed,loads=0
+  const f=fixture({networkStatus:async()=>({connected:false}),cacheFactory:values=>({
+    load:async key=>clone(values.get(key)??null),save:async(key,value)=>values.set(key,clone(value)),remove:async key=>values.delete(key),
+    loadChanged:async key=>{loads++;return changed?{changed:true,value:clone(changed)}:{changed:false}},
+  })})
+  t.after(()=>f.api.dispose());await f.api.getState();await flush()
+  const previous=await f.api.getState()
+  changed=clone(f.values.get(cacheKey(A)));changed.records.find(value=>value.source==='tasks').title='Background task update'
+  changed.workspace={spaces:[{name:'Must never replace current workspace'}]};changed.deviceState={scopeId:'wrong'}
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  const current=await f.api.getState()
+  assert.equal(current.records.find(value=>value.source==='tasks').title,'Background task update')
+  assert.deepEqual(current.workspace,previous.workspace);assert.deepEqual(current.deviceState,previous.deviceState)
+  assert.equal(loads,1);assert.equal(f.counts().authReads,0);assert.equal(f.counts().nativeReads.length,0)
+  assert.deepEqual(current.nativeWriteSources,[],'Background cache grants no write authority')
+  assert.ok(current.statuses.every(status=>status.state==='connected'&&status.cached===true))
+  assert.equal(current.connection.connected,false,'Saved historical success does not certify an online session')
+})
+
+test('warm reconciliation failure leaves a background generation available until successful adoption confirms it',async t=>{
+  let archive,confirmed=false,fail=false,offers=0,confirms=0
+  const f=fixture({networkStatus:async()=>({connected:false}),reconcileRecords:async()=>{if(fail)throw new Error('Fixture reconciliation failure')},cacheFactory:values=>({
+    load:async key=>clone(values.get(key)??null),save:async(key,value)=>values.set(key,clone(value)),remove:async key=>values.delete(key),
+    loadChanged:async()=>{offers++;return confirmed?{changed:false}:{changed:true,value:clone(archive),confirm:()=>{confirmed=true;confirms++}}},
+  })})
+  t.after(()=>f.api.dispose());await f.api.getState();await flush()
+  archive=clone(f.values.get(cacheKey(A)));archive.records[0].title='Published background update';fail=true
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  assert.equal((await f.api.getState()).records[0].title,'tasks saved');assert.equal(confirms,0)
+  fail=false
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  assert.equal((await f.api.getState()).records[0].title,'Published background update');assert.equal(confirms,1)
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  assert.equal(offers,3);assert.equal(confirms,1);assert.deepEqual((await f.api.getState()).nativeWriteSources,[])
+})
+
+test('warm adoption timeout fences late reconciliation without consuming the available generation',async t=>{
+  const pending=deferred();let archive,block=false,confirmed=false,confirms=0
+  const f=fixture({networkStatus:async()=>({connected:false}),reconcileRecords:async()=>{if(block)await pending.promise},cacheFactory:values=>({
+    load:async key=>clone(values.get(key)??null),save:async(key,value)=>values.set(key,clone(value)),remove:async key=>values.delete(key),
+    loadChanged:async()=>confirmed?{changed:false}:{changed:true,value:clone(archive),confirm:()=>{confirmed=true;confirms++}},
+  })})
+  t.after(()=>{pending.resolve();f.api.dispose()});await f.api.getState();await flush()
+  archive=clone(f.values.get(cacheKey(A)));archive.records[0].title='Available background update';block=true
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  f.fire(10_000);await flush();pending.resolve();await flush()
+  assert.equal((await f.api.getState()).records[0].title,'tasks saved');assert.equal(confirms,0)
+  block=false;await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  assert.equal((await f.api.getState()).records[0].title,'Available background update');assert.equal(confirms,1)
+})
+
+for(const reason of ['watermark','account','cancelled','corrupt']) test(`warm resume preserves current records when background generation is ${reason}`,async t=>{
+  const blocked=deferred();let archive
+  const f=fixture({networkStatus:async()=>({connected:false}),cacheFactory:values=>({
+    load:async key=>clone(values.get(key)??null),save:async(key,value)=>values.set(key,clone(value)),remove:async key=>values.delete(key),
+    loadChanged:async()=>{if(reason==='cancelled')await blocked.promise;return {changed:true,value:clone(archive)}},
+  })})
+  t.after(()=>{blocked.resolve();f.api.dispose()});await f.api.getState();await flush()
+  archive=clone(f.values.get(cacheKey(A)));archive.records[0].title='Should not be adopted'
+  if(reason==='watermark')archive.acknowledgedSequence=1
+  if(reason==='corrupt')archive.version=99
+  if(reason==='account')f.native.getSavedAccount=async()=>({account:{...A,username:'other'}})
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  if(reason==='cancelled'){await f.api.setAppActive(false);blocked.resolve();await flush()}
+  assert.equal((await f.api.getState()).records[0].title,'tasks saved')
+})
+
+test('late account denial withdraws early access and fences simultaneous bulk discovery',async t=>{
+  const access=deferred(),bulk=deferred();let discovery,read
+  const f=fixture({sourceRead:async input=>{read=input;return bulk.promise},nativeClient:{readSourceAccess:async input=>{discovery=input;input.onCollections({sources:['calendar'],collections:[{id:'calendar',source:'calendar',title:'Calendar'}]});return access.promise}}})
+  t.after(()=>{access.resolve({errors:[]});bulk.resolve({records:[],collections:[],statuses:[]});f.api.dispose()})
+  f.advance(61*60_000)
+  await f.api.getState();await f.api.resumeSync('open');await flush()
+  assert.deepEqual((await f.api.getState()).nativeWriteSources,['calendar'])
+  access.resolve({collections:[],verifiedSources:[],errors:[{source:'calendar',code:'AUTH',message:'Authorization denied'}]});await flush()
+  const late={sources:['calendar'],collections:[{id:'calendar',source:'calendar',title:'Late calendar'}]}
+  discovery.onCollections(late);read.onCollections(late);await flush()
+  const current=await f.api.getState();assert.deepEqual(current.nativeWriteSources,[]);assert.deepEqual(current.nativeOperations,[])
+  assert.equal(current.connection.reconnectRequired,true)
+})
+
+test('bulk denial prevents an older independent-access callback recertifying that scope',async t=>{
+  const access=deferred(),bulk=deferred();let discovery,read
+  const f=fixture({sourceRead:async input=>{read=input;return bulk.promise},nativeClient:{readSourceAccess:async input=>{discovery=input;return access.promise}}})
+  t.after(()=>{access.resolve({errors:[]});bulk.resolve({records:[],collections:[],statuses:[]});f.api.dispose()})
+  f.advance(61*60_000)
+  await f.api.getState();await f.api.resumeSync('open');await flush()
+  read.onSource({records:[],collections:[],statuses:[{source:'notes',state:'error',permissionDenied:true,errorCode:'PERMISSION',count:0}]})
+  discovery.onCollections({sources:['calendar'],collections:[{id:'calendar',source:'calendar',title:'Obsolete calendar discovery'}]})
+  assert.deepEqual((await f.api.getState()).nativeWriteSources,[])
+})
+
+test('warm denial is visible even when changed background archive cannot be read',async t=>{
+  const f=fixture({networkStatus:async()=>({connected:false}),cacheFactory:values=>({load:async key=>clone(values.get(key)??null),save:async(key,value)=>values.set(key,clone(value)),remove:async key=>values.delete(key),loadChanged:async()=>{throw new Error('Unreadable archive')}})})
+  t.after(()=>f.api.dispose());await f.api.getState();await flush()
+  f.native.getSavedAccount=async()=>({account:A,readDenials:[{source:'deck',code:'PERMISSION',collection:null}]})
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  const current=await f.api.getState();assert.equal(current.records.some(record=>record.source==='deck'),false)
+  assert.equal(current.statuses.find(status=>status.source==='deck').permissionDenied,true)
+})
+
+test('unreadable warm denial evidence withdraws previous access while preserving cached data',async t=>{
+  const f=fixture({networkStatus:async()=>({connected:false}),cacheFactory:values=>({load:async key=>clone(values.get(key)??null),save:async(key,value)=>values.set(key,clone(value)),remove:async key=>values.delete(key),loadChanged:async()=>({changed:false})})})
+  t.after(()=>f.api.dispose());await f.api.refresh()
+  assert.ok((await f.api.getState()).nativeWriteSources.length)
+  f.native.getSavedAccount=async()=>({account:A,readDenials:[{source:'unknown',code:'PERMISSION',collection:null}]})
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  const current=await f.api.getState();assert.deepEqual(current.nativeWriteSources,[]);assert.equal(current.records.length,5)
+  assert.equal(current.storage.errorCode,'CACHE_UNREADABLE')
+})
+
+test('a foreground refresh wins over a slow background generation adoption',async t=>{
+  const block=deferred();let archive
+  const f=fixture({networkStatus:async()=>({connected:false}),cacheFactory:values=>({load:async key=>clone(values.get(key)??null),save:async(key,value)=>values.set(key,clone(value)),remove:async key=>values.delete(key),loadChanged:async()=>{await block.promise;return {changed:true,value:archive}}})})
+  t.after(()=>{block.resolve();f.api.dispose()});await f.api.getState();await flush()
+  archive=clone(f.values.get(cacheKey(A)));archive.records[0].title='Older background copy'
+  await f.api.setAppActive(false);await f.api.setAppActive(true);await f.api.resumeSync('resume');await flush()
+  f.data.records[0].title='New foreground copy';await f.api.refresh()
+  block.resolve();await flush()
+  assert.equal((await f.api.getState()).records[0].title,'New foreground copy')
 })
 
 test('foreground authorization still respects restored Wi-Fi-only policy while the large archive loads', async t => {
@@ -106,7 +395,7 @@ test('fresh collection discovery permits an independently preflighted edit befor
   const ready=await f.api.getState()
   assert.equal(ready.connection.connected,true)
   assert.deepEqual(ready.nativeWriteSources,['tasks','calendar'])
-  assert.equal(ready.statuses.find(status=>status.source==='calendar').state,'unavailable')
+  assert.equal(ready.statuses.find(status=>status.source==='calendar').cached,true)
   assert.equal(ready.statuses.find(status=>status.source==='calendar').lastSyncedAt,new Date(start).toISOString())
   assert.equal(Boolean(ready.records.find(record=>record.id==='calendar').readonly),false)
   await assert.rejects(f.api.createEvent(input),{code:'FIXTURE_PREFLIGHT'});assert.equal(attempted,1)
@@ -238,7 +527,7 @@ test('freshness saved in compact launch survives private restoration after an un
   assert.equal(f.values.get(launchKey(A)).state.statuses[0].lastSyncedAt,latest)
   const restarted=fixture({cacheFactory:()=>f.cache});t.after(()=>restarted.api.dispose())
   assert.equal((await restarted.api.getState()).statuses[0].lastSyncedAt,latest);await flush()
-  const restored=await restarted.api.getState();assert.ok(restored.statuses.every(status=>status.lastSyncedAt===latest&&status.state==='unavailable'))
+  const restored=await restarted.api.getState();assert.ok(restored.statuses.every(status=>status.lastSyncedAt===latest&&status.state==='connected'&&status.cached===true))
   assert.deepEqual(restored.nativeOperations,[]);assert.ok(restored.records.every(record=>record.readonly))
 })
 
@@ -323,7 +612,7 @@ test('open/resume signals coalesce planner pulls and due refresh retains all uns
   await f.api.getState(); await flush(); const before = await f.api.getState()
   await Promise.all([f.api.resumeSync('open'), f.api.resumeSync('resume'), f.api.resumeSync('online')]); await flush()
   assert.equal(f.counts().plannerReads, 1)
-  assert.deepEqual(f.counts().nativeReads, [['tasks', 'calendar', 'notes', 'collectives']])
+  assert.deepEqual(f.counts().nativeReads, [['tasks', 'calendar']])
   const after = await f.api.getState()
   assert.deepEqual(after.records.filter(record => record.source === 'deck'), before.records.filter(record => record.source === 'deck'))
   assert.deepEqual(after.statuses.find(status => status.source === 'deck'), before.statuses.find(status => status.source === 'deck'))
@@ -389,7 +678,7 @@ test('device intervals persist with exact validation, disabled groups stay manua
   await assert.rejects(f.api.setSyncSettings({caldavMinutes: 1, deckMinutes: 15, wifiOnly: false}), {code: 'VALIDATION'})
   f.native.configureSync = async () => {throw new Error('private native exception')}
   const state = await f.api.setSyncSettings({caldavMinutes: 0, deckMinutes: 60, wifiOnly: true})
-  assert.deepEqual(f.values.get(syncSettingsKey(A)), state.deviceSync.settings)
+  assert.deepEqual(f.values.get(syncSettingsKey(A)), {...state.deviceSync.settings,calendarHistoryDays:null})
   assert.equal(state.deviceSync.background.scheduled, false); assert.match(state.deviceSync.background.error, /could not schedule/)
   await f.api.refresh(); assert.deepEqual(f.counts().nativeReads[0], SOURCES, 'Manual refresh ignores disabled automatic intervals')
 })
@@ -476,7 +765,7 @@ test('authorization is single-flight and background job configuration never bloc
   await f.api.resumeSync('open'); const manual = f.api.syncWorkspace(); await flush()
   assert.equal(f.counts().authReads, 1); assert.equal((await f.api.getState()).deviceSync.plannerSyncing, undefined)
   auth.resolve(); await manual; await flush()
-  assert.equal(f.counts().plannerReads, 1); assert.equal(f.counts().nativeReads.length, 1)
+  assert.equal(f.counts().plannerReads, 1); assert.equal(f.counts().nativeReads.length, 0)
   const reads = f.counts().authReads
   await f.api.resumeSync('timer'); await flush(); assert.equal(f.counts().authReads, reads, 'No due sources means no repeated provider check')
   f.fire(10_000); await flush(); assert.match((await f.api.getState()).deviceSync.background.error, /could not schedule/)
@@ -516,4 +805,81 @@ test('a failed private archive still saves compact readonly launch data and reta
   const launch = checkedLaunchCheckpoint(f.values.get(launchKey(A)), cacheKey(A))
   assert.equal(launch.state.records.length, 5); assert.ok(launch.state.records.every(record => record.readonly))
   assert.ok(launch.state.records.every(record => record.remote === undefined))
+})
+
+for(const history of [null,0,36500])test(`Calendar history ${history} persists independently of cadence and refreshes only Calendar`,async t=>{
+  const reads=[],f=fixture({settings:{caldavMinutes:0,deckMinutes:30,wifiOnly:true,calendarHistoryDays:14},sourceRead:async options=>{reads.push(options);return {records:[],collections:[],statuses:[{source:'calendar',state:'connected',count:0,lastSyncedAt:new Date(start).toISOString()}]}}})
+  t.after(()=>f.api.dispose());await f.api.getState();await flush()
+  assert.equal((await f.api.getState()).calendarHistoryDays,14)
+  const result=await f.api.setCalendarHistoryDays(history);assert.equal(result.calendarHistoryDays,history);await flush()
+  assert.deepEqual(reads.map(value=>value.sources),[['calendar']]);assert.equal(reads[0].calendarHistoryDays,history)
+  assert.equal(f.values.get(cacheKey(A)).calendarHistoryDays,history)
+  assert.deepEqual(f.values.get(syncSettingsKey(A)),{caldavMinutes:0,deckMinutes:30,wifiOnly:true,calendarHistoryDays:history})
+  await f.api.setSyncSettings({caldavMinutes:60,deckMinutes:0,wifiOnly:false})
+  assert.equal(f.values.get(syncSettingsKey(A)).calendarHistoryDays,history)
+  for(const invalid of [-1,36501,2.5,'14',undefined])await assert.rejects(f.api.setCalendarHistoryDays(invalid),{code:'VALIDATION'})
+})
+
+for(const enabled of [false,true])test(`legacy history catches up once with automatic Calendar ${enabled?'enabled':'off'}`,async t=>{
+  const f=fixture({settings:{caldavMinutes:enabled?60:0,deckMinutes:60,wifiOnly:false}});t.after(()=>f.api.dispose())
+  delete f.values.get(cacheKey(A)).calendarHistoryDays
+  await f.api.getState();await flush();await f.api.resumeSync('open');await flush()
+  assert.equal((await f.api.getState()).calendarHistoryDays,null)
+  assert.deepEqual(f.counts().nativeReads,enabled?[['calendar']]:[])
+  if(enabled){assert.equal(f.values.get(cacheKey(A)).calendarHistoryDays,null);await f.api.resumeSync('timer');await flush();assert.deepEqual(f.counts().nativeReads,[['calendar']])}
+})
+
+test('changing Calendar history fences a delayed older read while preserving its selected setting',async t=>{
+  const old=deferred(),reads=[],f=fixture({sourceRead:async options=>{
+    reads.push(options.calendarHistoryDays)
+    if(options.calendarHistoryDays===null)await old.promise
+    return {records:[{id:'calendar',source:'calendar',kind:'event',title:options.calendarHistoryDays===null?'Old horizon':'New horizon',collectionId:'calendar'}],collections:[{id:'calendar',source:'calendar',title:'Calendar'}],statuses:[{source:'calendar',state:'connected',count:1,lastSyncedAt:new Date(start).toISOString()}]}
+  }});t.after(()=>{old.resolve();f.api.dispose()})
+  await f.api.getState();await flush();const earlier=f.api.refresh();await flush()
+  const changed=await f.api.setCalendarHistoryDays(30);assert.equal(changed.calendarHistoryDays,30);await flush()
+  old.resolve();await earlier;await flush()
+  assert.deepEqual(reads,[null,30]);assert.equal((await f.api.getState()).records.find(row=>row.source==='calendar').title,'New horizon');assert.equal(f.values.get(cacheKey(A)).calendarHistoryDays,30)
+})
+
+test('failed expanded history keeps prior completed coverage evidence and existing records',async t=>{
+  const f=fixture({settings:{caldavMinutes:60,deckMinutes:60,wifiOnly:false,calendarHistoryDays:14},sourceRead:async()=>({records:[],collections:[],statuses:[{source:'calendar',state:'error',errorCode:'LIMIT',count:0,message:'Projection limit reached'}]})});t.after(()=>f.api.dispose())
+  f.values.get(cacheKey(A)).calendarHistoryDays=14
+  await f.api.getState();await flush();await f.api.setCalendarHistoryDays(null);await flush()
+  const result=await f.api.getState();assert.equal(result.calendarHistoryDays,null);assert.equal(result.statuses.find(row=>row.source==='calendar').errorCode,'LIMIT');assert.ok(result.records.some(row=>row.source==='calendar'));assert.equal(f.values.get(cacheKey(A)).calendarHistoryDays,14)
+})
+
+test('rapid Calendar history changes preserve the final requested value even when it matches the original',async t=>{
+  const f=fixture();t.after(()=>f.api.dispose());await f.api.getState();await flush()
+  await Promise.all([f.api.setCalendarHistoryDays(30),f.api.setCalendarHistoryDays(null)]);await flush()
+  assert.equal((await f.api.getState()).calendarHistoryDays,null);assert.equal(f.values.get(syncSettingsKey(A)).calendarHistoryDays,null)
+})
+
+test('completed source refresh persists a new task even when planner identity publication is rejected', async t => {
+  const plannerWorkspace = createEmptyState().workspace, plannerKey = metadataKey(A)
+  const initialPlanner = {version:1,accountKey:plannerKey,ready:true,revision:0,workspace:clone(plannerWorkspace),baseline:clone(plannerWorkspace),remoteExists:true,checkpoint:null,etag:null,deviceState:{},status:'synced',message:'Fixture planner'}
+  const confirmed = []
+  const f = fixture({makeMetadataStore:createMetadataStore, cacheFactory:values => {
+    values.set(plannerKey, clone(initialPlanner))
+    return {load:async key=>clone(values.get(key)??null),remove:async key=>values.delete(key),save:async(key,value)=>{
+      if (key===plannerKey && value.workspace.identities.length) throw Object.assign(new Error('Fictional metadata storage limit'), {code:'LIMIT'})
+      values.set(key,clone(value))
+    }}
+  }})
+  t.after(()=>f.api.dispose())
+  f.native.confirmSourceReads = async value => {confirmed.push(...value.sources)}
+  await f.api.getState(); await flush()
+  f.data.records.push({id:'new-native-task',source:'tasks',kind:'task',title:'New fictional task',collectionId:'tasks',remote:{href:'new-task.ics',raw:'BEGIN:VCALENDAR\nEND:VCALENDAR'}})
+  const state = await f.api.refresh()
+  assert.equal(state.records.some(record=>record.title==='New fictional task'),true)
+  assert.equal(f.values.get(cacheKey(A)).records.some(record=>record.title==='New fictional task'),true)
+  assert.equal(state.statuses.find(status=>status.source==='tasks').state,'connected')
+  assert.equal(state.connection.connected,true)
+  assert.ok(state.nativeWriteSources.includes('tasks'))
+  assert.ok(confirmed.includes('tasks'))
+  assert.equal(state.storage.syncStatus,'error')
+  assert.equal(state.storage.errorCode,'LIMIT')
+  assert.deepEqual(state.workspace,plannerWorkspace)
+  assert.deepEqual(f.values.get(plannerKey).workspace,plannerWorkspace)
+  const launch=checkedLaunchCheckpoint(f.values.get(launchKey(A)),cacheKey(A))
+  assert.equal(launch.state.records.some(record=>record.title==='New fictional task'),true)
 })

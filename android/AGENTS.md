@@ -6,7 +6,21 @@ The visible product name is **NextGlance**. Preserve the existing Android applic
 
 ## Scope and current milestone
 
-RELEASE-17 is the current packaging milestone: 0.6.17/versionCode19 after BRAND-01 fast verification and orchestrator source freeze/GO. Package the approved project icon without redesign or Android behavior changes. Verify packaged legacy/adaptive/themed launcher and splash resources against the canonical artwork, current UI/headless assets, manifest and signing continuity. Preserve application, storage identities and earlier APKs. No emulator, deployment or live-account writes are authorized.
+RELEASE-27 is the current packaging milestone at **0.6.27/versionCode29** after WIDGET-09 fast verification and orchestrator source freeze. Preserve the earlier APKs and the existing app, account, storage and signing identities. The orchestrator may push the reviewed source to the existing GitHub repository. Keep packaging local.
+
+RELEASE-26 at **0.6.26/versionCode28** included HISTORY-02, VIEW-18 and WIDGET-05. Project ordinary native history without expanding planner metadata. Promote identities only with actual planner customizations. Valid source data remains independently durable when planner validation or publication fails, with the planner failure reported separately. Preserve source access, acknowledged edits, account and revision fences.
+
+RELEASE-25 at **0.6.25/versionCode27** introduced HISTORY-01. Calendar history uses the existing account-private sync-settings cache, default All history (`null`) or 0–36,500 whole past days. Foreground and headless projection consume the same saved value. Both preference slots are read-only, revision-fenced headless inputs; completed source archives record only successfully projected coverage. Preserve durable raw resources, recurrence/byte limits, pending edits, manual sync settings and account isolation.
+
+RELEASE-24 at **0.6.24/versionCode26** is the prior Android package with WIDGET-04. Charts use uniform raster and display scaling with a common image/touch viewport. Retain the 2MiB bitmap limit, accessible item strips, transparent appearance and previous artifacts/signing identities. Physical launcher rendering remains separate acceptance.
+
+RELEASE-23 at **0.6.23/versionCode25** is the prior package with VIEW-17. Weekend days are an installation-wide appearance mask, Sunday bit0 through Saturday bit6, default65 and valid empty0. Native private appearance preferences feed both shared UI and widget repainting; they never enter account archives or cloud metadata. Widgets shade projected civil dates behind their existing content and preserve Today, source colors and actions.
+
+RELEASE-22 at **0.6.22/versionCode24** is the prior package with WIDGET-03 and SYNC-16. Native charts consume pure shared calendar geometry, remain bounded to 2MiB across at most four size variants, and keep accessible individual item strips for dense or legacy layouts. Transparent surfaces must not be claimed as wallpaper blur. Foreground connectivity recovery and native publication/scheduling fences remain unchanged. Include the existing Lucide notices.
+
+SYNC-14 separates current source access from content refresh: Tasks/Calendar/Deck permission discovery must not read item bodies or mark cached content freshly synchronized. Their automatic reads follow timestamps and configured intervals; foreground access checks still run when automatic content sync is off. Retain target preflight and durable-edit gates. Warm resume may adopt a newer validated private background read generation with account, revision, acknowledged-edit and denial fences, preserving the live workspace and pending work. Native file prefixes only order candidate cache generations; full validation/fallback and strict acknowledged-history checks remain mandatory. Background token/inventory acceleration is disposable and needs exact resource revision proofs and a complete shared projection before reuse. Run the touched cache, startup, Worker, native-edit, shared-vector and native background regression checks before packaging.
+
+Historical RELEASE-17 used 0.6.17/versionCode19 for the approved BRAND-01 icon integration. Preserve its artifact and signing identity.
 
 Historical RELEASE-16 used 0.6.16/versionCode18 for the shared VIEW-16 Timeline sidebar/checkbox correction.
 

@@ -34,6 +34,26 @@ function makeWorld() {
   return world;
 }
 
+test('widening Calendar history reuses cached bodies and loads old recurring events', async () => {
+  const world=makeWorld();
+  const historical=ics('Workshop','VEVENT','RRULE:FREQ=DAILY;COUNT=2\r\n').replaceAll('20261113T','20200202T');
+  world.resources.push({name:'historic.ics',body:historical,etag:'"1"'});
+  const reader=world.reader(),recent=await reader.read();
+  assert.equal(recent.records.filter(record=>record.source==='calendar').length,1);
+  const reopened=world.reader();
+  assert.equal(reopened.prime(recent),true);
+  const full=await reopened.read({calendarHistoryDays:null});
+  assert.deepEqual(full.records.filter(record=>record.title==='Workshop').map(record=>record.start),['2020-02-02T09:00:00.000Z','2020-02-03T09:00:00.000Z']);
+  assert.deepEqual(reopened.stats.gets,[]);
+  assert.equal(reopened.stats.inventory,0);
+  const projected=reopened.stats.projections.length;
+  await reopened.read({calendarHistoryDays:null});
+  assert.equal(reopened.stats.projections.length,projected);
+  const limited=await reopened.read({calendarHistoryDays:0});
+  assert.deepEqual(limited.records.map(record=>record.title).sort(),['event','task']);
+  assert.deepEqual(reopened.stats.gets,[]);
+});
+
 test('acknowledged event deletion invalidates a warm checkpoint and disposable body cache before the next read',async()=>{
   const world=makeWorld(),reader=world.reader(),before=await reader.read();
   const event=before.records.find(record=>record.source==='calendar'),collection=before.collections.find(item=>item.id===event.collectionId);
@@ -62,14 +82,14 @@ test('complete same-day warm and restarted readers check discovery but skip inve
 test('legacy projection hints reproject cached raw events into current details without losing records or redownloading',async()=>{
   const world=makeWorld();
   world.resources[1].body=ics('event','VEVENT','LOCATION:Studio\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Reminder\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\n');
-  const first=await world.reader().read();assert.equal(first.davCheckpoint.projectionVersion,3);
+  const first=await world.reader().read();assert.equal(first.davCheckpoint.projectionVersion,4);
   const legacy={...first,davCheckpoint:{...first.davCheckpoint,projectionVersion:1},records:first.records.map(record=>{const copy={...record};delete copy.location;delete copy.reminders;delete copy.unsupportedReminderCount;return copy})};
   const restarted=world.reader();assert.equal(restarted.prime(legacy),false);
   assert.equal(legacy.records.length,2);
   const fresh=await restarted.read(),event=fresh.records.find(record=>record.source==='calendar');
   assert.equal(event.location,'Studio');assert.deepEqual(event.reminders,[15]);assert.equal(event.unsupportedReminderCount,0);
   assert.equal(restarted.stats.gets.length,0);assert.equal(restarted.stats.inventory,1);assert.ok(restarted.stats.projections.length>0);
-  assert.equal(fresh.davCheckpoint.projectionVersion,3);
+  assert.equal(fresh.davCheckpoint.projectionVersion,4);
 });
 
 test('changed token inventories once and only new/changed resources are downloaded and projected',async()=>{
@@ -227,7 +247,7 @@ test('cached collection inventories share the same aggregate resource bound with
   const roots=Array.from({length:5},(_,i)=>ROOT.replace('/work/',`/cached-${i}/`));
   const client=new NextcloudClient({serverUrl:SERVER,username:'tester'},{accountKey:ACCOUNT,authentication:'delegated',davReadMode:'propfind-get',now:()=>now,fetch:async(url,options)=>options.method==='PROPFIND'?response(xml(row(ROOT,'<d:resourcetype><d:collection/></d:resourcetype>')+row(ROOT+'fresh.ics','<d:resourcetype/><d:getetag>&quot;1&quot;</d:getetag>')),207):response(ics('new'),200,{ETag:'"1"'})});
   const collections=roots.map(href=>({id:client.id('tasks',href),source:'tasks',title:'Cached',readonly:false,remote:{href}}));
-  const checkpoint={version:1,projectionVersion:3,accountKey:ACCOUNT,collections:roots.map(href=>({href,token,readonly:false,components:['VTODO'],...window,resources:Array.from({length:10000},(_,i)=>({href:href+i+'.ics',etag:'"1"',taskKeys:[],eventKeys:[]}))}))};
+  const checkpoint={version:1,projectionVersion:4,accountKey:ACCOUNT,collections:roots.map(href=>({href,token,readonly:false,components:['VTODO'],...window,resources:Array.from({length:10000},(_,i)=>({href:href+i+'.ics',etag:'"1"',taskKeys:[],eventKeys:[]}))}))};
   assert.equal(client.primeDavState({accountKey:ACCOUNT,records:[],collections,checkpoint}),true);
   client.discovered=true;client.refreshCapabilities=async()=>false;client.discoverCalendars=async()=>[ROOT,...roots].map(href=>({href,title:'Cached',readonly:false,components:['VTODO'],token}));
   const result=await client.readAll({sources:['tasks']});assert.equal(result.statuses[0].state,'error');assert.equal(result.statuses[0].errorCode,'LIMIT');assert.match(result.statuses[0].message,/50,000 resources/);

@@ -11,6 +11,7 @@
     "./*.mjs": "./src/*.mjs"
   },
   "dependencies": {
+    "@nextspace/contracts": "workspace:*",
     "@nextspace/core": "workspace:*",
     "fast-xml-parser": "^5.3.0",
     "ical.js": "^2.2.1"

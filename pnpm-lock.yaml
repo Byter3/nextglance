@@ -125,6 +125,9 @@ importers:
 
   packages/nextcloud:
     dependencies:
+      '@nextspace/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@nextspace/core':
         specifier: workspace:*
         version: link:../core
@@ -235,6 +238,9 @@ importers:
       '@nextspace/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@nextspace/nextcloud-client':
+        specifier: workspace:*
+        version: link:../packages/nextcloud
       '@nextspace/nextcloud-node':
         specifier: workspace:*
         version: link:../packages/nextcloud-node

@@ -4,9 +4,13 @@ const parse = value => value ? new Date(isDate(value) ? `${value}T00:00:00` : va
 const midnight = value => new Date(value.getFullYear(), value.getMonth(), value.getDate())
 const tomorrow = value => new Date(value.getFullYear(), value.getMonth(), value.getDate() + 1)
 const dayNumber = value => Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()) / 86400000
+/** Clock coordinates are injectable for hosts projecting a different local timezone. */
+export const localCalendarClock = Object.freeze({parse, midnight, tomorrow, dayNumber, minute: value => value.getHours() * 60 + value.getMinutes()})
 
 /** Native work dates are displayed, never converted into invented work sessions. */
-export function calendarItem(record) {
+export function calendarItem(record) { return calendarItemWithClock(record, localCalendarClock) }
+export function calendarItemWithClock(record, clock) {
+  const {parse, midnight, tomorrow, dayNumber} = clock
   if (!['event', 'task', 'card'].includes(record.kind)) return null
   const work = record.kind !== 'event'
   const first = parse(record.start), last = parse(work ? record.due : record.end)
@@ -28,7 +32,8 @@ export function calendarItem(record) {
 }
 
 /** Allocate a lane and clipped date-column bounds for one continuous item. */
-export function calendarAllDayLayout(items, days) {
+export function calendarAllDayLayout(items, days, clock = localCalendarClock) {
+  const {midnight, tomorrow, dayNumber} = clock
   if (!days.length) return {items: [], lanes: 0}
   const first = midnight(days[0]), last = tomorrow(days.at(-1))
   const entries = items.filter(item => item.allDay && item.start < +last && item.end > +first).map(item => ({
@@ -45,7 +50,9 @@ export function calendarAllDayLayout(items, days) {
 }
 
 /** Keep genuine plan sessions, but don't paint an exact native interval twice. */
-export function calendarTimedItems(records, plans, native = records.map(calendarItem).filter(Boolean)) {
+export function calendarTimedItems(records, plans, native, clock = localCalendarClock) {
+  native ||= records.map(record => calendarItemWithClock(record, clock)).filter(Boolean)
+  const {parse} = clock
   const items = native.filter(item => !item.allDay)
   const byId = new Map(records.map(record => [record.id, record]))
   for (const plan of plans) {

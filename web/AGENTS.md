@@ -2,7 +2,11 @@
 
 ## Current authorization — WEB-01 (2026-11-14)
 
-RELEASE-17 authorizes final local 0.6.17 assets/archive with the approved BRAND-01 project icon after fast checks and source freeze. Preserve prior artifacts; no deployment/publication. Native Deck moves use the target stack locator and verified readback; shared dependency and floating Board drag behavior applies to the embedded planner as well.
+RELEASE-27 authorizes final local 0.6.27 assets and archive after fast checks and source freeze, followed by a privacy-reviewed source push to the existing GitHub repository. Preserve the session-only HISTORY-02 behavior and native identifiers. Server installation, binary uploads and deployment remain outside this release.
+
+RELEASE-26 adds HISTORY-02 native identity isolation and VIEW-18 quieter weekend shades to the Nextcloud app at 0.6.26. Verify session-only history and customization saves before final packaging.
+
+RELEASE-25 authorizes final local 0.6.25 assets/archive after HISTORY-01 fast checks and orchestrator source freeze/GO. The Web host initially reads the recent Calendar period, then fetches bounded Calendar-only windows as the displayed dates change. Retain the recent projection and at most one additional range in session memory; no private browser persistence. Preserve native edit, denial and session fences and independently load Tasks/Deck. Board completion age and weekend-day appearance are local presentation preferences, not synchronized filters. Preserve the approved BRAND-01 icon, app identity and prior artifacts; no deployment/publication. Native Deck moves use the target stack locator and verified readback; shared dependency and floating Board drag behavior applies to the embedded planner as well. RELEASE-23 at0.6.23 is historical evidence.
 
 The owner has resumed Web implementation; this section supersedes every earlier hold/scaffolding prohibition below. App ID is `nextglance`, visible NextGlance, namespace `OCA\Nextglance`. Target Server 34.x and 35.x; verify each before claiming compatibility. Project-owned code is AGPL-3.0-or-later by explicit owner decision; preserve dependency licenses. No publication/deployment is authorized.
 

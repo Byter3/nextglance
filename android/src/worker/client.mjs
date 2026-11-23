@@ -3,7 +3,7 @@ import {createPublicState} from './publication.mjs'
 import {COMMANDS,EFFECTS,USER_ACTION_COMMANDS,WORKER_PROTOCOL,checkedCall,checkedFileEffect,checkedExternalUrl,createRpc,fail,wireError} from './protocol.mjs'
 
 /** UI adapter: bounded platform effects, public state and a diagnostic mirror. */
-export function createWorkerApi({createWorker,effects,isNative,hostAvailable=true,appVersion='Development',hint,saveDiagnostics,copyDiagnostics,onDiagnosticsChange=()=>{},now=()=>performance.now(),timeOrigin=()=>performance.timeOrigin,timers=globalThis,sessionId=()=>crypto.randomUUID()}){
+export function createWorkerApi({createWorker,effects,isNative,hostAvailable=true,appVersion='Development',hint,timeZone='UTC',locale='en',saveDiagnostics,copyDiagnostics,onDiagnosticsChange=()=>{},now=()=>performance.now(),timeOrigin=()=>performance.timeOrigin,timers=globalThis,sessionId=()=>crypto.randomUUID()}){
   let ownerEpoch=Date.now(),worker,rpc,session,failed,disposed=false,startPending,readyControl,diagnosticGeneration=0,recordingOrigin=0
   let states=createPublicState(),fallback,sync,publishTimer,pendingPublish,durationTimer
   const listeners=new Set(),syncListeners=new Set(),fileQueues=new Map()
@@ -93,7 +93,7 @@ export function createWorkerApi({createWorker,effects,isNative,hostAvailable=tru
         }catch(error){if(session===activeSession&&!disposed&&!failed)send({type:'result',id:message.id,error:wireError(error)})}
       })()
     })
-    if(!failed)send({type:'init',isNative,hostAvailable,appVersion,hint})
+    if(!failed)send({type:'init',isNative,hostAvailable,appVersion,hint,timeZone,locale})
     startPending=ready.then(()=>rpc.call('getState')).then(decode).catch(error=>{crash(error);throw error})
     void startPending.catch(()=>{})
     return startPending

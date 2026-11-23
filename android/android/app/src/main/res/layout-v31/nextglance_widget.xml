@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="2dp">
+    <ImageView android:id="@+id/widget_background" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_shell_dark" android:scaleType="fitXY" android:importantForAccessibility="no" />
+    <LinearLayout android:id="@+id/widget_body" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:paddingStart="8dp" android:paddingEnd="8dp" android:paddingTop="6dp" android:paddingBottom="6dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <TextView android:id="@+id/widget_title" android:layout_width="0dp" android:layout_height="match_parent" android:gravity="center_vertical" android:layout_weight="1" android:text="@string/app_name" android:textSize="16sp" android:fontFamily="sans-serif-medium" android:includeFontPadding="false" android:textColor="#eff4fb" android:maxLines="2" android:ellipsize="end" />
+            <ImageView android:id="@+id/widget_create" android:layout_width="44dp" android:layout_height="44dp" android:padding="11dp" android:background="@drawable/widget_action_surface" android:src="@drawable/widget_icon_plus" android:contentDescription="@string/widget_create" />
+            <ImageView android:id="@+id/widget_settings" android:layout_width="44dp" android:layout_height="44dp" android:padding="12dp" android:background="@drawable/widget_action_surface" android:src="@drawable/widget_icon_settings" android:contentDescription="@string/widget_settings" />
+        </LinearLayout>
+        <TextView android:id="@+id/widget_context" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#c3cfde" android:textSize="11sp" android:includeFontPadding="false" android:gravity="center_vertical" android:paddingBottom="5dp" android:maxLines="1" android:ellipsize="end" />
+        <LinearLayout android:id="@+id/widget_overview" android:layout_width="match_parent" android:layout_height="30dp" android:layout_marginBottom="4dp" android:orientation="horizontal" android:visibility="gone">
+            <TextView android:id="@+id/widget_overview_bookings" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center_vertical" android:paddingStart="8dp" android:paddingEnd="8dp" android:layout_marginEnd="4dp" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" android:background="@drawable/widget_card_dark" />
+            <TextView android:id="@+id/widget_overview_work" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center_vertical" android:paddingStart="8dp" android:paddingEnd="8dp" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" android:background="@drawable/widget_card_dark" />
+        </LinearLayout>
+        <ImageView android:id="@+id/widget_timeline_axis" android:layout_width="match_parent" android:layout_height="22dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <include layout="@layout/nextglance_widget_timeline_split_header" />
+        <LinearLayout android:id="@+id/widget_month" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" />
+        <LinearLayout android:id="@+id/widget_month_agenda" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="44dp" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingStart="4dp">
+                <TextView android:id="@+id/widget_month_agenda_date" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="13sp" android:fontFamily="sans-serif-medium" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+                <TextView android:id="@+id/widget_month_agenda_count" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="11sp" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+            </LinearLayout>
+            <TextView android:id="@+id/widget_month_open_day" android:layout_width="wrap_content" android:layout_height="44dp" android:minWidth="44dp" android:paddingStart="8dp" android:paddingEnd="8dp" android:gravity="center" android:text="@string/widget_open_day" android:textSize="12sp" android:maxLines="1" />
+        </LinearLayout>
+        <FrameLayout android:id="@+id/widget_content" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipChildren="true" android:clipToPadding="true">
+            <ListView android:id="@+id/widget_list" android:layout_width="match_parent" android:layout_height="match_parent" android:divider="@android:color/transparent" android:dividerHeight="0dp" android:clipToPadding="true" />
+            <FrameLayout android:id="@+id/widget_grid_plan" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone" android:clipChildren="true">
+                <FrameLayout android:id="@+id/widget_calendar_chart" android:layout_width="match_parent" android:layout_height="match_parent" android:clipChildren="true">
+                    <ImageView android:id="@+id/widget_calendar_image" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitCenter" android:importantForAccessibility="no" />
+                    <FrameLayout android:id="@+id/widget_calendar_actions" android:layout_width="match_parent" android:layout_height="match_parent" android:layoutDirection="ltr" />
+                </FrameLayout>
+            </FrameLayout>
+            <TextView android:id="@+id/widget_empty" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="@string/widget_prepare" android:textColor="#c3cfde" android:textSize="13sp" android:padding="8dp" />
+        </FrameLayout>
+        <TextView android:id="@+id/widget_freshness_compact" android:layout_width="match_parent" android:layout_height="18dp" android:gravity="center_vertical" android:includeFontPadding="false" android:textSize="10sp" android:maxLines="1" android:ellipsize="end" android:visibility="gone" />
+        <LinearLayout android:id="@+id/widget_footer" android:layout_width="match_parent" android:layout_height="44dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <TextView android:id="@+id/widget_freshness" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="10sp" android:includeFontPadding="false" android:textColor="#c3cfde" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/widget_open" android:layout_width="wrap_content" android:layout_height="44dp" android:minWidth="44dp" android:paddingStart="8dp" android:paddingEnd="8dp" android:gravity="center" android:text="@string/widget_open" android:textColor="#41b5f4" android:textSize="12sp" android:maxLines="1" />
+            <ImageView android:id="@+id/widget_settings_compact" android:layout_width="44dp" android:layout_height="44dp" android:padding="12dp" android:background="@drawable/widget_action_surface" android:src="@drawable/widget_icon_settings" android:contentDescription="@string/widget_settings" android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

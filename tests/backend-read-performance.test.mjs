@@ -22,14 +22,19 @@ test('public snapshot strips private source data before cloning and owns every r
   // This sentinel cannot be cloned: public reads must not traverse native data
   // merely to discard it afterwards. Persisted native data is always plain JSON.
   store.value.cache.records[0].remote.privateSentinel=()=>{}
+  store.value.cache.records[1].identity.privateSentinel=()=>{}
   const result=store.publicSnapshot()
   assert.equal(result.sync,undefined)
-  assert.ok(result.cache.records.every(record=>!('remote' in record)&&!('identity' in record)))
+  assert.ok(result.cache.records.every(record=>!('remote' in record)))
+  assert.equal(result.cache.records[0].identity,undefined)
+  assert.deepEqual(result.cache.records[1].identity,{source:'deck',key:'native-card'})
   assert.ok(!('remote' in result.cache.collections[0]))
   result.cache.records[0].body='Changed copy';result.workspace.name='Changed planner';result.cache.statuses[0].state='error'
+  result.cache.records[1].identity.key='Changed identity copy'
   assert.equal(store.value.cache.records[0].body,'Current text')
   assert.notEqual(store.value.workspace.name,'Changed planner')
   assert.equal(store.value.cache.statuses[0].state,'connected')
+  assert.equal(store.value.cache.records[1].identity.key,'native-card')
 })
 
 test('selection reads only the requested native record or collection and preserves alias and source checks',()=>{

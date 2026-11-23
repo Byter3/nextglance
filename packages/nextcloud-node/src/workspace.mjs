@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { validateWorkspace, migrateWorkspace, jsonValue } from '@nextspace/core/planner-schema.mjs'
 import { normalizeTheme } from '@nextspace/core/theme-cache.mjs'
-import { reconcileIdentities } from '@nextspace/core/identity.mjs'
+import { projectNativeIdentities, promoteNativeIdentities, publicTaskIdentity } from '@nextspace/core/identity.mjs'
 import { createPlannerWorkspace } from '@nextspace/core/planner.mjs'
 import { deviceViewKeys, mergeWorkspaces, withDeviceViewPreferences } from '@nextspace/core/workspace-merge.mjs'
 import {FolderWorkspaceClient, PLANNER_FOLDER} from './planner-folder.mjs'
@@ -134,7 +134,7 @@ export class WorkspaceStore {
         if (legacy && (legacy.schemaVersion !== 1 || !Number.isSafeInteger(legacy.revision) || legacy.revision < 0 || !legacy.cache)) throw new Error('The previous workspace format could not be migrated. Its original file was preserved.')
         const workspace = migrateWorkspace(legacy?.workspace || initialState.workspace)
         const cache = validateCache(legacy?.cache || { records: initialState.records || [], collections: initialState.collections || [], statuses: initialState.statuses || [], ...(initialState.theme ? { theme: initialState.theme } : {}) })
-        const resolved = reconcileIdentities(workspace, cache.records)
+        const resolved = projectNativeIdentities(workspace, cache.records)
         cache.records = resolved.records
         const validated = validateWorkspace(resolved.workspace)
         store.value = { schemaVersion: 1, revision: legacy ? legacy.revision + 1 : 0, workspace: validated, cache, sync: { baseHash: null, initialHash: workspaceHash(validated), ...(!legacy ? {initialWorkspace: clone(validated)} : {}), etag: null, status: 'local', message: legacy ? 'Planning data migrated. The original workspace.json remains untouched on this device. Connect to sync these customizations to Nextcloud.' : 'Saved on this device. Connect to sync planner customizations automatically.' } }
@@ -159,11 +159,12 @@ export class WorkspaceStore {
     // Project before cloning: raw ICS, native Deck snapshots and sync baselines
     // are private backend data and can dwarf the state sent to the renderer.
     const publicItem = ({ remote, identity, ...item }) => item
+    const publicRecord = record => {const item=publicItem(record),identity=publicTaskIdentity(record);return identity?{...item,identity}:item}
     const {workspace, revision, cache} = this.value
-    return clone({workspace, revision, cache:{records:cache.records.map(publicItem),collections:cache.collections.map(publicItem),statuses:cache.statuses,...(cache.theme?{theme:cache.theme}:{})}})
+    return clone({workspace, revision, cache:{records:cache.records.map(publicRecord),collections:cache.collections.map(publicItem),statuses:cache.statuses,...(cache.theme?{theme:cache.theme}:{})}})
   }
   resolveRecordId(id) {
-    const current = new Set(this.value.workspace.identities.map(identity => identity.id))
+    const current = new Set([...this.value.workspace.identities.map(identity => identity.id),...this.value.cache.records.map(record=>record.id)])
     if (current.has(id)) return id
     const seen = new Set()
     let resolved = id
@@ -188,8 +189,9 @@ export class WorkspaceStore {
     // A cloud registry can choose a canonical UUID while a native edit still
     // carries the previous session ID. Keep this account-local alias only for
     // in-flight callers; never retarget an ID to a different native source key.
-    const canonical = new Map(next.workspace.identities.map(identity => [JSON.stringify([identity.source,identity.key]),identity.id]))
-    for (const identity of this.value.workspace.identities) {
+    const identities=value=>[...value.workspace.identities,...value.cache.records.filter(record=>record.identity?.key).map(record=>({...record.identity,source:record.source,id:record.id}))]
+    const canonical = new Map(identities(next).map(identity => [JSON.stringify([identity.source,identity.key]),identity.id]))
+    for (const identity of identities(this.value)) {
       const id = canonical.get(JSON.stringify([identity.source,identity.key]))
       if (id && id !== identity.id) this.recordAliases.set(identity.id,id)
     }
@@ -226,7 +228,9 @@ export class WorkspaceStore {
       // The connector owns native identity; UI edits cannot accidentally remove
       // the registry while saving a Space or a view preference.
       validated.identities = clone(next.workspace.identities)
-      next.workspace = validated
+      const resolved=promoteNativeIdentities(validated,next.cache.records)
+      next.workspace = validateWorkspace(resolved.workspace)
+      next.cache.records = resolved.records
       next.workspace.updatedAt = new Date().toISOString()
       next.revision++
       next.sync.status = next.sync.baseHash ? 'pending' : 'local'
@@ -244,8 +248,15 @@ export class WorkspaceStore {
       next.cache = validateCache({ ...(!Object.hasOwn(cache, 'theme') && next.cache.theme ? { theme: next.cache.theme } : {}), ...cache })
       const beforeHash = workspaceHash(next.workspace)
       const untouched = !next.sync.baseHash && beforeHash === next.sync.initialHash
-      const resolved = reconcileIdentities(next.workspace, next.cache.records)
-      next.workspace = validateWorkspace(resolved.workspace)
+      const resolved = projectNativeIdentities(next.workspace, next.cache.records)
+      let metadataError
+      try { next.workspace = validateWorkspace(resolved.workspace) }
+      catch(error) {
+        if(!error.message?.startsWith('Invalid workspace:'))throw error
+        // Verified native reads and planner metadata have separate outcomes.
+        // Keep the last valid customization document and its exact revision.
+        metadataError='Planner metadata could not be updated. Your previous planner customizations are preserved. Native source data was saved; reduce planner metadata before retrying its sync.'
+      }
       next.cache.records = resolved.records
       const afterHash = workspaceHash(next.workspace)
       if (beforeHash !== afterHash) {
@@ -253,6 +264,7 @@ export class WorkspaceStore {
         if (untouched) { next.sync.initialHash = afterHash; if (next.sync.initialWorkspace) next.sync.initialWorkspace = clone(next.workspace) }
         if (next.sync.status === 'synced') next.sync.status = 'pending'
       }
+      if(metadataError){next.sync.status='error';next.sync.message=metadataError}
       await this.commit(next, {returnSnapshot:false})
       // A normal backup retains the former cache. After confirmed permission
       // revocation, replace that backup too so recovery cannot expose old content.
@@ -322,7 +334,7 @@ export class WorkspaceStore {
             }
           }
           if (!remoteWorkspace && baseHash) return fail('conflict', 'The previously synced cloud workspace was removed. Your local workspace was preserved. Restore the cloud file before syncing again.')
-          const resolved = reconcileIdentities(candidate, next.cache.records)
+          const resolved = projectNativeIdentities(candidate, next.cache.records)
           candidate = validateWorkspace(resolved.workspace)
           // Preserve the published device fields instead of alternating them
           // between PCs. Timestamp-only/view-only saves need no cloud write.
@@ -351,7 +363,7 @@ export class WorkspaceStore {
               latest.sync.conflictPaths = merged.conflicts.length ? merged.conflicts : ['combined-settings']
               return this.commit(latest)
             }
-            const final = reconcileIdentities(workspace, latest.cache.records)
+            const final = projectNativeIdentities(workspace, latest.cache.records)
             latest.workspace = validateWorkspace(final.workspace); latest.cache.records = final.records
             if (currentHash !== workspaceHash(latest.workspace)) latest.revision++
             const pending = sharedWorkspaceHash(latest.workspace) !== sharedWorkspaceHash(published)

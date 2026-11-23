@@ -15,6 +15,12 @@ NextGlance is an app in Nextcloud's own navigation, using the account already si
 
 Browser memory can speed repeated reads while the page is open. Losing connection disables writes; session expiry hides private state. Reloading requires the server. Cookies belong to the existing Nextcloud session, not an offline database.
 
+Calendar starts with the recent period. Navigating to older or later dates loads that period on demand, including the edges of a month grid. These requests read Calendar only; they do not reload Tasks or Deck or download the intervening years. The page retains its recent data and one additional date range in memory. A failed or incomplete read remains retryable. Refresh and session expiry invalidate that extra coverage.
+
+Board filters can hide completed Tasks and Deck cards after a chosen number of days, with 14 days as the default. Choose All to retain completed work or 0 to hide it. This local display preference does not delete records.
+
+Settings & connection → Appearance lets you choose which weekdays receive weekend shading. Saturday and Sunday are the defaults. This small appearance preference is saved in the browser for every Space and page; no planner records or offline content are stored with it.
+
 Filters are shared by account, Space and page, including My overview. They use the separate `/Workspace/Nextspace/view-preferences.json` file; the current page, dates and panel layout remain local presentation choices. The Web app keeps no offline copy or pending-write queue. Conflicting filter edits remain available for review rather than overwriting another device.
 
 ## Current boundaries

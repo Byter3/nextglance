@@ -35,16 +35,17 @@ function fixture({initial = A, cached = result(A), isNative = true} = {}) {
   return {api, native, cache, calls, values, clients, makeClient, setAccount: value => { current = value }}
 }
 
-test('restored cache is scoped, cloned, read-only and visibly stale until refresh', async () => {
+test('restored cache is scoped, cloned and read-only while preserving explicit saved read history', async () => {
   const f = fixture(), state = await f.api.getState()
   assert.equal(state.connection.connected, false)
   assert.equal(state.records[0].readonly, true)
   assert.equal(state.collections[0].readonly, true)
-  assert.ok(state.statuses.every(status => status.state === 'unavailable'))
+  assert.ok(state.statuses.every(status => status.state === 'connected' && status.cached === true))
   state.records[0].title = 'Mutated caller'
   assert.equal((await f.api.getState()).records[0].title, 'a')
   const live = await f.api.refresh()
   assert.equal(live.connection.connected, true)
+  assert.ok(live.statuses.every(status => status.cached === undefined))
   assert.ok(live.records.every(record => record.readonly === undefined), 'Phase 1 capability gating must not counterfeit native permissions')
   assert.equal(f.values.get(cacheKey(A)).records[0].title, 'a')
 })
@@ -67,7 +68,8 @@ test('browser preview never asks native APIs or accepts a connection or write', 
   assert.equal((await f.api.getState()).records.length, 0)
   assert.equal((await f.api.refresh()).connection.connected, false)
   await assert.rejects(f.api.selectAccount(), /Install the Android app/)
-  for (const method of ['saveWorkspace', 'createTask', 'createNote', 'updateNote', 'setTaskCompleted', 'connect', 'syncWorkspace', 'exportWorkspace']) await assert.rejects(f.api[method]({}), /read-only/)
+  for (const method of ['saveWorkspace', 'createTask', 'createNote', 'updateNote', 'setTaskCompleted', 'connect', 'syncWorkspace']) await assert.rejects(f.api[method]({}), /read-only/)
+  await assert.rejects(f.api.exportWorkspace(), {code:'METADATA_NOT_READY'})
   for (const method of ['beginLogin', 'pollLogin']) await assert.rejects(f.api[method]({}), /sign-in is unavailable/)
   assert.equal(f.calls.save.length, 0)
 })

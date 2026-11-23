@@ -1,7 +1,7 @@
 /** Durable, account-local metadata. Cloud files use the same protocol as Windows. */
 import {createPlannerWorkspace} from '@nextspace/core/planner.mjs'
 import {validateWorkspace} from '@nextspace/core/planner-schema.mjs'
-import {reconcileIdentities} from '@nextspace/core/identity.mjs'
+import {projectNativeIdentities, promoteNativeIdentities} from '@nextspace/core/identity.mjs'
 import {sourceGroupNameKey} from '@nextspace/core/source-groups.mjs'
 import {alignWorkspaceIdentities, mergeWorkspaces, withDeviceViewPreferences} from '@nextspace/core/workspace-merge.mjs'
 import {FolderWorkspaceClient, PLANNER_FOLDER, sharedFolderHash} from '@nextspace/nextcloud-client/planner-folder.mjs'
@@ -74,7 +74,7 @@ function mergedWorkspace(base, local, remote) {
 export function createMetadataStore({cache, key, client, isActive = () => true, now = Date.now, makeId = () => globalThis.crypto.randomUUID()}) {
   if (!/^[a-f0-9]{64}$/.test(key || '')) throw problem('Invalid metadata account key.', 'METADATA_ACCOUNT')
   const stamp = () => new Date(now()).toISOString()
-  let value = initial(key, stamp()), loaded = false, loading, queue = Promise.resolve(), syncing, syncGeneration = 0
+  let value = initial(key, stamp()), loaded = false, loading, queue = Promise.resolve(), syncing, syncGeneration = 0, observedRecords = []
   const active = () => { if (!isActive()) throw problem('The selected Nextcloud account changed.', 'CANCELLED') }
   // A multi-document save checks account selection before every cloud mutation.
   const guardedClient = new Proxy(client, {get(target, name) {
@@ -212,13 +212,13 @@ export function createMetadataStore({cache, key, client, isActive = () => true, 
   return {
     load,
     getState: () => { requireLoaded(); return state() },
-    saveWorkspace: (workspace, expectedRevision) => exclusive(async () => {
+    saveWorkspace: (workspace, expectedRevision, records = observedRecords) => exclusive(async () => {
       requireLoaded(); requireRevision(expectedRevision)
       if (!value.ready) throw problem('Load your existing saved Spaces from Nextcloud before editing.', 'METADATA_NOT_READY')
-      const validated = validateWorkspace(clone(workspace))
+      let validated = validateWorkspace(clone(workspace))
       // A stale UI object must never remove the connector's identity registry.
       validated.identities = clone(value.workspace.identities)
-      validateWorkspace(validated)
+      validated = validateWorkspace(promoteNativeIdentities(validated, records, makeId).workspace)
       if (jsonEqual(validated, value.workspace)) return state()
       const next = clone(value)
       validated.updatedAt = stamp(); next.workspace = validated; next.revision++
@@ -230,14 +230,27 @@ export function createMetadataStore({cache, key, client, isActive = () => true, 
     reconcileRecords: (records, options = {}) => exclusive(async () => {
       const context = {check: () => {active(); if (options.isCurrent?.() === false) throw problem('Planner reconciliation was cancelled.', 'CANCELLED')}, wait: promise => options.stopped ? Promise.race([promise, options.stopped]) : promise}
       requireLoaded(); context.check()
-      if (!value.ready) return {...state(), records: clone(records), remap: new Map()}
-      const resolved = reconcileIdentities(value.workspace, records, makeId)
-      if (!jsonEqual(resolved.workspace, value.workspace)) {
+      const resolved = projectNativeIdentities(value.workspace, records, makeId)
+      observedRecords = resolved.records
+      if (value.ready && !jsonEqual(resolved.workspace, value.workspace)) {
         const next = clone(value)
-        next.workspace = validateWorkspace(resolved.workspace); next.revision++
-        if (next.conflict) next.conflict.local = clone(next.workspace)
-        else { next.status = 'pending'; next.message = 'Source identities are saved on this device and waiting to sync.' }
-        await commit(next, context)
+        try {
+          next.workspace = validateWorkspace(resolved.workspace); next.revision++
+          if (next.conflict) next.conflict.local = clone(next.workspace)
+          else { next.status = 'pending'; next.message = 'Referenced source identities are saved on this device and waiting to sync.' }
+          await commit(next, context)
+        } catch (error) {
+          context.check()
+          if (['CANCELLED','TIMEOUT'].includes(error?.code)) throw error
+          // The source projection is valid independently of planner publication.
+          // Preserve the last validated workspace, including its revision, while
+          // retaining the native rows and reporting the planner failure separately.
+          const failed = {...value, status: value.conflict ? 'conflict' : 'error', message: plannerFailureMessage(error, 'local-cache')}
+          delete failed.errorCode; delete failed.errorStage
+          Object.assign(failed, syncDiagnostic(error, 'local-cache'))
+          try { await commit(failed, context) }
+          catch (failure) {context.check(); if (['CANCELLED','TIMEOUT'].includes(failure?.code)) throw failure; value = failed}
+        }
       }
       context.check()
       return {...state(), records: resolved.records, remap: resolved.remap}

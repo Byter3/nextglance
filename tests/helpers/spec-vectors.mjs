@@ -1,4 +1,6 @@
+import {restoreSourceStatuses,sourceReadLabel,syncPresentationState} from '@nextspace/core/cached-sources.mjs'
 import {calendarViewportDays,visibleAllDayLayout,calendarAllDaySize} from '@nextspace/core/calendar-sizing.mjs'
+import {normalizeWidgetConfig,projectWidget,validateWidgetIntent,widgetNavigation} from '@nextspace/core/widgets.mjs'
 import {normalizeTaskLabel,taskCreationOptions} from '@nextspace/core/card-tasks.mjs'
 import {linkedNavigation} from '@nextspace/core/linked-navigation.mjs'
 import {dependencyGroups} from '@nextspace/core/dependency-groups.mjs'
@@ -15,7 +17,7 @@ import {orderTimelineRecords,reorderIds,boardTaskStacks,orderTimelineGroups,orde
  */
 import assert from 'node:assert/strict'
 import {validateWorkspace} from '@nextspace/core/planner-schema.mjs'
-import {reconcileIdentities} from '@nextspace/core/identity.mjs'
+import {reconcileIdentities,projectNativeIdentities,promoteNativeIdentities} from '@nextspace/core/identity.mjs'
 import {taskStatusProgress, nativeStatus} from '@nextspace/core/status-mapping.mjs'
 import {isClosed, allRelations, canAddRelation, scopeRecordIds, boardColumns, boardCollectionsForScope, localDay, dayItems, filterCompletedWork} from '@nextspace/core/planner.mjs'
 import {dependencyCandidates} from '@nextspace/core/relation-picker.mjs'
@@ -53,8 +55,28 @@ import {unscheduledRecords} from '@nextspace/core/unscheduled.mjs'
 import {restoreUnscheduledPresentation,changeUnscheduledPresentation,unscheduledTrayVisible,timelineRowRecords} from '@nextspace/core/unscheduled-presentation.mjs'
 import {createRelationPickerIndex} from '@nextspace/core/relation-picker.mjs'
 import {mergeDavDelta} from '@nextspace/nextcloud-client/dav-delta-policy.mjs'
+import {isWeekendDateKey,normalizeWeekendMask,setWeekendDay} from '@nextspace/core/weekend-days.mjs'
+import {boardCompletionVisible,normalizeBoardCompletedDays,normalizeCalendarHistoryDays,normalizeCalendarWindow} from '@nextspace/core/history.mjs'
 const output = value => ({output: value})
 const operations = new Map([
+  ['identity.nativeCatalog',{fields:['promote'],run:(state,input)=>{const {records,workspace}=(input.promote?promoteNativeIdentities:projectNativeIdentities)(state.workspace,state.records,()=>{throw Error('Portable identities must not allocate a random ID')});return output({ids:records.map(record=>record.id),registered:workspace.identities.map(identity=>identity.id)})}}],
+  ['history.boardDays',{fields:[],run:state=>output(normalizeBoardCompletedDays(state.value))}],
+  ['history.boardRows',{fields:[],run:state=>output(state.records.filter(record=>boardCompletionVisible(record,state.days,Date.parse(state.now),state.showCancelled)).map(record=>record.id))}],
+  ['history.calendarDays',{fields:[],run:state=>output(normalizeCalendarHistoryDays(state.value))}],
+  ['history.window',{fields:[],run:state=>output(normalizeCalendarWindow(state.value))}],
+  ['history.davWindow',{fields:[],run:state=>{const {from,to}=davProjectionWindow(Date.parse(state.now),state.options);return output({from:new Date(from).toISOString(),to:new Date(to).toISOString()})}}],
+  ['weekend.normalize',{fields:[],run:state=>output(normalizeWeekendMask(state.mask))}],
+  ['weekend.dateFlags',{fields:['dates'],run:(state,input)=>output(input.dates.map(date=>isWeekendDateKey(state.mask,date)))}],
+  ['weekend.setDay',{fields:['day','enabled'],run:(state,input)=>output(setWeekendDay(state.mask,input.day,input.enabled))}],
+  ['widget.rowGroups',{fields:[],run:state=>output(projectWidget(state.state,state.config,state.options).rows.map(row=>Object.fromEntries(['id','title','recordId','depth','parentId','direction','sectionCount'].filter(key=>row[key]!==undefined).map(key=>[key,row[key]]))))}],
+  ['widget.gridGeometry',{fields:[],run:state=>{const grid=projectWidget(state.state,state.config,state.options).calendarGrid;return output(grid?{mode:grid.mode,days:grid.days.map(day=>day.date),hourStart:grid.hourStart,hourEnd:grid.hourEnd,timed:grid.timed.map(({recordId,dayIndex,startMinute,endMinute,lane,laneCount})=>({recordId,dayIndex,startMinute,endMinute,lane,laneCount})),allDay:grid.allDay.map(({recordId,startDay,endDay,lane})=>({recordId,startDay,endDay,lane})),allDayLanes:grid.allDayLanes}:null)}}],
+  ['widget.navigation',{fields:['intent'],run:(state,input)=>output(widgetNavigation(validateWidgetIntent(input.intent,state.config,state.state,state.options)))}],
+  ['widget.monthItinerary',{fields:['dates'],run:(state,input)=>{const {month}=projectWidget(state.state,state.config,state.options);return output(input.dates.map(date=>{const cell=month.cells.find(value=>value.date===date);return {date,count:cell.count,records:cell.itinerary.map(index=>month.itineraryRows[index].recordId)}}))}}],
+  ['widget.presentation',{fields:['field'],run:(state,input)=>output(projectWidget(state.state,state.config,state.options)[input.field]??null)}],
+  ['widget.rowLabels',{fields:[],run:state=>output(projectWidget(state.state,state.config,state.options).rows.map(row=>Object.fromEntries(['id','type','title','leadingLabel','secondaryLabel','trailingLabel','displayDay','sectionCount'].filter(key=>row[key]!==undefined).map(key=>[key,row[key]]))))}],
+  ['widget.normalize',{fields:[],run:state=>output(normalizeWidgetConfig(state.config,state.options))}],
+  ['widget.rows',{fields:[],run:state=>output(projectWidget(state.state,state.config,state.options).rows.filter(row=>row.type==='item').map(row=>row.recordId))}],
+  ['widget.state',{fields:[],run:state=>output(projectWidget(state.state,state.config,state.options).state)}],
   ['preferences.sharedMerge',{fields:[],run:state=>output(mergeViewPreferences(state.base,state.local,state.remote))}],
   ['dav-sync-delta',{fields:[],run:state=>output(mergeDavDelta(state))}],
   ['preferences.sharedEmpty',{fields:[],run:()=>output(emptyViewPreferences())}],
@@ -114,9 +136,12 @@ const operations = new Map([
   ['board.taskStacks',{fields:[],run:state=>{const value=boardTaskStacks(state.records,state.relations);return output({parents:value.parentByTask,stacks:Object.fromEntries(Object.entries(value.byCard).map(([id,stack])=>[id,{incoming:stack.incoming.map(record=>record.id),outgoing:stack.outgoing.map(record=>record.id)}]))})}}],
   ['board.columns', {fields: ['options'], run: (state,input) => output(boardColumns(state.records,state.collections,input.options).map(column=>({id:column.id,title:column.title,count:column.records.length})))}],
   ['board.collections', {fields: ['scopeId'], run: (state,input) => output(boardCollectionsForScope(state.workspace,state.records,state.collections,input.scopeId).map(collection=>collection.id))}],
+  ['sync.restoreStatuses', {fields:[], run:state=>output(restoreSourceStatuses(state.statuses,state.records))}],
+  ['sync.sourceLabel', {fields:[], run:state=>output(sourceReadLabel(state))}],
+  ['sync.presentation', {fields:[], run:state=>output(syncPresentationState(state))}],
   ['sync.settings', {fields: [], run: state => output(normalizeSyncSettings(state))}],
   ['sync.validateSettings', {fields: [], run: state => output(validateSyncSettings(state))}],
-  ['sync.due', {fields: ['now','includeOthers'], run: (state,input) => output(dueSyncSources(state.settings,state.statuses,state.lastAttempts,input.now,{includeOthers:input.includeOthers}))}],
+  ['sync.due', {fields: ['now','includeOthers'], optionalFields: ['independentAccessSources'], run: (state,input) => output(dueSyncSources(state.settings,state.statuses,state.lastAttempts,input.now,{includeOthers:input.includeOthers,independentAccessSources:input.independentAccessSources}))}],
   ['sync.stale', {fields: ['now'], run: (state,input) => output(sourceSyncStale(state.statuses,state.settings,input.now))}],
   ['sources.select', {fields: [], run: state => output(sourceSelection(state))}],
   ['sources.cachedResource', {fields: ['locator','serverUrl'], run: (state,input) => output(checkedResourceEntry(state,input.locator,input.serverUrl))}],
@@ -208,7 +233,7 @@ function validateCase(vector) {
   assert.ok(plain(vector.input) && nonempty(vector.input.operation), `${vector.id} needs input.operation`)
   const operation = operations.get(vector.input.operation)
   assert.ok(operation, `${vector.id} has unknown operation ${vector.input.operation}`)
-  fields(vector.input, ['operation', ...operation.fields], `${vector.id} input`)
+  fields(vector.input, ['operation', ...operation.fields, ...(operation.optionalFields || [])], `${vector.id} input`)
   for (const key of operation.fields) assert.ok(own(vector.input, key), `${vector.id} input needs ${key}`)
   fields(vector.expected, ['output', 'nextState', 'error'], `${vector.id} expected`)
   const hasError = own(vector.expected, 'error')

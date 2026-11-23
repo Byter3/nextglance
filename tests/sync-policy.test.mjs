@@ -5,7 +5,7 @@ const now=Date.parse('2026-11-12T12:00:00Z')
 const settings={caldavMinutes:15,deckMinutes:30,wifiOnly:false}
 const status=(source,minutes,state='connected')=>({source,state,count:1,lastSyncedAt:new Date(now-minutes*60000).toISOString()})
 test('preferences normalize legacy values but submitted settings reject invalid or extra fields',()=>{
-  assert.deepEqual(normalizeSyncSettings({caldavMinutes:1,deckMinutes:0,wifiOnly:'false'}),{caldavMinutes:15,deckMinutes:0,wifiOnly:false})
+  assert.deepEqual(normalizeSyncSettings({caldavMinutes:1,deckMinutes:0,wifiOnly:'false'}),{caldavMinutes:60,deckMinutes:0,wifiOnly:false})
   for(const bad of [null,[],{...settings,other:1},{...settings,deckMinutes:'30'},{...settings,wifiOnly:1}])assert.throws(()=>validateSyncSettings(bad),{code:'VALIDATION'})
   assert.deepEqual(validateSyncSettings(settings),settings)
 })
@@ -25,4 +25,17 @@ test('freshness follows selected cadence rather than expiring after two minutes'
   assert.equal(sourceSyncStale([status('deck',500)],{...settings,deckMinutes:0},now),false)
   assert.equal(sourceSyncStale([status('deck',0,'error')],settings,now),true)
   assert.equal(sourceSyncStale([status('deck',-1)],settings,now),true)
+})
+
+test('independent access checks do not force recently synchronized source bodies to reload',()=>{
+  const statuses=['tasks','calendar','deck','notes','collectives'].map(source=>status(source,1,'unavailable'))
+  const options={independentAccessSources:['tasks','calendar','deck']}
+  assert.deepEqual(dueSyncSources(settings,statuses,{},now,options),['notes','collectives'])
+  assert.deepEqual(dueSyncSources(settings,statuses,{},now,{...options,includeOthers:false}),[])
+  assert.deepEqual(dueSyncSources(settings,statuses,{},now),['tasks','calendar','deck','notes','collectives'])
+  assert.deepEqual(dueSyncSources(settings,statuses.map(value=>({...value,lastSyncedAt:new Date(now-31*60000).toISOString()})),{},now,{...options,includeOthers:false}),['tasks','calendar','deck'])
+  assert.deepEqual(dueSyncSources(settings,[],{},now,{...options,includeOthers:false}),['tasks','calendar','deck'])
+  assert.deepEqual(dueSyncSources(settings,statuses,{caldav:now+1,deck:now+1},now,{...options,includeOthers:false}),['tasks','calendar','deck'])
+  assert.deepEqual(dueSyncSources({...settings,caldavMinutes:0,deckMinutes:0},statuses,{},now,{...options,includeOthers:false}),[])
+  assert.deepEqual(dueSyncSources(settings,statuses,{},now,{independentAccessSources:['notes','collectives']}),['tasks','calendar','deck','notes','collectives'])
 })

@@ -1,7 +1,8 @@
+import {localCalendarClock} from './calendar-items.mjs'
 /** Index each timed item into its intersecting local days once, then pack overlaps.
  * Points and exclusive midnight ends retain the calendar's existing semantics. */
-export function calendarTimedLayout(items, days, {minimumMinutes = 27.5, minimumDuration = 0} = {}) {
-  const starts = days.map(Number), ends = days.map(day => +new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1))
+export function calendarTimedLayout(items, days, {minimumMinutes = 27.5, minimumDuration = 0, clock = localCalendarClock} = {}) {
+  const starts = days.map(Number), ends = days.map(day => +clock.tomorrow(day))
   const result = new Map(starts.map(start => [start, []]))
   for (const item of items) {
     let low = 0, high = ends.length
@@ -10,7 +11,7 @@ export function calendarTimedLayout(items, days, {minimumMinutes = 27.5, minimum
       const first = starts[index], last = ends[index]
       if (!(item.start < last && (item.end > first || item.end === item.start && item.start >= first))) continue
       const a = new Date(Math.max(first, item.start)), z = new Date(Math.min(last, item.end))
-      const from = a.getHours() * 60 + a.getMinutes(), to = +z === last ? 1440 : z.getHours() * 60 + z.getMinutes()
+      const from = clock.minute(a), to = +z === last ? 1440 : clock.minute(z)
       result.get(first).push({...item, from, to: Math.max(from + minimumDuration, to), lane: 0, lanes: 1})
     }
   }

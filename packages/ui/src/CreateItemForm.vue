@@ -15,6 +15,7 @@ const props=withDefaults(defineProps<{
   collections:Collection[]
   initialType?:CreateItemKind
   initialRange?:CreateItemRange
+  initialStackId?:string
   destinations?:Partial<Record<CreateItemKind,string>>
   availableTypes?:CreateItemKind[]
   contextLabel?:string
@@ -37,7 +38,7 @@ const dates=computed(()=>dateDrafts.value[type.value])
 const collectionId=computed({get:()=>destinations.value[type.value],set:value=>{destinations.value[type.value]=value}})
 const collections=computed(()=>props.collections.filter(c=>c.source===sourceFor[type.value]&&!c.readonly))
 const board=computed(()=>props.collections.find(c=>c.id===destinations.value.card&&c.source==='deck'))
-const stackId=ref(board.value?.stacks?.[0]?.id||'')
+const stackId=ref(board.value?.stacks?.some(stack=>stack.id===props.initialStackId)?props.initialStackId!:board.value?.stacks?.[0]?.id||'')
 watch(()=>destinations.value.card,()=>{if(!board.value?.stacks?.some(s=>s.id===stackId.value))stackId.value=board.value?.stacks?.[0]?.id||''})
 const isWork=computed(()=>type.value==='task'||type.value==='card')
 const hasDestination=computed(()=>type.value==='note'&&!collectionId.value||collections.value.some(c=>c.id===collectionId.value))

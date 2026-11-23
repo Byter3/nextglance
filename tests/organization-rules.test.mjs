@@ -125,7 +125,7 @@ test('organization folder and draft round trips preserve maps/tags while local s
   assert.deepEqual(buildScopeDraft(workspace,{kind:'project',id:'project'}).tagNames,['Alpha'])
   const snapshot=captureScopePreferences(workspace.planner,{statusIds:['removed','$unmapped','removed']})
   const local=saveScopePreferences(parseScopePreferences(null),'work',snapshot)
-  assert.deepEqual(parseScopePreferences(JSON.stringify(local)).scopes.work.statusIds,['removed','$unmapped'])
+  assert.deepEqual(parseScopePreferences(JSON.stringify(local)).scopes.work.pages[snapshot.view].statusIds,['removed','$unmapped'])
   assert.ok([...docs.values()].every(document=>!JSON.stringify(document).includes('statusIds')))
 })
 test('independent Space customization and tag edits merge, same mapped field conflicts, identities leave rules intact',()=>{

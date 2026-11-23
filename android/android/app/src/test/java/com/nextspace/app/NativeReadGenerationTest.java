@@ -21,4 +21,15 @@ public class NativeReadGenerationTest {
         assertFalse(committed.get());
         NativeReadGeneration.publish(expected,expected::get,()->{},()->committed.set(true));assertTrue(committed.get());
     }
+    @Test public void calendarHistorySettingsAreReadOnlyAndFenceOlderBackgroundProjections()throws Exception {
+        var keys=NativeHeadlessProjector.cacheKeys("a".repeat(64));assertEquals(5,keys.size());
+        String settings="cache/"+keys.get(4)+".0.json";
+        assertEquals(NativeLoginFlow.digest("sync-settings\0"+keys.get(0)),keys.get(4));
+        assertFalse(NativeHeadlessProjector.writablePath(settings,keys));assertFalse(NativeHeadlessProjector.writablePath("cache/"+keys.get(3)+".1.json",keys));
+        for(int index=0;index<3;index++)assertTrue(NativeHeadlessProjector.writablePath("cache/"+keys.get(index)+".1.json",keys));
+        AtomicBoolean committed=new AtomicBoolean();Map<String,String> expected=Map.of("archive","one",settings,"old-history");
+        assertThrows(NativeLoginFlow.Failure.class,()->NativeReadGeneration.publish(expected,path->path.equals(settings)?"new-history":"one",()->{},()->committed.set(true)));
+        assertFalse(committed.get());
+        NativeReadGeneration.publish(expected,expected::get,()->{},()->committed.set(true));assertTrue(committed.get());
+    }
 }

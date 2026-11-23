@@ -21,11 +21,12 @@ function input(){
 }
 
 test('background projection uses real DAV discovery, Tasks/Calendar parsers and identities without network',async()=>{
-  const value=input();let ids=0
-  const first=await projectHeadlessSources({...value,makeId:()=>`00000000-0000-4000-8000-${String(++ids).padStart(12,'0')}`})
+  const value=input()
+  const first=await projectHeadlessSources({...value,makeId:()=>{throw new Error('Source reads must not allocate planner identities')}})
   assert.equal(first.complete,true);assert.equal(first.records.length,2);assert.equal(first.collections.length,2);assert.ok(first.statuses.every(status=>status.state==='connected'))
   const event=first.records.find(item=>item.source==='calendar');assert.equal(event.location,'Example room');assert.deepEqual(event.reminders,[15]);assert.equal(event.remote.raw,value.snapshot.resources[1].body)
-  assert.equal(first.workspace.identities.length,2);validateWorkspace(first.workspace)
+  assert.deepEqual(first.workspace,value.workspace);validateWorkspace(first.workspace)
+  assert.ok(first.records.every(record=>/^native-[a-f0-9]{64}$/.test(record.id)))
   assert.equal(first.davCheckpoint.collections.length,1)
   const warm=await projectHeadlessSources({...value,previous:first,workspace:first.workspace,snapshot:{replies:value.snapshot.replies.slice(0,3),resources:[]},makeId:()=>{throw new Error('Warm identities must be reused')}})
   assert.equal(warm.complete,true);assert.deepEqual(warm.records.map(item=>item.id),first.records.map(item=>item.id));assert.equal(warm.records.length,2)

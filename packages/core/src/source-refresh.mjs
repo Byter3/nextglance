@@ -1,3 +1,4 @@
+import {hasSavedSourceRead} from './cached-sources.mjs'
 /** Source freshness is independent of restored transport authorization.
  * Hosts mark unavailable credentials with reconnectRequired/recoveryOnly. */
 export function canRefreshSources(connection, {networkOnline=true, busy=false, refreshing=false, loginWaiting=false}={}) {
@@ -7,14 +8,14 @@ export function canRefreshSources(connection, {networkOnline=true, busy=false, r
 }
 
 /** Do not label an authorized but unverified source snapshot as offline. */
-export function sourceConnectionLabel(connection, {networkOnline=true, refreshing=false, itemCount=0, sourceErrors=false}={}) {
+export function sourceConnectionLabel(connection, {networkOnline=true, refreshing=false, itemCount=0, sourceErrors=false,statuses=[]}={}) {
   if(!connection)return 'Not connected'
   if(connection.reconnectRequired || connection.recoveryOnly)return 'Sign-in required'
   if(!(connection.connected || connection.serverUrl && connection.username))return 'Not connected'
   if(!networkOnline)return itemCount?'Offline · saved items':'Offline · no items available'
   if(refreshing)return 'Refreshing sources…'
   if(connection.connected)return 'Nextcloud connected'
-  return sourceErrors?'Source refresh incomplete':'Source check needed'
+  return sourceErrors?'Source refresh incomplete':hasSavedSourceRead(statuses)?'Saved data · checking access':'Source check needed'
 }
 
 /** Count the items actually retained in this snapshot, not a stale source count.

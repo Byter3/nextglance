@@ -4,7 +4,7 @@ const { pathToFileURL } = require('node:url')
 const { randomUUID } = require('node:crypto')
 const fs = require('node:fs/promises')
 const { configureProfile } = require('./profile.cjs')
-const { safeUrl, trustedSender, LoginFlowRegistry, reconcileRefreshedCache } = require('./security.cjs')
+const { safeUrl, trustedSender, LoginFlowRegistry } = require('./security.cjs')
 const { OperationLanes } = require('./operation-lanes.cjs')
 const { createPageHandlers, removeDeniedPage } = require('./pages.cjs')
 const { createCalendarDeleteHandler } = require('./calendar-delete.cjs')
@@ -20,11 +20,28 @@ let WorkspaceStore, accountScope, atomicWriteJson, NextcloudClient, beginLoginFl
 let dataDirectory, credentialPath, credentialDirectory, activeCredentialPath, entryUrl, startupWarning
 const operations = new OperationLanes()
 let refreshPromise
+let SourceHistorySession, readCalendarHistory, saveCalendarHistory, createResourceCache, refreshSourceSession, historySession
+const resourceCaches = new WeakMap()
 let verifiedSources = new Set()
 const loginFlows = new LoginFlowRegistry()
 const sourceNames = ['tasks', 'calendar', 'deck', 'notes', 'collectives']
 const scheduler = new CalendarScheduler({writeJson: (...args) => atomicWriteJson(...args)})
 const cleanClone = value => structuredClone(value)
+
+function nativeClient(credentials, accountStore) {
+  const resources = createResourceCache({directory:path.join(accountStore.directory,'source-resources'),serverUrl:credentials.serverUrl,writeJson:atomicWriteJson})
+  const next = new NextcloudClient(credentials,{accountKey:accountStore.scope,resourceCache:resources})
+  resourceCaches.set(next,resources)
+  const cache = accountStore.cacheSnapshot()
+  next.primeDavState({accountKey:accountStore.scope,records:cache.records,collections:cache.collections,checkpoint:cache.davCheckpoint})
+  return next
+}
+async function switchHistory(accountStore) {
+  const days = await readCalendarHistory(accountStore.directory)
+  historySession?.close()
+  if(client)resourceCaches.get(client)?.close()
+  historySession = new SourceHistorySession(days)
+}
 
 function boundedString(value, label, maximum, allowEmpty = false) {
   if (typeof value !== 'string' || (!allowEmpty && !value.trim()) || value.length > maximum || value.includes('\0')) throw new Error(`${label} is missing or too long.`)
@@ -49,7 +66,7 @@ async function writeCredentials(credentials, scope) {
 function state() {
   const current = store.publicSnapshot()
   return {
-    mode, workspace: current.workspace, revision: current.revision, recordIdAliases: store.recordIdAliases(),
+    mode, workspace: current.workspace, revision: current.revision, recordIdAliases: store.recordIdAliases(), calendarHistoryDays: historySession?.days ?? null,
     records: current.cache.records, collections: current.cache.collections, statuses: current.cache.statuses.map(status => mode === 'live' && !verifiedSources.has(status.source) && status.state === 'connected' ? { ...status, state: 'unavailable', message: 'Cached from a previous session. Refresh to check this source before editing.' } : status),
     connection: cleanClone(connection), storage: { ...store.storage(), ...(startupWarning ? { message: startupWarning } : {}) },
     pendingSchedules: scheduler.pending(store).map(pending => ({...pending,recordId:store.resolveRecordId(pending.recordId)})),
@@ -58,6 +75,7 @@ function state() {
 }
 async function loadDisconnected() {
   const nextStore = await WorkspaceStore.open({ dataDir: dataDirectory, scope: 'local', initialState: createEmptyState() })
+  await switchHistory(nextStore)
   store = nextStore; client = null; mode = 'disconnected'; connection = { connected: false }; verifiedSources = new Set()
   await scheduler.load(store)
   return state()
@@ -65,37 +83,23 @@ async function loadDisconnected() {
 function freshLiveState() {
   return { workspace: createPlannerWorkspace(), records: [], collections: [], statuses: sourceNames.map(source => ({ source, state: 'unavailable', count: 0, message: 'Refresh to load data from Nextcloud.' })) }
 }
-async function refreshSources() {
+async function refreshSources(selected = sourceNames) {
   if (mode === 'disconnected') return state()
   requireLiveConnection()
   if (refreshPromise) return refreshPromise
-  const operation = refreshNativeSources()
+  const activeStore=store,activeClient=client,session=historySession
+  const operation = refreshSourceSession({store:activeStore,client:activeClient,session,selected,sources:sourceNames,resourceCache:resourceCaches.get(activeClient),current:()=>store===activeStore&&client===activeClient&&historySession===session,onVerified:(successful,refreshed)=>{verifiedSources=new Set([...verifiedSources].filter(source=>!refreshed.includes(source)).concat([...successful]))}}).then(()=>state())
   refreshPromise = operation
   try { return await operation } finally { if (refreshPromise === operation) refreshPromise = undefined }
 }
-async function refreshNativeSources() {
-  // Native reads and custom metadata sync have independent background actions.
-  // The current registry is reconciled again when either action commits.
-  const before = store.cacheSnapshot()
-  client.primeFileMetadata(before.records)
-  let incoming
-  try { incoming = await client.readAll() }
-  catch (error) { incoming = { records: [], collections: [], statuses: sourceNames.map(source => ({ source, state: 'error', count: 0, ...(['AUTH', 'PERMISSION'].includes(error.code) ? { permissionDenied: true, message: 'Nextcloud denied access. Reconnect to verify your access.' } : { message: 'Could not refresh this source. Check your connection.' }) })) } }
-  await store.updateCache(current => {
-    // Optional file-tag/attachment discovery can fail independently of Notes
-    // or Deck. Missing metadata is not an instruction to erase cached links.
-    const byId = new Map(current.records.map(item => [item.id, item]))
-    const byIdentity = new Map(current.records.filter(item => item.identity?.key).map(item => [`${item.source}\0${item.identity.key}`, item]))
-    incoming.records = incoming.records.map(record => {
-      const previous = byId.get(record.id) || (record.identity?.key ? byIdentity.get(`${record.source}\0${record.identity.key}`) : undefined);
-      if (!previous) return record;
-      return {...record, ...(record.source === 'deck' && record.attachmentFileIds === undefined && previous.attachmentFileIds ? {attachmentFileIds: previous.attachmentFileIds} : {}), ...(record.source === 'notes' && record.fileTags === undefined && previous.fileTags ? {fileTags: previous.fileTags, tagDetails: previous.fileTags, tags: [...new Set([...(record.tags || []), ...previous.fileTags.map(tag => tag.title)])]} : {})};
-    })
-    const reconciled = reconcileRefreshedCache(before, current, incoming, sourceNames)
-    verifiedSources = reconciled.successful
-    return reconciled.cache
-  }, { purgeBackup: incoming.statuses.some(status => status.permissionDenied === true || status.revokedCollectionIds?.length) })
-  return state()
+async function setCalendarHistoryDays(days) {
+  if(mode!=='live'||!store.directory||connection.recoveryOnly)throw new Error('Reconnect your saved account before changing Calendar history.')
+  const activeStore=store,session=historySession
+  const ticket=await session.set(days,value=>saveCalendarHistory(activeStore.directory,value,{writeJson:atomicWriteJson}))
+  // The old pass remains cancelable and cannot publish a different history choice.
+  if(refreshPromise)await refreshPromise.catch(()=>{})
+  if(store!==activeStore||historySession!==session||!ticket.current())return state()
+  return connection.connected&&client?refreshSources(['calendar']):state()
 }
 async function commitSourceEdit(record, saved) {
   const collection = store.collectionSnapshot(record.collectionId, record.source)
@@ -143,7 +147,10 @@ async function connectAccount(input, loginEntry) {
   const nextStore = await WorkspaceStore.open({ dataDir: dataDirectory, scope, initialState: freshLiveState() })
   if (loginEntry) loginFlows.beginCommit(loginEntry)
   await writeCredentials({ serverUrl, username, appPassword, accountUser: canonicalUsername }, scope)
-  store = nextStore; client = candidate; mode = 'live'; connection = { connected: true, serverUrl, username: canonicalUsername }; startupWarning = undefined; verifiedSources = new Set()
+  const connectedClient=nativeClient({serverUrl,username,appPassword,accountUser:canonicalUsername},nextStore)
+  connectedClient.capabilities=candidate.capabilities;connectedClient.discovered=candidate.discovered
+  await switchHistory(nextStore)
+  store = nextStore; client = connectedClient; mode = 'live'; connection = { connected: true, serverUrl, username: canonicalUsername }; startupWarning = undefined; verifiedSources = new Set()
   await scheduler.load(store)
   await store.syncWith(client)
   return refreshSources()
@@ -198,6 +205,7 @@ async function rememberNoteTags(record, result) {
   return result
 }
 const handlers = {
+  setCalendarHistoryDays,
   ...createViewPreferenceHandlers({
     getClient: () => { requireLiveConnection(); return client },
     createClient: nativeClient => new ViewPreferencesClient(nativeClient),
@@ -509,7 +517,7 @@ function installBridge() {
         if (/authorization|basic [a-z0-9+/=]+|password[=:]|token[=:]/i.test(message)) throw new Error('The Nextcloud request failed. Check your connection and sign in again if necessary.')
         throw new Error(message.slice(0, 1200))
       }
-    }, { parallel: ['refresh', 'syncWorkspace', 'getViewPreferences', 'saveViewPreferences', 'getState', 'saveWorkspace', 'listFiles', 'readRelatedResources'].includes(name), contextChange: ['connect', 'disconnect', 'retryConnection', 'pollLogin', 'beginLogin'].includes(name) })
+    }, { parallel: ['refresh', 'setCalendarHistoryDays', 'syncWorkspace', 'getViewPreferences', 'saveViewPreferences', 'getState', 'saveWorkspace', 'listFiles', 'readRelatedResources'].includes(name), contextChange: ['connect', 'disconnect', 'retryConnection', 'pollLogin', 'beginLogin'].includes(name) })
     return operation
   })
 }
@@ -517,11 +525,12 @@ async function restoreConnection() {
   const restored = await restoreSavedAccount({
     credentialPath, credentialDirectory, accountScope, sources: sourceNames,
     openStore: scope => WorkspaceStore.open({ dataDir: dataDirectory, scope, initialState: freshLiveState() }),
-    createClient: credentials => new NextcloudClient(credentials),
+    createClient: nativeClient,
     canDecrypt: () => safeStorage.isEncryptionAvailable() && !(process.platform === 'linux' && safeStorage.getSelectedStorageBackend?.() === 'basic_text'),
     decrypt: encrypted => safeStorage.decryptString(encrypted),
   })
   if (restored.kind === 'none') return false
+  await switchHistory(restored.store)
   store = restored.store; client = restored.client; connection = restored.connection; mode = 'live'
   activeCredentialPath = restored.accountPath; verifiedSources = new Set(); startupWarning = undefined
   await scheduler.load(store)
@@ -568,6 +577,9 @@ else {
     ;({normalizeEventDetails} = await import('@nextspace/core/event-details.mjs'))
     ;({normalizeEventAttendees,normalizeEventParticipation} = await import('@nextspace/core/event-scheduling.mjs'))
     ;({taskCreationOptions} = await import('@nextspace/core/card-tasks.mjs'))
+    ;({SourceHistorySession,readCalendarHistory,saveCalendarHistory} = await import('./calendar-history.mjs'))
+    ;({createResourceCache} = await import('./resource-cache.mjs'))
+    ;({refreshNativeSources:refreshSourceSession} = await import('./source-refresh.mjs'))
     ;({ WorkspaceStore, accountScope, atomicWriteJson } = workspaceModule)
     ;({ NextcloudClient, beginLogin: beginLoginFlow, pollLogin: pollLoginFlow, calendarInterval } = connectorModule)
     ;({ createPlannerWorkspace, createEmptyState } = plannerModule)

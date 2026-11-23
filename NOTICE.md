@@ -8,6 +8,8 @@ The approved NextGlance application icon includes a checkmark from **Google Mate
 
 The committed Gradle wrapper JAR retains its Apache-2.0 license in `META-INF/LICENSE`; wrapper scripts retain their upstream copyright and license headers. Dependency packages downloaded during setup are not committed here.
 
+Android widget action and item icons (`widget_icon_*.xml`) adapt the `plus`, `settings-2`, `panels-top-left`, `circle`, `circle-check` and `calendar-days` paths from **Lucide 0.468.0**. The paths were translated into Android VectorDrawable commands and styled to match the widget. Preserve the upstream copyright and [ISC license](LICENSES/Lucide.txt) with these derivatives.
+
 The intended distribution model is a public source repository and a free Nextcloud server app, with possible paid Google Play and Microsoft Store packages. Charging does not remove source, notice or redistribution obligations. No publication is implied by this document.
 
 Concrete dependencies requiring inclusion in distribution review include AndroidX JavaScriptEngine and fast-text-encoding (Apache-2.0), whatwg-url (MIT), Nextcloud Android SingleSignOn (GPL-3.0-or-later), ical.js (MPL-2.0), and DOMPurify (MPL-2.0 OR Apache-2.0). Preserve their notices and the licenses of all other bundled dependencies. This short note is not a complete generated third-party notice inventory; produce that inventory from locked dependencies before public binary distribution. Do not assume that separating client repositories changes licensing obligations.
