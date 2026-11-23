@@ -6,7 +6,11 @@ The visible product name is **NextGlance**. Preserve the existing Android applic
 
 ## Scope and current milestone
 
-RELEASE-27 is the current packaging milestone at **0.6.27/versionCode29** after WIDGET-09 fast verification and orchestrator source freeze. Preserve the earlier APKs and the existing app, account, storage and signing identities. The orchestrator may push the reviewed source to the existing GitHub repository. Keep packaging local.
+RELEASE-29 is the current packaging milestone at **0.6.29/versionCode31** after BOARD-07 fast verification and orchestrator source freeze. The shared Board adds item type icons and two-line standalone task cards. Preserve the existing touch controls and the app, account, storage and signing identities. Keep packaging local.
+
+RELEASE-28 at **0.6.28/versionCode30** packaged EDIT-19 exact-member Calendar revision verification. Preserve that APK and the shared Calendar fix.
+
+RELEASE-27 at **0.6.27/versionCode29** packaged the WIDGET-09 work timelines and dependency arrows. Preserve its APK and signing identity.
 
 RELEASE-26 at **0.6.26/versionCode28** included HISTORY-02, VIEW-18 and WIDGET-05. Project ordinary native history without expanding planner metadata. Promote identities only with actual planner customizations. Valid source data remains independently durable when planner validation or publication fails, with the planner failure reported separately. Preserve source access, acknowledged edits, account and revision fences.
 

@@ -1,5 +1,25 @@
 # NextGlance feature parity and phased implementation
 
+## Compact Board tasks and type icons — BOARD-07 / RELEASE-29
+
+- [x] Shared Board shows two-line standalone tasks and source-colored item icons.
+- [x] Hover, focus, selection and touch preserve existing details and controls. Drag, linked stacks and navigation retain current behavior.
+- [x] Verify Windows, Android and Nextcloud 0.6.29 packages and refresh the stable Windows shortcut.
+- [x] Review source and history for publication.
+- [ ] Physical-device and live-server acceptance.
+
+The Board browser fixture verified task height, icon types, visible source and due date, metadata disclosure, touch Move controls, and existing drag and retry behavior. Linked-stack and layout unit tests passed. The tablet inspector and Nextcloud session browser checks passed on isolated runs. All 948 shared tests passed on the bounded-concurrency run, and all 1,859 client tests passed. See the [release evidence](../docs/RELEASES.md#0629--windows-android-and-nextcloud) for package verification.
+
+## Calendar deletion revision verification — EDIT-19 / RELEASE-28
+
+- [x] Verify identity encoding and exact-member DAV evidence before accepting a different GET representation ETag.
+- [x] Preserve changed-content, changed-revision and linked-record safety across supported hosts.
+- [x] Verify Windows and Android 0.6.28 packages.
+- [x] Refresh the stable Windows shortcut.
+- [ ] Physical-device and live-server acceptance.
+
+The shared and client suites passed 948 and 1,859 tests respectively, including the common Windows, Android and Nextcloud vectors. Linked-event fixtures exercise conditional deletion through the Windows handler and Android controller while retaining the Deck card and planner link. The protocol rejects changed bodies and revisions, unverified DAV member evidence and raced mutations. Windows unpacked and portable launch checks, APK signing and contents checks, and package checksums are recorded in [release evidence](../docs/RELEASES.md#0628--windows-and-android).
+
 ## Denser widget work timelines — WIDGET-09 / RELEASE-27
 
 - [x] Denser work rows, headings, and font-aware readable metadata in Overview and Timeline.

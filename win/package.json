@@ -1,6 +1,6 @@
 {
   "name": "@nextspace/windows",
-  "version": "0.6.27",
+  "version": "0.6.29",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
@@ -33,7 +33,7 @@
   "build": {
     "appId": "local.nextspace.workspace",
     "productName": "NextGlance",
-    "buildVersion": "0.6.27.29",
+    "buildVersion": "0.6.29.31",
     "directories": {
       "output": "release"
     },

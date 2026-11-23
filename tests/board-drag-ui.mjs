@@ -1,4 +1,4 @@
-/** BOARD-06: actual shared Board pointer/touch feedback and native-edit recovery. */
+/** Actual Board compact presentation, pointer/touch feedback and native-edit recovery. */
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
@@ -13,12 +13,17 @@ fixture.collections=fixture.collections.filter(c=>c.id==='deck-work');fixture.wo
 const prototype=fixture.records.find(r=>r.id==='card-mine')
 fixture.records=Array.from({length:18},(_,i)=>({...prototype,id:`drag-${i}`,title:`Card ${String(i).padStart(2,'0')}`,body:undefined,due:undefined}))
 fixture.storage.syncStatus='synced';fixture.metadata={ready:true};fixture.nativeWriteSources=['deck'];fixture.nativeOperations=['moveCard','setCardCompleted']
+const taskFixture=plannerFixture(new Date(2030,3,8,9))
+const compactFixture=structuredClone(fixture)
+const compactTask=taskFixture.records.find(record=>record.id==='task-today')
+compactFixture.records.push({...compactTask,tags:['Review']})
+compactFixture.collections.push(taskFixture.collections.find(collection=>collection.id===compactTask.collectionId))
 const server=await createServer({configFile:path.join(root,'win/vite.config.ts'),server:{host:'127.0.0.1',port:0,strictPort:false},logLevel:'error'})
 let browser,page
 try{
   await server.listen();const origin=`http://127.0.0.1:${server.httpServer.address().port}`
   browser=await chromium.launch({headless:true,channel:'msedge'})
-  async function open(viewport,touch=false){
+  async function open(viewport,touch=false,initialState=fixture){
     const page=await browser.newPage({viewport,hasTouch:touch});page.setDefaultTimeout(15000)
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.errors=errors
     await page.route('**/*',route=>route.request().url().startsWith(origin)||route.request().url().startsWith('data:')?route.continue():route.abort())
@@ -29,13 +34,58 @@ try{
         saveWorkspace:async(workspace,revision)=>{if(revision!==state.revision)throw Error('Stale fixture revision');state.workspace=structuredClone(workspace);state.revision++;return {workspace:structuredClone(state.workspace),revision:state.revision,storage:structuredClone(state.storage)}},
         moveCard:async input=>{window.__writes.push(structuredClone(input));if(window.__holdMove)await new Promise(resolve=>window.__releaseMove=resolve);if(window.__failMove){window.__failMove=false;throw Error('Fixture server rejected this move')}const record=state.records.find(r=>r.id===input.id);record.stackId=input.stackId;record.status=state.collections[0].stacks.find(s=>s.id===input.stackId).title;return read()},
       }
-    },fixture)
+    },initialState)
     await page.goto(origin+'/drag-fixture',{waitUntil:'domcontentloaded',timeout:60000});await page.locator('.board-card.can-drag[data-record-id="drag-0"]').waitFor()
     return page
   }
   const card=(id)=>page.locator(`.board-card[data-record-id="${id}"]`),column=id=>page.locator(`.board-column[data-column-id="${id}"]`),preview=()=>page.locator('.board-drag-preview')
   async function point(locator){const b=await locator.boundingBox();assert.ok(b);return {x:b.x+Math.min(b.width/2,80),y:b.y+Math.min(b.height/2,35)}}
   async function assertPreview(x,y,offset){const b=await preview().boundingBox();assert.ok(b);assert.ok(Math.abs(b.x-(x-offset.x))<2,`preview x ${b.x}`);assert.ok(Math.abs(b.y-(y-offset.y))<2,`preview y ${b.y}`);assert.equal(await preview().getAttribute('aria-hidden'),'true');assert.equal(await preview().locator('[id],[data-record-id],[data-order-id]').count(),0);assert.equal(await preview().evaluate(el=>getComputedStyle(el).pointerEvents),'none');assert.equal(await page.locator('#app > .board-drag-preview').count(),1,'Preview stays in host portal')}
+
+  page=await open({width:1440,height:900},false,compactFixture)
+  const taskCard=card(compactTask.id),taskButton=taskCard.locator('.board-card-main')
+  const taskSummary=taskCard.locator('.board-task-summary')
+  await taskSummary.waitFor()
+  assert.match(await taskSummary.innerText(),/Freelance tasks/)
+  assert.equal(await taskSummary.locator('.board-task-due').getAttribute('data-date'),compactTask.due)
+  assert.equal(await taskCard.locator('.board-item-icon.lucide-circle-icon').count(),1)
+  assert.equal(await card('drag-0').locator('.board-item-icon.lucide-folder-kanban-icon').count(),1)
+  const restingHeight=(await taskCard.boundingBox()).height
+  assert.ok(restingHeight<58,`The resting task uses two compact lines: ${restingHeight}px`)
+  const nativeStatus=taskCard.locator('.board-native-status'),tags=taskCard.locator('.board-card-tags')
+  assert.equal(await nativeStatus.isVisible(),false)
+  assert.equal(await tags.isVisible(),false)
+  await taskButton.hover()
+  const move=taskCard.getByRole('combobox',{name:`Move ${compactTask.title}`})
+  const waitForMove=()=>page.waitForFunction(id=>{
+    const footer=document.querySelector(`[data-record-id="${id}"] .board-card-controls`)
+    return footer&&getComputedStyle(footer).opacity==='1'
+  },compactTask.id)
+  await waitForMove()
+  assert.ok((await taskCard.boundingBox()).height>restingHeight)
+  assert.ok(await move.isVisible())
+  assert.ok(await nativeStatus.isVisible())
+  assert.equal(await tags.innerText(),'Review')
+  await page.locator('.board-column > header').first().hover()
+  assert.equal(await nativeStatus.isVisible(),false)
+  await taskButton.focus()
+  await waitForMove()
+  assert.ok(await nativeStatus.isVisible())
+  assert.ok(await move.isVisible())
+  await taskButton.press('Enter')
+  await page.waitForFunction(id=>document.querySelector(`[data-record-id="${id}"]`)?.classList.contains('selected'),compactTask.id)
+  assert.deepEqual(await page.evaluate(()=>window.__writes),[],'Opening a compact task does not change native status')
+  assert.deepEqual(page.errors,[]);await page.close()
+
+  page=await open({width:780,height:900},true,compactFixture)
+  const touchCard=card(compactTask.id)
+  await touchCard.locator('.board-task-summary').waitFor()
+  assert.ok((await touchCard.locator('.board-card-main').boundingBox()).height<58)
+  assert.equal(await touchCard.locator('.board-native-status').isVisible(),false)
+  await waitForMove()
+  assert.ok(await touchCard.getByRole('combobox',{name:`Move ${compactTask.title}`}).isVisible())
+  assert.deepEqual(page.errors,[]);await page.close()
+
   page=await open({width:1600,height:950})
   await page.getByRole('combobox',{name:'Board source'}).selectOption('deck-work')
   // Mouse drag follows the original grab offset; pending native response lands optimistically.
@@ -102,6 +152,6 @@ try{
   assert.deepEqual(await page.evaluate(()=>window.__writes),[{id:'drag-0',stackId:'stack-progress'}])
   start=await point(card('drag-1'));await touch('touchStart',start.x,start.y);await preview().waitFor({state:'visible'});await touch('touchMove',target.x,target.y);await touch('touchCancel');await preview().waitFor({state:'hidden'})
   assert.equal(await page.evaluate(()=>window.__writes.length),1);assert.deepEqual(page.errors,[])
-  console.log('PASS: native and mapped Board drops, grab offset/scoped inert preview, source/target feedback, one optimistic commit, invalid/Escape/pointercancel safety, failure retry, real touch pan/hold/drop/cancel')
+  console.log('PASS: compact Board task rows and type icons, hover/focus/touch details and controls, native and mapped Board drops, inert drag preview, optimistic commit and retry, real touch pan/hold/drop/cancel')
 }catch(error){if(page){await mkdir(path.join(root,'artifacts/board-drag'),{recursive:true});await page.screenshot({path:path.join(root,'artifacts/board-drag/failure.png')}).catch(()=>{})}throw error}
 finally{await browser?.close();await server.close()}

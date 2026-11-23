@@ -9,11 +9,21 @@ const document=(properties='',siblings='')=>['BEGIN:VCALENDAR','VERSION:2.0','BE
 const collection={id:'calendar-work',source:'calendar',remote:{href:server+'/remote.php/dav/calendars/alex/work/'}};
 const record=(raw=document())=>({id:'event-1',source:'calendar',kind:'event',collectionId:collection.id,etag:'"original"',remote:{href,uid:'booking-1',raw}});
 const reply=(body='',status=200,headers={})=>new Response([204,304].includes(status)?null:body,{status,headers});
+const memberRow=(url,properties, status='200 OK')=>`<d:response><d:href>${url}</d:href><d:propstat><d:prop>${properties}</d:prop><d:status>HTTP/1.1 ${status}</d:status></d:propstat></d:response>`;
+const davProperties=(rows)=>reply(`<d:multistatus xmlns:d="DAV:">${rows}</d:multistatus>`,207);
+const etagProperty=value=>`<d:getetag>${value}</d:getetag>`;
 function fixture(handler){const calls=[];return{calls,client:new NextcloudClient({serverUrl:server,username:'alex',appPassword:'fixture'},{fetch:async(url,options)=>{calls.push({url,...options});return nativePermissionResponse(url,options)||handler(url,options,calls.filter(call=>call.method!=='PROPFIND').length)}})}}
 
 test('ordinary timed and all-day events use fresh conditional reads and one conditional DELETE',async()=>{
   for(const raw of [document(),document().replace('DTSTART:20261120T100000Z','DTSTART;VALUE=DATE:20261120').replace('DTEND:20261120T110000Z','DTEND;VALUE=DATE:20261122'),document('', 'BEGIN:VTIMEZONE\r\nTZID:Etc/UTC\r\nEND:VTIMEZONE')]){
-    const {client,calls}=fixture((url,options)=>{assert.equal(url,href);assert.equal(options.headers['If-Match'],'"original"');return options.method==='DELETE'?reply('',204):reply(raw,200,{ETag:'"original"'})});
+    const {client,calls}=fixture((url,options)=>{
+      assert.equal(url,href);
+      assert.equal(options.headers['If-Match'],'"original"');
+      if(options.method==='DELETE')return reply('',204);
+      assert.equal(options.headers['Accept-Encoding'],'identity');
+      assert.equal(options.headers['Cache-Control'],'no-cache');
+      return reply(raw,200,{ETag:'"original"'});
+    });
     assert.deepEqual(await client.deleteEvent({id:'event-1'},record(raw),collection),{deleted:true});
     assert.equal(calls.length,3);assert.equal(calls[2].method,'DELETE');
   }
@@ -21,6 +31,44 @@ test('ordinary timed and all-day events use fresh conditional reads and one cond
 test('conditional GET also verifies a delegated response without exposed ETag headers',async()=>{
   const {client}=fixture((url,options)=>options.method==='DELETE'?reply('',204):reply(document()));
   assert.deepEqual(await client.deleteEvent({id:'event-1'},record(),collection),{deleted:true});
+});
+test('a proxy GET representation tag uses an exact DAV revision lookup and the original DELETE precondition',async()=>{
+  for(const deletionStatus of [204,412]){
+    const {client,calls}=fixture((url,options)=>{
+      assert.equal(url,href);
+      if(options.method==='PROPFIND'){
+        assert.equal(options.headers.Depth,'0');
+        assert.equal(options.headers['Cache-Control'],'no-cache');
+        assert.match(options.body,/<d:getetag\/>/);
+        return davProperties(memberRow(new URL(href).pathname,etagProperty('"original"')));
+      }
+      assert.equal(options.headers['If-Match'],'"original"');
+      if(options.method==='DELETE')return reply('',deletionStatus);
+      return reply(document(),200,{ETag:'"representation-tag"'});
+    });
+    const deleted=client.deleteEvent({id:'event-1'},record(),collection);
+    if(deletionStatus===204)assert.deepEqual(await deleted,{deleted:true});
+    else await assert.rejects(deleted,{code:'CONFLICT'});
+    assert.deepEqual(calls.map(call=>call.method||'GET'),['PROPFIND','GET','PROPFIND','DELETE']);
+  }
+});
+test('missing, weak, denied or ambiguous member evidence cannot resolve a GET tag mismatch',async()=>{
+  const current=etagProperty('"original"');
+  const cases=[
+    [memberRow(href,etagProperty('"version-two"')),'CONFLICT'],
+    [memberRow(href,etagProperty('W/"original"')),'CONFLICT'],
+    [memberRow(href,''),'CONFLICT'],
+    [memberRow(href,current,'404 Not Found'),'CONFLICT'],
+    [memberRow(href.replace('booking.ics','other.ics'),current),'CONFLICT'],
+    [memberRow(href,current).repeat(2),'CONFLICT'],
+    [memberRow(href,current.repeat(2)),'FORMAT'],
+    [memberRow(href,current,'403 Forbidden'),'PERMISSION'],
+  ];
+  for(const [properties,code] of cases){
+    const {client,calls}=fixture((url,options)=>options.method==='PROPFIND'?davProperties(properties):reply(document(),200,{ETag:'"proxy"'}));
+    await assert.rejects(client.deleteEvent({id:'event-1'},record(),collection),{code});
+    assert.deepEqual(calls.map(call=>call.method||'GET'),['PROPFIND','GET','PROPFIND']);
+  }
 });
 test('real REPORT XML baseline permits an unchanged CRLF GET using the original validator',async()=>{
   const raw=document('DESCRIPTION:Review & plan\r\nX-PRIVATE-FIELD:preserve')+'\r\n';
@@ -71,9 +119,9 @@ test('content-line comparison preserves unknown fields, duplicates, parameters, 
   assert.equal(calendarContentEquivalent(undefined,undefined),false);
   assert.equal(calendarContentEquivalent('X:ab','X:a\n  b'),false);
   assert.equal(calendarContentEquivalent('X:ab','X:a\r b'),false);
-  const changedValidator=fixture(()=>reply(baseline.replaceAll('\r\n','\n'),200,{ETag:'"new"'}));
+  const changedValidator=fixture((url,options)=>options.method==='PROPFIND'?davProperties(memberRow(href,etagProperty('"new"'))):reply(baseline.replaceAll('\r\n','\n'),200,{ETag:'"new"'}));
   await assert.rejects(changedValidator.client.deleteEvent({id:'event-1'},record(baseline),collection),{code:'CONFLICT'});
-  assert.equal(changedValidator.calls.length,2);
+  assert.equal(changedValidator.calls.length,3);
 });
 test('complex and mixed resources fail locally before any network or whole-resource deletion',async()=>{
   const {client,calls}=fixture(()=>{throw Error('Unexpected request')});
@@ -90,7 +138,7 @@ test('invalid identities, unsafe locators and missing or weak baselines never se
   assert.equal(calls.length,0);
 });
 test('changed baseline, conditional conflict and permission loss preserve the event without retry',async()=>{
-  for(const result of [reply(document('DESCRIPTION:Changed'),200,{ETag:'"original"'}),reply(document(),200,{ETag:'"new"'}),reply('',412),reply('',403)]){
+  for(const result of [reply(document('DESCRIPTION:Changed'),200,{ETag:'"proxy"'}),reply('',412),reply('',403)]){
     const {client,calls}=fixture(()=>result);
     await assert.rejects(client.deleteEvent({id:'event-1'},record(),collection));assert.equal(calls.length,2);
   }

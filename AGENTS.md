@@ -45,6 +45,10 @@ Use targeted unit tests and no-emit/syntax checks only during iterations. Exampl
 
 ## Current owner decisions
 
+- RELEASE-29 authorizes BOARD-07 and final local Windows, Android and Nextcloud packages at **0.6.29/build31** after focused checks and source freeze. Use Windows file version **0.6.29.31** and Android versionCode **31**. Preserve prior packages, technical identities and the permanent Windows shortcut. After privacy review, push source to the existing GitHub repository. Don't upload packages, deploy or install on user devices.
+
+- RELEASE-28 authorizes EDIT-19 and final Windows and Android packages at **0.6.28/build30** after focused verification and source freeze. Preserve previous packages and technical identities and update `NextGlance-Latest.exe`. Run the shared protocol checks across all client harnesses. No push, deployment or device install is authorized for this milestone.
+
 - RELEASE-27 authorizes WIDGET-09 and final local Windows, Android and Nextcloud packages at **0.6.27/build29**, with Windows file version **0.6.27.29** and Android versionCode **29**. Freeze after fast checks, preserve existing identities and prior builds, refresh `NextGlance-Latest.exe`, then push reviewed source to the existing GitHub repository. Do not install, deploy, or upload binaries.
 
 - RELEASE-26 authorizes HISTORY-02, VIEW-18 and WIDGET-05 and final local Windows, Android and Nextcloud packages at **0.6.26/build28** after fast checks and source freeze. Preserve prior artifacts, storage/signing identities and the stable Windows shortcut target. No deployment, push or real-account writes.

@@ -21,7 +21,7 @@ import {reconcileIdentities,projectNativeIdentities,promoteNativeIdentities} fro
 import {taskStatusProgress, nativeStatus} from '@nextspace/core/status-mapping.mjs'
 import {isClosed, allRelations, canAddRelation, scopeRecordIds, boardColumns, boardCollectionsForScope, localDay, dayItems, filterCompletedWork} from '@nextspace/core/planner.mjs'
 import {dependencyCandidates} from '@nextspace/core/relation-picker.mjs'
-import {calendarContentEquivalent} from '@nextspace/nextcloud-client/calendar-representation.mjs'
+import {calendarContentEquivalent,calendarDeletePreflight} from '@nextspace/nextcloud-client/calendar-representation.mjs'
 import {normalizeEventDetails,normalizeEventReminders,linkedEventDescription,newEventDetails} from '@nextspace/core/event-details.mjs'
 import {normalizeEventAttendees,normalizeEventParticipation,eventSchedulingAccess} from '@nextspace/core/event-scheduling.mjs'
 import {deckDependencyProblem} from '@nextspace/core/deck-dependencies.mjs'
@@ -99,6 +99,7 @@ const operations = new Map([
   ['board.completedVisibility',{fields:[],run:state=>output(filterCompletedWork(state.records,state.relations,state.view,state.showCompleted).map(record=>record.id))}],
   ['dependency.candidates',{fields:[],run:state=>output(dependencyCandidates(state.workspace,state.records,state.scopeId).map(record=>record.id))}],
   ['calendar.contentEquivalent',{fields:[],run:state=>output(calendarContentEquivalent(state.left,state.right))}],
+  ['calendar.deletePreflight',{fields:[],run:state=>output(calendarDeletePreflight(state))}],
   ['event.details',{fields:[],run:state=>output(normalizeEventDetails(state.input,state.options))}],
   ['event.reminders',{fields:[],run:state=>output(normalizeEventReminders(state))}],
   ['event.linkedDescription',{fields:[],run:state=>output(linkedEventDescription(state))}],

@@ -2,6 +2,8 @@
 
 ## Current authorization — WEB-01 (2026-11-14)
 
+RELEASE-29 authorizes final local 0.6.29 assets and archive after BOARD-07 fast checks and source freeze. Preserve the Nextcloud session, app identity and prior archives. Reviewed source may be pushed to the existing GitHub repository. Package uploads and server deployment remain outside this release.
+
 RELEASE-27 authorizes final local 0.6.27 assets and archive after fast checks and source freeze, followed by a privacy-reviewed source push to the existing GitHub repository. Preserve the session-only HISTORY-02 behavior and native identifiers. Server installation, binary uploads and deployment remain outside this release.
 
 RELEASE-26 adds HISTORY-02 native identity isolation and VIEW-18 quieter weekend shades to the Nextcloud app at 0.6.26. Verify session-only history and customization saves before final packaging.

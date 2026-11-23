@@ -9,7 +9,7 @@ import { syncDiagnostic } from './sync-diagnostics.mjs';
 import {sourceSelection, checkedResourceEntry, validResourceLocator, httpEtag, completeDeckStacks} from './resource-cache-policy.mjs';
 import {sanitizeDiagnosticInput} from '@nextspace/core/performance-diagnostics.mjs';
 import {DAV_PROJECTION_VERSION, davProjectionWindow, checkedDavToken, checkedDavCheckpoint, davCheckpointCompatible, davInventoryCompatible, checkedDavResourceIndex} from './dav-checkpoint-policy.mjs';
-import {calendarContentEquivalent} from './calendar-representation.mjs';
+import {calendarContentEquivalent, calendarDeletePreflight} from './calendar-representation.mjs';
 import {normalizeEventDetails} from '@nextspace/core/event-details.mjs';
 import {eventAlarmDetails, replaceEventReminders} from './event-alarms.mjs';
 import {eventMailbox, normalizeEventAttendees, normalizeEventParticipation} from '@nextspace/core/event-scheduling.mjs';
@@ -70,6 +70,7 @@ function noteRetryPatch(desired, base, latest) {
   return patch;
 }
 const plannerReadHeaders = { Accept: 'application/json', 'Accept-Encoding': 'identity', 'Cache-Control': 'no-cache' };
+const calendarReadHeaders = { Accept: 'text/calendar', 'Accept-Encoding': 'identity', 'Cache-Control': 'no-cache' };
 const xmlText = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 const fileProperties = '<d:displayname/><d:resourcetype/><d:getcontentlength/><d:getcontenttype/><oc:fileid/>';
 const filesPropfind = properties => `<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns"><d:prop>${properties}</d:prop></d:propfind>`;
@@ -295,7 +296,7 @@ function ocsData(response) {
   return body.ocs.data;
 }
 
-function multistatus(response) {
+function multistatus(response, uniqueProperty) {
   assertStatus(response);
   if (/<!DOCTYPE|<!ENTITY/i.test(response.body) || XMLValidator.validate(response.body) !== true) throw fail('Nextcloud returned invalid WebDAV XML.', 'FORMAT');
   const parsed = xml.parse(response.body);
@@ -306,7 +307,12 @@ function multistatus(response) {
     const properties = {};
     let denied = /\s(401|403)(?:\s|$)/.test(String(item.status));
     let unauthorized = /\s401(?:\s|$)/.test(String(item.status));
+    let propertySeen = false;
     for (const part of list(item.propstat)) {
+      if (uniqueProperty && part.prop && Object.hasOwn(part.prop, uniqueProperty)) {
+        if (propertySeen || Array.isArray(part.prop[uniqueProperty])) throw fail('Nextcloud returned conflicting WebDAV properties.', 'FORMAT');
+        propertySeen = true;
+      }
       if (/\s2\d\d(?:\s|$)/.test(String(part.status))) Object.assign(properties, part.prop);
       if (/\s(401|403)(?:\s|$)/.test(String(part.status))) denied = true;
       if (/\s401(?:\s|$)/.test(String(part.status))) unauthorized = true;
@@ -1078,7 +1084,7 @@ export class NextcloudClient {
   }
 
   async readDavResource(calendar, resource, revision, allowance, context) {
-    const single=()=>this.sourceRequest(context,resource.href,{headers:{Accept:'text/calendar','Accept-Encoding':'identity','Cache-Control':'no-cache',...(revision?{'If-Match':revision}:{})},maxBytes:allowance});
+    const single=()=>this.sourceRequest(context,resource.href,{headers:{...calendarReadHeaders,...(revision?{'If-Match':revision}:{})},maxBytes:allowance});
     if(this.#davReadMode!=='report'||!revision||this.#davNoMultiget.has(calendar.href))return single();
     // The four bounded download workers coalesce their current reads. No extra
     // items are prefetched, so existing transfer reservations remain in force.
@@ -2043,7 +2049,8 @@ export class NextcloudClient {
     if (record.source === 'tasks' || record.source === 'calendar') {
       let raw = saved?.raw, etag = saved?.etag;
       if (typeof raw !== 'string' || typeof etag !== 'string' || !etag || etag === '*') {
-        const response = assertStatus(await this.request(record.remote.href, { headers: { Accept: 'text/calendar' }, maxBytes: 2 * 1024 * 1024 }));
+        const headers = record.source === 'calendar' ? calendarReadHeaders : {Accept: 'text/calendar'};
+        const response = assertStatus(await this.request(record.remote.href, {headers, maxBytes: 2 * 1024 * 1024}));
         raw = response.body; etag = response.headers.get('ETag') || undefined;
       }
       const items = this.calendarRecords(raw, record.remote.href, etag, collection, new Date(-8640000000000000), new Date(8640000000000000));
@@ -2511,7 +2518,7 @@ export class NextcloudClient {
   }
 
   async readCreatedEvent({href, uid, requestId}, collection, {authorityVerified=false}={}) {
-    const response = assertStatus(await this.request(href, {headers: {Accept: 'text/calendar'}, maxBytes: 2 * 1024 * 1024}));
+    const response = assertStatus(await this.request(href, {headers: calendarReadHeaders, maxBytes: 2 * 1024 * 1024}));
     const calendar = parseCalendar(response.body);
     const event = calendar.getFirstSubcomponent('vevent');
     if (!event || eventStructureReason(calendar,event) || event.getFirstPropertyValue('uid') !== uid || requestId && event.getFirstPropertyValue('x-nextspace-request') !== requestId.toLowerCase()) throw fail('The scheduling resource no longer matches this request. It was not overwritten. Refresh and link the existing event manually.', 'CONFLICT');
@@ -2566,6 +2573,18 @@ export class NextcloudClient {
     return this.eventWriteReadback(record,response,verifiedCollection);
   }
 
+  async #calendarResourceEtag(href, collectionHref) {
+    const response = await this.request(href, {method: 'PROPFIND', headers: {Depth: '0', 'Content-Type': 'application/xml', 'Cache-Control': 'no-cache'}, body: propfind('<d:getetag/>'), maxBytes: 64 * 1024});
+    if ([404, 405, 501].includes(response.status)) return null;
+    const rows = multistatus(response, 'getetag');
+    if (rows.length !== 1 || davMemberHref(this.serverUrl, collectionHref, rows[0].href) !== href) return null;
+    const [row] = rows;
+    if (row.unauthorized) throw fail('Nextcloud authorization expired. Reconnect before editing.', 'AUTH', 401);
+    if (row.denied) throw fail('Your Nextcloud account does not have permission for this action.', 'PERMISSION', 403);
+    if (row.status && !/\s2\d\d(?:\s|$)/.test(row.status)) return null;
+    return strongEtag(row.properties.getetag);
+  }
+
   async deleteEvent({id}, record, collection) {
     const href = record?.remote?.href, collectionHref = collection?.remote?.href;
     if (id !== record?.id || record?.source !== 'calendar' || record.kind !== 'event' || collection?.source !== 'calendar' || collection.readonly || collection.id !== record.collectionId) throw fail('Choose an editable calendar event from a verified source.', 'PERMISSION');
@@ -2597,21 +2616,25 @@ export class NextcloudClient {
       if(!cacheAlreadyInvalidated)await this.resourceOperation('remove', {kind: 'dav', collection: collectionHref, href});
       return {deleted: true};
     };
-    const fresh = await this.request(href, {headers: {'If-Match': etag, 'Cache-Control': 'no-cache', Accept: 'text/calendar'}, maxBytes: 2 * 1024 * 1024});
+    const fresh = await this.request(href, {headers: {...calendarReadHeaders, 'If-Match': etag}, maxBytes: 2 * 1024 * 1024});
     if (fresh.status === 404) return forget();
     assertStatus(fresh);
     checkDocument(fresh.body);
-    // Conditional GET certifies the stored strong validator even when the
-    // delegated transport cannot return response headers. Never adopt a new
-    // validator and thereby delete a version the user has not reviewed.
-    const returnedEtag = fresh.headers.get('ETag');
-    if (returnedEtag && returnedEtag !== etag || !calendarContentEquivalent(fresh.body, record.remote.raw)) throw fail('This event changed on Nextcloud. Refresh and review it before deleting.', 'CONFLICT', 412);
+    // A proxy can change a GET representation tag. If the complete resource
+    // matches, confirm the original revision through its DAV property.
+    const revisionEvidence = {baseline: record.remote.raw, body: fresh.body, etag, responseEtag: fresh.headers.get('ETag')};
+    let preflight = calendarDeletePreflight(revisionEvidence);
+    if (preflight === 'check-dav') {
+      const davEtag = await this.#calendarResourceEtag(href, collectionHref);
+      preflight = calendarDeletePreflight({...revisionEvidence, davEtag});
+    }
+    if (preflight !== 'verified') throw fail('This event changed on Nextcloud. Refresh and review it before deleting.', 'CONFLICT', 412);
     const removed = await this.request(href, {method: 'DELETE', headers: {'If-Match': etag}});
     if ([200, 204].includes(removed.status)) return forget(new URL(href).pathname.includes('/remote.php/dav/calendars/'));
     if (removed.status !== 404) assertStatus(removed);
     // Asynchronous success or a raced 404 is not proof of removal. Read once;
     // never replay DELETE after an uncertain transport outcome.
-    const verify = await this.request(href, {headers: {'Cache-Control': 'no-cache', Accept: 'text/calendar'}, maxBytes: 2 * 1024 * 1024});
+    const verify = await this.request(href, {headers: calendarReadHeaders, maxBytes: 2 * 1024 * 1024});
     if (verify.status === 404) return forget();
     assertStatus(verify);
     throw fail('Nextcloud has not confirmed that this event was deleted. Refresh before trying again.', 'UNAVAILABLE');

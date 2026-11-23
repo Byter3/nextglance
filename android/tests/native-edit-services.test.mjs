@@ -60,6 +60,7 @@ async function fixture({isNative = false, metadataReady = true} = {}) {
     if(url===calendar&&input.method==='PROPFIND')return multi(row(calendar,'<d:resourcetype><d:collection/><c:calendar/></d:resourcetype><d:current-user-privilege-set><d:privilege><d:write/></d:privilege></d:current-user-privilege-set><c:supported-calendar-component-set><c:comp name="VTODO"/><c:comp name="VEVENT"/></c:supported-calendar-component-set>'))
     if(url.startsWith(calendar)&&url.endsWith('.ics')) {
       const existing=sources.get(url)
+      if(input.method==='PROPFIND')return existing?multi(row(url,`<d:getetag>${escape(existing.etag)}</d:getetag>`)):new Response(null,{status:404})
       if(input.method==='DELETE'){if(new Headers(input.headers).get('If-Match')!==existing?.etag)return new Response(null,{status:412});sources.delete(url);return new Response(null,{status:204})}
       if(input.method==='PUT') {
         const headers=new Headers(input.headers)
@@ -69,7 +70,7 @@ async function fixture({isNative = false, metadataReady = true} = {}) {
         return new Response(null,{status:201,headers:{ETag:etag}})
       }
       if(f.failEventReads&&existing?.body.includes('BEGIN:VEVENT'))return new Response(null,{status:503})
-      return existing?new Response(existing.body,{headers:{ETag:existing.etag,'Content-Type':'text/calendar'}}):new Response(null,{status:404})
+      return existing?new Response(existing.body,{headers:{ETag:f.calendarRepresentationEtag??existing.etag,'Content-Type':'text/calendar'}}):new Response(null,{status:404})
     }
     if(url.startsWith(notes+'?')) {
       const data=clone(f.note)
@@ -516,6 +517,37 @@ test('an event restored through XML REPORT can be deleted against unchanged CRLF
   assert.ok(!deleted.records.some(record=>record.id===event.id));assert.ok(!f.sources.has(entry[0]))
   assert.equal(new Headers(f.calls.findLast(call=>call.url===entry[0]&&call.method==='DELETE').headers).get('If-Match'),entry[1].etag)
 })
+
+test('a linked Deck event with a different response ETag keeps the original DAV revision on deletion', async t => {
+  const f = await fixture({isNative:true}); t.after(f.close)
+  const card = f.record('card'), request = {...f.request(), recordId:card.id}
+  const booked = await f.api.createLinkedEvent(request)
+  const event = booked.records.find(record => record.kind === 'event')
+  const [href, saved] = [...f.sources].find(([,resource]) => resource.body.includes('BEGIN:VEVENT'))
+  const journalKey = schedulingKey(f.account)
+  const journal = clone(f.cacheValues.get(journalKey))
+  assert.ok(journal.requests.some(entry => entry.status === 'linked' && entry.eventId === event.id && entry.recordId === card.id))
+  assert.ok(booked.workspace.relations.some(link => link.fromId === card.id && link.toId === event.id))
+
+  f.calendarRepresentationEtag = '"encoded-event-representation"'
+  const before = f.calls.length
+  const deleted = await f.api.deleteEvent({id:event.id})
+  const requests = f.calls.slice(before).filter(call => call.url === href)
+  assert.deepEqual(requests.map(call => call.method), ['GET', 'PROPFIND', 'DELETE'])
+  const [read, revision, removal] = requests.map(call => new Headers(call.headers))
+  assert.equal(read.get('if-match'), saved.etag)
+  assert.equal(read.get('accept-encoding'), 'identity')
+  assert.equal(revision.get('depth'), '0')
+  assert.equal(removal.get('if-match'), saved.etag)
+  assert.equal(f.sources.has(href), false)
+  assert.equal(deleted.records.some(record => record.id === event.id), false)
+  assert.deepEqual(deleted.records.find(record => record.id === card.id), card)
+  assert.deepEqual(deleted.workspace.relations, booked.workspace.relations)
+  assert.deepEqual(f.cacheValues.get(journalKey), journal)
+  const acknowledgement = f.cacheValues.get(sourceEditsKey(f.account)).entries.find(entry => entry.record.id === event.id)
+  assert.equal(acknowledgement?.deleted, true)
+})
+
 test('cancelling attachment picker preserves existing attachment list and performs no upload',async t=>{
   const f=await fixture();t.after(f.close);f.attachments=[{id:4,type:'file',data:'brief.md',extendedData:{fileid:7,path:'/Notes/brief.md'}}];f.native.chooseAttachment=async()=>({cancelled:true});f.native.uploadAttachment=()=>assert.fail('Unexpected upload')
   const result=await f.api.uploadDeckAttachment({id:f.record('card').id});assert.equal(result.cancelled,true);assert.equal(result.attachments.length,1)

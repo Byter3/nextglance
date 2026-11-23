@@ -4,6 +4,33 @@ These are dated records of local builds, not public download links. Artifact pat
 
 Packages listed here are local development artifacts. Outputs stay in `win/release/`, `android/release/` and `web/release/`, outside source control. The reviewed source is published in [Byter3/nextglance](https://github.com/Byter3/nextglance); source publication does not publish these binary packages. Application/account/storage identities remain unchanged.
 
+## 0.6.29 — Windows, Android and Nextcloud
+
+Built on **2026-11-23** for BOARD-07 / RELEASE-29. Windows file version is `0.6.29.31`, Android versionCode is `31`, and Nextcloud app version is `0.6.29`.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `win/release/NextGlance-0.6.29-Windows.exe` | 101,268,859 bytes | `c25be92ef27abfdf6a68c14b0c07dee5973d6373744289ea8e4054f08bf543f3` |
+| `android/release/NextGlance-0.6.29-Android-debug.apk` | 13,245,547 bytes | `4336da31fea57b1882eb4c8d9857639815132e73b451c9339f752e43a1c800a0` |
+| `web/release/NextGlance-0.6.29-Nextcloud.tar.gz` | 2,027,027 bytes | `f02fde7b53f291c6e7d984804beeb1a9f13ec073aebff9bca2d98f81d4c8f4cb` |
+
+The Board now identifies tasks and Deck cards with source-colored icons. Standalone tasks show their title, source and due date in a compact row. See the [release notes](RELEASE-NOTES-0.6.29.md).
+
+Windows passed unpacked and portable launch checks. `win/release/NextGlance-Latest.exe` matches the versioned EXE byte for byte. The Android APK retains its signing identity and includes the new Board markup and styles. Gradle reused 216 passing JVM results. The Nextcloud archive contains matching production assets and 492 files from the frozen workspace. All 948 shared tests, 1,859 client tests and the targeted Board and Nextcloud browser fixtures passed. All 778 frozen paths and 55 previous packages matched their prebuild checksums. Physical-device and live-server acceptance remain open.
+
+## 0.6.28 — Windows and Android
+
+Built on **2026-11-23** for EDIT-19 / RELEASE-28. Windows file version is `0.6.28.30` and Android versionCode is `30`.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `win/release/NextGlance-0.6.28-Windows.exe` | 101,270,611 bytes | `ce12fe278a73b420684c76cfaec71d9c715d24dff4336173301d3b993678d604` |
+| `android/release/NextGlance-0.6.28-Android-debug.apk` | 13,245,151 bytes | `337f06482fe9005e49316ead78d9f2b1583043b0a28d1f6b61d8b6880483342b` |
+
+Event deletion verifies the original DAV revision when the complete event matches and a GET response carries a different representation ETag. Linked work and saved relationships are retained. Isolated HTTP and client fixtures cover compressed responses, changed revisions and successful deletion of a linked event. All 948 shared tests, 1,859 client tests and 216 Android JVM tests passed. Windows passed isolated unpacked and portable launch checks. The Android APK retains the signing certificate. All 778 frozen source paths and 53 previous packages matched their prebuild checksums.
+
+After the running Windows app closed, `NextGlance-Latest.exe` was refreshed. It reports file version `0.6.28.30` and matches the versioned Windows package byte for byte.
+
 ## 0.6.27 — Windows, Android and Nextcloud
 
 Built on **2026-11-23** for WIDGET-09 / RELEASE-27. Windows file version is `0.6.27.29`, Android versionCode is `29`, and Nextcloud app version is `0.6.27`.

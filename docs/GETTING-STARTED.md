@@ -44,6 +44,8 @@ Project A and Project B can share a calendar or Deck board while showing differe
 
 ## Board: keep linked tasks with their card
 
+Standalone tasks use a compact row with the title, source list and due date. The circle identifies a task and the kanban folder identifies a Deck card. Hover or focus a task to reveal its details.
+
 Enable **Group linked tasks** in the Board toolbar (or its menu on smaller screens). Tasks the card waits for appear above it, such as **Gather reference images**; tasks that need the card appear below it, such as **Share design summary**.
 
 Under **Board → Filters → Completed items**, choose how long completed tasks and cards stay visible. The default is 14 days. You can set another number of days, hide completed items, or show them all.
