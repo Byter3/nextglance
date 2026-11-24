@@ -305,9 +305,12 @@ public class NextcloudSsoPolicyTest {
         for(String transport:List.of("sso","direct")){
             NativeRequestPolicy.checkedRequest(transport,base,"user",share,"POST",headers,body);
             assertThrows(Exception.class,()->NativeRequestPolicy.checkedRequest(transport,base,"user",share,"POST",headers,body.replace("permissions\":1","permissions\":31")));
-            String attachment=base+"/index.php/apps/deck/api/v1.1/boards/1/stacks/2/cards/5/attachments/8?type=file";
+            String attachments=base+"/index.php/apps/deck/api/v1.1/boards/1/stacks/2/cards/5/attachments";
+            String attachment=attachments+"/file/8";
             NativeRequestPolicy.checkedRequest(transport,base,"user",attachment,"DELETE",Map.of(),null);
-            assertThrows(Exception.class,()->NativeRequestPolicy.checkedRequest(transport,base,"user",attachment.replace("type=file","type=deck_file"),"DELETE",Map.of(),null));
+            for(String target:List.of(attachments+"/deck_file/8",attachments+"/8?type=file",attachment+"?type=file",attachment+"/extra",base+"/remote.php/dav/files/user/Notes/brief.md"))
+                assertThrows(Exception.class,()->NativeRequestPolicy.checkedRequest(transport,base,"user",target,"DELETE",Map.of(),null));
+            assertThrows(Exception.class,()->NativeRequestPolicy.checkedRequest(transport,base,"user",attachment,"DELETE",headers,"{}"));
             NativeRequestPolicy.checkedRequest(transport,base,"user",calendar+"event.ics","DELETE",Map.of("If-Match",List.of("\"exact\"")),null);
             assertThrows(Exception.class,()->NativeRequestPolicy.checkedRequest(transport,base,"user",calendar+"event.ics","DELETE",Map.of(),null));
         }

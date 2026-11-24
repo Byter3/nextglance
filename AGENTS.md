@@ -45,6 +45,10 @@ Use targeted unit tests and no-emit/syntax checks only during iterations. Exampl
 
 ## Current owner decisions
 
+- RELEASE-32 authorizes the final local Android APK at **0.6.32/versionCode34** for SYNC-18 after fast checks and source freeze. Preserve prior APKs and signing, application, account and storage identities. Push the privacy-reviewed 0.6.31 and 0.6.32 source to the existing GitHub repository. Keep packages local. Windows and Nextcloud stay at 0.6.31.
+
+- RELEASE-31 authorizes final local Windows, Android and Nextcloud packages at **0.6.31/build33** for HISTORY-03, VIEW-19 and EDIT-21. Use Windows file version **0.6.31.33** and Android versionCode **33**. Preserve previous versioned artifacts, signing and technical identities. Refresh the stable Windows shortcut after packaging.
+
 - RELEASE-30 authorizes final local Windows, Android and Nextcloud packages at **0.6.30/build32** for SYNC-17, PERF-19, PERF-20 and EDIT-20. Use Windows file version **0.6.30.32** and Android versionCode **32**. Preserve previous packages and identities, refresh the stable Windows shortcut, and push privacy-reviewed source to the existing GitHub repository after package checks. Keep binary packages local.
 
 - RELEASE-29 authorizes BOARD-07 and final local Windows, Android and Nextcloud packages at **0.6.29/build31** after focused checks and source freeze. Use Windows file version **0.6.29.31** and Android versionCode **31**. Preserve prior packages, technical identities and the permanent Windows shortcut. After privacy review, push source to the existing GitHub repository. Don't upload packages, deploy or install on user devices.

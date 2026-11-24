@@ -5,7 +5,7 @@ export const DIAGNOSTIC_ENUMS = Object.freeze({
   stage: ['start', 'finish', 'error', 'discovery', 'cache-read', 'cache-write', 'download', 'projection', 'local-cache', 'authorization', 'planner-read', 'planner-write', 'page', 'panel', 'frame', 'scroll', 'worker-ready', 'first-checkpoint', 'full-restore', 'publication'],
   page: ['overview', 'calendar', 'timeline', 'board', 'list', 'settings'],
   method: ['GET', 'HEAD', 'PROPFIND', 'REPORT', 'PUT', 'POST', 'DELETE', 'MKCOL'],
-  code: ['AUTH', 'PERMISSION', 'CANCELLED', 'TIMEOUT', 'NETWORK', 'OFFLINE', 'LIMIT', 'FORMAT', 'VALIDATION', 'SECURITY', 'CONFLICT', 'PLANNER_OVERLAP', 'PLANNER_READ_CHANGED', 'PLANNER_WRITE_CHANGED', 'UNAVAILABLE', 'NEXTCLOUD', 'REDIRECT', 'CACHE_FORMAT', 'CACHE_READ_FAILED', 'CACHE_WRITE_FAILED', 'CACHE_WRITE', 'CACHE_UNREADABLE', 'METADATA_NOT_READY', 'PREVIEW_HOST', 'PREVIEW_SESSION_EXPIRED', 'RECONNECT_REQUIRED', 'UNKNOWN'],
+  code: ['AUTH', 'PERMISSION', 'CANCELLED', 'TIMEOUT', 'NETWORK', 'FILES_TRANSPORT', 'OFFLINE', 'LIMIT', 'FORMAT', 'VALIDATION', 'SECURITY', 'CONFLICT', 'PLANNER_OVERLAP', 'PLANNER_READ_CHANGED', 'PLANNER_WRITE_CHANGED', 'UNAVAILABLE', 'NEXTCLOUD', 'REDIRECT', 'CACHE_FORMAT', 'CACHE_READ_FAILED', 'CACHE_WRITE_FAILED', 'CACHE_WRITE', 'CACHE_UNREADABLE', 'METADATA_NOT_READY', 'PREVIEW_HOST', 'PREVIEW_SESSION_EXPIRED', 'RECONNECT_REQUIRED', 'UNKNOWN'],
 })
 export const DIAGNOSTIC_NUMBERS = Object.freeze(['durationMs', 'count', 'bytes', 'completed', 'total', 'cacheHits', 'cacheMisses', 'downloads', 'frames', 'maxDelayMs', 'status'])
 export function sanitizeDiagnosticInput(value) {

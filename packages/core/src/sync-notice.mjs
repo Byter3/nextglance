@@ -6,7 +6,7 @@ const notice = (kind, message, action, actionLabel, tone='warning') => ({kind, t
  * freshness belong to the always-accessible cloud indicator. */
 export function syncNoticePresentation(value) {
   if (!value) return 'none'
-  return value.action === 'reconnect' || value.action === 'details' ? 'banner' : 'indicator'
+  return value.action === 'reconnect' || value.action === 'details' && value.kind !== 'connection' ? 'banner' : 'indicator'
 }
 
 /** A concise summary of observed state, never a diagnosis inferred from prose.
@@ -29,6 +29,8 @@ export function syncNotice({connection, storage={}, statuses=[], networkOnline=t
     return notice('source', 'Source access needs review. Review permissions.', 'details', 'Review')
   if (failures.some(status=>status.errorStage==='local-cache'||status.errorCode?.startsWith('CACHE_')))
     return notice('source', 'Local source storage needs attention.', 'details', 'Review')
+  if (networkOnline && (failures.some(status=>status.errorCode==='FILES_TRANSPORT') || plannerFailed && storage.errorCode==='FILES_TRANSPORT'))
+    return notice('connection', 'The Nextcloud Files connection was interrupted. Saved data is available.', 'details', 'Connection options')
   if (plannerFailed) {
     const cause=storage.errorCode==='TIMEOUT'?'Planner sync timed out.':storage.errorCode==='NETWORK'?'Planner sync could not connect.':'Planner sync needs attention.'
     return notice('planner', `${cause} Local changes are preserved.${syncing?' Retrying…':''}`, syncing||!networkOnline?null:'retry-planner', syncing||!networkOnline?null:'Retry sync')

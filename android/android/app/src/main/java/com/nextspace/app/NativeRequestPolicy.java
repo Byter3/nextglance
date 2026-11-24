@@ -118,8 +118,8 @@ final class NativeRequestPolicy {
             throw new NativeLoginFlow.Failure("LIMIT", "The native write exceeds its body limit.");
 
         boolean share="POST".equals(method)&&"ocs/v2.php/apps/files_sharing/api/v1/shares".equals(path)&&"format=json".equals(uri.getRawQuery());
-        boolean detach="DELETE".equals(method)&&path.matches("index\\.php/apps/deck/api/v1\\.1/boards/[1-9]\\d*/stacks/[1-9]\\d*/cards/[1-9]\\d*/attachments/[1-9]\\d*")&&"type=file".equals(uri.getRawQuery());
-        if(uri.getRawQuery()!=null&&!share&&!detach)throw new NativeLoginFlow.Failure("VALIDATION","Unsupported native query parameters.");
+        boolean detach="DELETE".equals(method)&&path.matches("index\\.php/apps/deck/api/v1\\.1/boards/[1-9]\\d*/stacks/[1-9]\\d*/cards/[1-9]\\d*/attachments/file/[1-9]\\d*");
+        if(uri.getRawQuery()!=null&&!share)throw new NativeLoginFlow.Failure("VALIDATION","Unsupported native query parameters.");
         if(share){
             JsonObject value=jsonBody(headers,body);List<String> allowed=List.of("path","shareType","shareWith","permissions");fields(value,allowed,allowed);
             if(!string(value,"path")||!value.get("path").getAsString().startsWith("/")||value.get("path").getAsString().length()>4096||value.get("path").getAsString().chars().anyMatch(c->c<32||c==92)||List.of(value.get("path").getAsString().split("/")).stream().anyMatch(p->p.equals(".")||p.equals(".."))||!value.get("shareType").isJsonPrimitive()||!value.getAsJsonPrimitive("shareType").isNumber()||value.get("shareType").getAsDouble()!=12||!value.get("permissions").isJsonPrimitive()||!value.getAsJsonPrimitive("permissions").isNumber()||value.get("permissions").getAsDouble()!=1||!value.get("shareWith").isJsonPrimitive()||!value.get("shareWith").getAsString().matches("[1-9]\\d{0,15}")||Double.parseDouble(value.get("shareWith").getAsString())>9007199254740991d)throw new NativeLoginFlow.Failure("VALIDATION","Only a read-only file share to a Deck card is allowed.");

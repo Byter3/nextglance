@@ -199,7 +199,15 @@ public class NextcloudSsoPlugin extends Plugin {
     public void beginLogin(PluginCall call) {
         synchronized (this) { accountGeneration++; }
         execute(call, timed -> {
-            NativeLoginFlow.Started started = login().begin(call.getString("serverUrl"));
+            NativeLoginFlow.Account expected = null;
+            if (call.getData().has("expectedAccount")) {
+                JSObject value = call.getObject("expectedAccount");
+                if (value == null) throw new BridgeFailure("VALIDATION", "Choose a saved Nextcloud account before switching its connection.");
+                String name = value.getString("name"), serverUrl = value.getString("serverUrl"), username = value.getString("username");
+                checkedAccountIdentity(name, serverUrl, username);
+                expected = new NativeLoginFlow.Account(name, serverUrl, username);
+            }
+            NativeLoginFlow.Started started = login().begin(call.getString("serverUrl"), expected);
             JSObject result = new JSObject(); result.put("flowId", started.flowId()); result.put("loginUrl", started.loginUrl());
             return result;
         });
@@ -305,25 +313,22 @@ public class NextcloudSsoPlugin extends Plugin {
                 if (saved == null || !NativeLoginFlow.normalizeServer(account.url).equals(NativeLoginFlow.normalizeServer(saved.serverUrl())) || !account.userId.equals(saved.username())) throw new BridgeFailure("AUTH", "Nextcloud Files returned another account.");
                 return accountResult(saved, "sso");
             } catch (Exception unavailable) {
-                JSObject result = accountResult(null, preferences().getString("transport", "sso"));
+                String transport = preferences().getString("transport", "sso");
                 try {
                     String serverUrl = preferences().getString("serverUrl", null);
                     String username = preferences().getString("username", null);
                     checkedAccountIdentity(name, serverUrl, username);
-                    JSObject identity = new JSObject();
-                    identity.put("name", name);
-                    identity.put("serverUrl", serverUrl);
-                    identity.put("username", username);
-                    result.put("account", identity);
+                    JSObject result = accountResult(new NativeLoginFlow.Account(name, serverUrl, username), transport);
                     result.put("reconnectRequired", true);
                     result.put("restoreError", "Saved Nextcloud account access is unavailable. Sign in again; saved data remains on this device.");
+                    return result;
                 } catch (Exception invalidIdentity) {
-                    result.put("account", JSONObject.NULL);
+                    JSObject result = accountResult(null, transport);
                     result.put("reconnectRequired", true);
                     result.put("recoveryOnly", true);
                     result.put("restoreError", "The saved account identity could not be verified. Reconnect through the Nextcloud Files app; existing account files are preserved.");
+                    return result;
                 }
-                return result;
             }
         } catch (Exception error) {
             JSObject result = accountResult(null, null);
@@ -587,6 +592,10 @@ public class NextcloudSsoPlugin extends Plugin {
     private JSObject accountResult(NativeLoginFlow.Account account, String transport) {
         JSObject result = new JSObject();
         result.put("account", account == null ? JSONObject.NULL : publicIdentity(account));
+        if (account != null) {
+            if ("sso".equals(transport)) result.put("authorizationMethod", "files");
+            if ("direct".equals(transport)) result.put("authorizationMethod", "direct");
+        }
         JSObject capabilities = new JSObject();
         capabilities.put("davReadMode", NativeRequestPolicy.davReadMode(transport));
         String nativeEdits = NativeRequestPolicy.nativeEdits(transport);

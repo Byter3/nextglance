@@ -97,6 +97,21 @@ test('Deck dependency, stack and label endpoints accept only their exact bounded
  for(const headers of [{...json,'if-match':'*'},{...json,'if-none-match':'*'}])assert.throws(()=>check(deck+'/dependentCards/4','DELETE',headers,undefined),{code:'VALIDATION'})
 })
 
+test('Deck file detach accepts only the typed v1.1 member through both JS transport boundaries', async () => {
+  const attachments=deck.replace('/api/v1.0/','/api/v1.1/')+'/attachments'
+  const file=`${attachments}/file/4`,calls=[]
+  const fetch=createSsoFetch({request:async input=>{calls.push(input);return nativeResponse(input.url,204)}},account,edits)
+  const input={accountName:account.name,url:file,method:'DELETE',headers:{}}
+  assert.equal(checkedRequest(account,input).method,'DELETE')
+  await fetch(file,input)
+  assert.equal(calls.length,1)
+  for(const target of [`${attachments}/4?type=file`,`${attachments}/deck_file/4`,`${file}?type=file`,`${file}/extra`,`${base}/remote.php/dav/files/tester/Notes/brief.md`]){
+    assert.throws(()=>checkedRequest(account,{...input,url:target}),{code:'SECURITY'})
+    await assert.rejects(fetch(target,input),{code:'SECURITY'})
+  }
+  assert.throws(()=>check(file,'DELETE',{},'{}'),{code:'VALIDATION'})
+})
+
 test('preview independently checks the same source writes and exposes tag creation location safely', () => {
   const input = {accountName: account.name, url: `${note}/1`, method: 'PUT', headers: {'Content-Type': 'application/json', 'If-Match': '"current"'}, body: '{"content":"Saved"}'}
   assert.equal(checkedRequest(account, input).method, 'PUT')

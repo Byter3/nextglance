@@ -2,7 +2,7 @@
 
 The Android client shares its planner interface, portable core and Nextcloud protocol with Windows and the Nextcloud web client. Current package evidence and artifact locations are recorded in [Releases](../docs/RELEASES.md). Generated APKs remain local under `android/release/` and are excluded from source control.
 
-The current release target is **0.6.30 / versionCode 32**. Planner sync recovers interrupted uploads and offers review for overlapping edits. This version also includes faster Timeline navigation, checklist conversion improvements and task deletion. For packaged artifacts, signing, tests and remaining device checks, see [Releases](../docs/RELEASES.md).
+The current release target is **0.6.32 / versionCode 34**. Foreground and background sync share one Nextcloud Files request slot. **Use direct connection** in Settings & connection lets the same account sign in directly through its server and keep its saved planner. For packaged artifacts, signing, tests and remaining device checks, see [Releases](../docs/RELEASES.md).
 
 Calendar history defaults to All history. Settings & connection can limit the number of past days for this account on this device. Foreground and background reads reuse existing downloaded calendar files and surface safety limits if a projection cannot finish. Native source data can refresh independently when planner metadata needs attention.
 

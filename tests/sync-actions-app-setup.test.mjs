@@ -14,12 +14,13 @@ test('actual App guards native deletes and planner conflict choices, and present
   const noop=()=>{},media={matches:false,addEventListener:noop,removeEventListener:noop}
   set('window',{innerWidth:900,matchMedia:()=>media,addEventListener:noop,removeEventListener:noop,confirm:()=>false})
   set('document',{hidden:false,visibilityState:'visible',addEventListener:noop,removeEventListener:noop,querySelector:selector=>selector.startsWith('.settings-')||selector==='.planner-storage-settings'?{scrollIntoView:()=>scrolls.push(selector)}:null,getElementById:()=>null,documentElement:{dataset:{},style:{setProperty:noop,removeProperty:noop}}})
-  set('navigator',{onLine:true});set('localStorage',{getItem:()=>null,setItem:noop});set('getComputedStyle',()=>({getPropertyValue:()=>'#171717'}));set('ResizeObserver',class{observe(){}disconnect(){}})
+  const storage=new Map([['nextspace-board-completed-days','0']])
+  set('navigator',{onLine:true});set('localStorage',{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)});set('getComputedStyle',()=>({getPropertyValue:()=>'#171717'}));set('ResizeObserver',class{observe(){}disconnect(){}})
   set('HTMLElement',class{})
   set('requestAnimationFrame',fn=>{frames.set(++frameId,fn);return frameId});set('cancelAnimationFrame',id=>frames.delete(id))
   const server=await createServer({root:fileURLToPath(new URL('../packages/ui',import.meta.url)),configFile:false,plugins:[vue()],server:{middlewareMode:true,ws:false},logLevel:'error',optimizeDeps:{noDiscovery:true}})
   try{
-    const host=createEmptyState();host.connection={connected:true,serverUrl:'https://cloud.example.test',username:'fixture'}
+    const host=createEmptyState();host.connection={connected:true,serverUrl:'https://cloud.example.test',username:'fixture',authorizationMethod:'files'};host.metadata={ready:true}
     host.statuses=['calendar','deck','notes','tasks'].map(source=>({source,state:'connected',count:1}))
     host.collections=[{id:'calendar',source:'calendar',title:'Work calendar'},{id:'deck',source:'deck',title:'Work board',stacks:[{id:'1',title:'To do'}]},{id:'notes',source:'notes',title:'Notes'},{id:'tasks',source:'tasks',title:'Tasks'}]
     host.records=[{id:'event',source:'calendar',kind:'event',collectionId:'calendar',title:'Project review',start:'2026-11-13T10:00:00Z',end:'2026-11-13T11:00:00Z',etag:'"v1"'},{id:'card',source:'deck',kind:'card',collectionId:'deck',title:'Prepare review'},{id:'note',source:'notes',kind:'note',collectionId:'notes',title:'Review brief',fileId:'42'}]
@@ -33,12 +34,15 @@ test('actual App guards native deletes and planner conflict choices, and present
     api.createTask=async input=>{calls.push(['createTask',input]);host.records.push({id:'new-task',kind:'task',source:'tasks',collectionId:'tasks',title:input.title,body:input.description,etag:'"task-revision"'});return structuredClone(host)}
     api.deleteTask=async input=>{calls.push(['deleteTask',input]);host.records=host.records.filter(item=>item.id!==input.id);return structuredClone(host)}
     api.syncWorkspace=async()=>structuredClone(host)
+    api.refresh=async()=>{calls.push(['refresh']);return structuredClone(host)}
+    api.beginLogin=async (...args)=>{calls.push(['beginLogin',...args]);return {flowId:'fixture-flow',loginUrl:'https://cloud.example.test/login'}}
+    api.pollLogin=async()=>({pending:false,state:{...structuredClone(host),connection:{...host.connection,reconnectRequired:false,authorizationMethod:'direct'}}})
     api.resolveWorkspaceConflict=async (...args)=>{calls.push(['resolveWorkspaceConflict',...args]);return {...structuredClone(host),revision:4,storage:{syncStatus:'synced'}}}
     api.createCard=async input=>{calls.push(['createCard',input]);host.records.push({id:'new-card',kind:'card',source:'deck',collectionId:input.collectionId,title:input.title,body:input.description});return {...structuredClone(host),createdRecordId:'new-card'}}
     api.updateDescription=async input=>{calls.push(['description',input]);host.records.find(item=>item.id===input.id).body=input.description;return structuredClone(host)}
     const {default:App}=await server.ssrLoadModule('/src/App.vue')
     const renderer=createRenderer({createElement:type=>({type,children:[]}),createText:text=>({text}),createComment:text=>({text}),setText:noop,setElementText:noop,parentNode:()=>null,nextSibling:()=>null,patchProp:noop,insert:noop,remove:noop})
-    app=renderer.createApp({...App,render:()=>null,ssrRender:undefined},{api,canMutateNative:false,nativeOperations:host.nativeOperations})
+    app=renderer.createApp({...App,render:()=>null,ssrRender:undefined},{api,mobileHost:true,selectAccount:api.getState,canMutateNative:false,nativeOperations:host.nativeOperations})
     app.provide(ssrContextKey,{modules:new Set()});const setup=app.mount({}).$.setupState
     await new Promise(resolve=>setTimeout(resolve,0));await nextTick()
     const card=()=>setup.state.records.find(record=>record.id==='card'),event=()=>setup.state.records.find(record=>record.id==='event')
@@ -107,5 +111,39 @@ test('actual App guards native deletes and planner conflict choices, and present
     assert.match(template,/class="icon-button sync-button"[^>]*@click="openSyncDetails"/)
     assert.doesNotMatch(template.match(/<button class="icon-button sync-button"[^>]+>/)[0],/:disabled=/)
     assert.match(template,/<template v-if="calendarColorsOpen">/)
+
+    setup.now=new Date('2026-11-23T12:00:00Z')
+    setup.state.records.push(
+      {id:'earlier-task',kind:'task',source:'tasks',collectionId:'tasks',title:'Completed earlier',completed:true,completedAt:'2026-11-09T11:59:59Z'},
+      {id:'cutoff-task',kind:'task',source:'tasks',collectionId:'tasks',title:'Completed at cutoff',completed:true,completedAt:'2026-11-09T12:00:00Z'},
+    )
+    const visible=id=>setup.model.records.some(record=>record.id===id)
+    setup.setView('timeline')
+    assert.equal(setup.completedDays,14)
+    assert.equal(visible('earlier-task'),false)
+    assert.equal(visible('cutoff-task'),true)
+    setup.setView('board')
+    assert.equal(setup.completedDays,0,'Board keeps its own persisted preference')
+    assert.equal(visible('cutoff-task'),false)
+    await setup.jumpLinked({id:'earlier-task',view:'timeline'})
+    assert.equal(setup.settings.view,'board','jump preflight respects the Timeline cutoff')
+    assert.match(setup.toast,/hidden by its filters/)
+    setup.setView('timeline')
+    setup.changeCompletionHistory(null)
+    assert.equal(visible('earlier-task'),true)
+    assert.equal(storage.get('nextspace-timeline-completed-days'),'null')
+    assert.equal(storage.get('nextspace-board-completed-days'),'0')
+    assert.equal(setup.authEntry.canSwitchDirect,true)
+    setup.state.connection={...setup.state.connection,connected:false,reconnectRequired:true}
+    assert.equal(setup.authEntry.canSwitchDirect,true)
+    setup.modal='settings';setup.login.serverUrl='https://other.example.test'
+    await setup.beginLogin(true)
+    assert.deepEqual(calls.find(([operation])=>operation==='beginLogin'),['beginLogin','https://cloud.example.test',{sameAccount:true}])
+    assert.equal(setup.loginWaiting,true)
+    await setup.pollLogin()
+    assert.equal(setup.loginWaiting,false)
+    assert.equal(setup.authEntry.methodLabel,'Direct connection to Nextcloud')
+    assert.equal(setup.authEntry.canSwitchDirect,undefined)
+    assert.equal(calls.some(([operation])=>operation==='refresh'),false,'the Android host owns the post-sign-in refresh')
   }finally{app?.unmount();await server.close();for(const [name,descriptor] of originals){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name]}}
 })

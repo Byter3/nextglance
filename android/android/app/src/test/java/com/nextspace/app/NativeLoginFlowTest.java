@@ -44,8 +44,33 @@ public class NativeLoginFlowTest {
     }
     @Test public void sameCanonicalAccountReusesProviderCacheLocator() throws Exception {
         Storage store = new Storage(); store.account = new NativeLoginFlow.Account("existing-files-provider", SERVER, "canonical");
-        NativeLoginFlow flow = flow(new Network(), store, new AtomicLong()); flow.begin(SERVER);
+        NativeLoginFlow flow = flow(new Network(), store, new AtomicLong()); flow.begin(SERVER, store.account);
         assertEquals("existing-files-provider", flow.poll("flow-1").account().name());
+    }
+    @Test public void switchingTransportRejectsAnotherBrowserUserBeforeCommitting() throws Exception {
+        Storage store = new Storage();
+        NativeLoginFlow.Account expected = new NativeLoginFlow.Account("existing-files-provider", SERVER, "original");
+        store.account = expected;
+        NativeLoginFlow flow = flow(new Network(), store, new AtomicLong()); flow.begin(SERVER, expected);
+        assertEquals("AUTH", assertThrows(NativeLoginFlow.Failure.class, () -> flow.poll("flow-1")).code);
+        assertEquals(expected, store.account);
+        assertNull(store.credential);
+        assertNull(flow.cancel("flow-1"));
+    }
+    @Test public void switchingTransportRejectsAChangedSelectionBeforeStartingOrCommitting() throws Exception {
+        Storage store = new Storage(); Network network = new Network();
+        NativeLoginFlow.Account expected = new NativeLoginFlow.Account("existing-files-provider", SERVER, "canonical");
+        NativeLoginFlow.Account other = new NativeLoginFlow.Account("new-files-provider", SERVER, "other");
+        store.account = other;
+        NativeLoginFlow flow = flow(network, store, new AtomicLong());
+        assertEquals("CANCELLED", assertThrows(NativeLoginFlow.Failure.class, () -> flow.begin(SERVER, expected)).code);
+        assertEquals(0, network.requests);
+        store.account = expected;
+        flow.begin(SERVER, expected);
+        store.account = other;
+        assertEquals("CANCELLED", assertThrows(NativeLoginFlow.Failure.class, () -> flow.poll("flow-1")).code);
+        assertEquals(other, store.account);
+        assertNull(store.credential);
     }
     @Test public void pending404LeavesPriorAccountAndSecretsUncommitted() throws Exception {
         Storage store = new Storage(); store.account = new NativeLoginFlow.Account("old", SERVER, "old-user");

@@ -1,5 +1,27 @@
 # NextGlance feature parity and phased implementation
 
+## Android Files transport isolation and direct sign-in — SYNC-18
+
+- [x] Verify single-slot Files execution, released/stalled calls, cooldown, and direct transport isolation.
+- [x] Verify foreground discovery coalescing and read-only background handoff.
+- [x] Verify guarded same-account browser switch with healthy and expired Files authorization, draft/cache preservation and restored background policy.
+- [ ] Physical Android Files and direct-connection acceptance.
+
+Android JVM tests exercise an uninterruptible provider call, queued expiry, cooldown, separate direct capacity and canonical identity checks. Controller and shared UI fixtures exercise lifecycle handoff, retained local edits, account selection guards, and saved background scheduling. Windows, Android and Web run the shared connection and sync notice vectors.
+
+The [0.6.32 Android release record](../docs/RELEASES.md#0632--android) records APK verification.
+
+## Timeline completion, task dependency status and Deck detach — HISTORY-03 / VIEW-19 / EDIT-21
+
+- [x] Verify Timeline's independent 14-day default, cutoff, overrides and linked-item navigation.
+- [x] Verify scoped unified task status in both dependency directions.
+- [x] Verify typed Deck file-share unlink, unchanged content and unsupported/ambiguous result handling across host policies.
+- [ ] Physical-device and live-server acceptance.
+
+The shared vectors and App fixture verify independent age preferences and linked-item navigation. The touch browser fixture verifies the active Space's status label and color in both directions. Native attachment fixtures verify Deck readback, Files content retention and safe rejection across Android transport policies.
+
+See the [release record](../docs/RELEASES.md#0631--windows-android-and-nextcloud) for package verification.
+
 ## Local packages and source push — RELEASE-30
 
 See the [local package and verification record](../docs/RELEASES.md#0630--windows-android-and-nextcloud) for artifact checksums, versions and source checks.

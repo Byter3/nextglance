@@ -15,6 +15,15 @@ public class NativeDiagnosticsTest {
             assertEquals(value, JsonParser.parseString(NativeDiagnostics.checked(value.toString())));
         }
     }
+    @Test public void acceptsFilesTransportCodeWithoutProviderText() throws Exception {
+        JsonObject value = JsonParser.parseString(report()).getAsJsonObject();
+        JsonObject event = value.getAsJsonArray("events").get(0).getAsJsonObject();
+        event.remove("status");
+        event.addProperty("stage", "error");
+        event.addProperty("success", false);
+        event.addProperty("code", "FILES_TRANSPORT");
+        assertEquals(value, JsonParser.parseString(NativeDiagnostics.checked(value.toString())));
+    }
     @Test public void privateTextAndUnknownKeysAreRejected(){for(String key:new String[]{"url","headers","body","title","account","stack","message","tag"}){JsonObject value=JsonParser.parseString(report()).getAsJsonObject();value.getAsJsonArray("events").get(0).getAsJsonObject().addProperty(key,"private");assertThrows(Exception.class,()->NativeDiagnostics.checked(value.toString()));}}
     @Test public void untrustedEnumsAndNumbersAreRejected(){for(String field:new String[]{"source","kind","method","stage","page","code"}){JsonObject value=JsonParser.parseString(report()).getAsJsonObject();value.getAsJsonArray("events").get(0).getAsJsonObject().addProperty(field,"private");assertThrows(Exception.class,()->NativeDiagnostics.checked(value.toString()));}assertThrows(Exception.class,()->NativeDiagnostics.checked(report().replace("\"durationMs\":8","\"durationMs\":-1")));}
     @Test public void countsTimesMetadataAndBodyAreBounded(){assertThrows(Exception.class,()->NativeDiagnostics.checked(report().replace("\"eventCount\":1","\"eventCount\":2")));assertThrows(Exception.class,()->NativeDiagnostics.checked(report().replace("\"atMs\":10","\"atMs\":20")));assertThrows(Exception.class,()->NativeDiagnostics.checked(report().replace("0.6.4","account@example.invalid")));assertThrows(Exception.class,()->NativeDiagnostics.checked("x".repeat(NativeDiagnostics.MAX_BYTES+1)));}

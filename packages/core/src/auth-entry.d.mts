@@ -5,4 +5,4 @@ export function connectionEntry(options?:{
   mobileHost?:boolean
   nativeFilesAvailable?:boolean
   initialStartup?:boolean
-}):{promptReconnect:boolean;primary:'files'|'browser';browserLabel:string}
+}):{promptReconnect:boolean;primary:'files'|'browser';browserLabel:string;methodLabel?:string;canSwitchDirect?:boolean}

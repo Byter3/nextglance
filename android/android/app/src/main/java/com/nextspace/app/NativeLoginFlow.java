@@ -27,7 +27,7 @@ final class NativeLoginFlow {
         final String code;
         Failure(String code, String message) { super(message); this.code = code; }
     }
-    private record Flow(String id, String server, String endpoint, String token, long deadline, long epoch) {}
+    private record Flow(String id, String server, String endpoint, String token, long deadline, long epoch, Account expectedAccount) {}
     private final Network network;
     private final Store store;
     private final LongSupplier clock;
@@ -42,10 +42,13 @@ final class NativeLoginFlow {
     NativeLoginFlow(Network network, Store store, LongSupplier clock, Supplier<String> ids) {
         this.network = network; this.store = store; this.clock = clock; this.ids = ids;
     }
-    Started begin(String rawServer) throws Exception {
+    Started begin(String rawServer) throws Exception { return begin(rawServer, null); }
+
+    Started begin(String rawServer, Account expectedAccount) throws Exception {
         final long started;
         synchronized (this) { invalidate(); started = epoch; }
         String server = normalizeServer(rawServer);
+        if (expectedAccount != null && (!server.equals(normalizeServer(expectedAccount.serverUrl())) || !sameIdentity(expectedAccount, store.current()))) throw changedAccount();
         store.checkAvailable();
         JsonObject json = document(network.request(server, server + "/index.php/login/v2", "POST", "", null));
         String login = text(json, "login", 16384);
@@ -57,7 +60,7 @@ final class NativeLoginFlow {
             if (started != epoch || Thread.currentThread().isInterrupted()) throw cancelled();
             String id = ids.get();
             if (id == null || !id.matches("[A-Za-z0-9-]{1,128}")) throw new Failure("FORMAT", "The authorization flow could not be created.");
-            flow = new Flow(id, server, endpoint, token, clock.getAsLong() + LIFETIME, started);
+            flow = new Flow(id, server, endpoint, token, clock.getAsLong() + LIFETIME, started, expectedAccount);
             return new Started(id, login);
         }
     }
@@ -100,7 +103,16 @@ final class NativeLoginFlow {
             synchronized (this) {
                 current(id);
                 Account previous;
-                try { previous = store.current(); } catch (Exception unavailableIdentity) { previous = null; }
+                if (selected.expectedAccount != null) {
+                    previous = store.current();
+                    if (!sameIdentity(selected.expectedAccount, previous)) { invalidate(); throw changedAccount(); }
+                    if (!canonical.equals(selected.expectedAccount.username())) {
+                        invalidate();
+                        throw new Failure("AUTH", "The browser signed in as a different Nextcloud user. Sign in as your current account to switch its connection.");
+                    }
+                } else {
+                    try { previous = store.current(); } catch (Exception unavailableIdentity) { previous = null; }
+                }
                 String name = previous != null && server.equals(normalizeServer(previous.serverUrl)) && canonical.equals(previous.username)
                         ? previous.name : "nextspace-direct:" + digest(server + '\0' + canonical);
                 Account account = new Account(name, server, canonical);
@@ -124,6 +136,11 @@ final class NativeLoginFlow {
         return flow;
     }
     private static Failure cancelled() { return new Failure("CANCELLED", "This authorization flow is no longer active."); }
+    private static Failure changedAccount() { return new Failure("CANCELLED", "The selected Nextcloud account changed. Open Settings to switch the current account's connection."); }
+    private static boolean sameIdentity(Account expected, Account current) throws Exception {
+        return current != null && expected.name().equals(current.name()) && expected.username().equals(current.username()) &&
+            normalizeServer(expected.serverUrl()).equals(normalizeServer(current.serverUrl()));
+    }
     static String normalizeServer(String raw) throws Exception {
         if (raw == null) throw new Failure("VALIDATION", "Enter your Nextcloud server address.");
         String value = raw.trim().replaceAll("/+$", "");

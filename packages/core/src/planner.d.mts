@@ -6,7 +6,7 @@ export function planningColumnForRecord(record: WorkspaceRecord, workflow?: Reco
 export function plannerSettings(input?: Partial<PlannerSettings>): PlannerSettings
 export function showCompletedForView(settings: Partial<PlannerSettings>, view?: PlannerView): boolean
 export function filterCompletedWork(records:WorkspaceRecord[],relations?:Relation[],view?:PlannerView,showCompleted?:boolean):WorkspaceRecord[]
-export function selectPlanner(state: State, overrides?: Partial<PlannerSettings> & {query?: string; now?: Date|string; statusIds?:string[];boardCompletedDays?:number|null}): PlannerModel
+export function selectPlanner(state: State, overrides?: Partial<PlannerSettings> & {query?: string; now?: Date|string; statusIds?:string[];completedDays?:number|null;boardCompletedDays?:number|null}): PlannerModel
 export function countPlannerActions(state: State, overrides?: Partial<PlannerSettings> & {query?: string;statusIds?:string[]}): number
 export function scopeRecordIds(workspace: Workspace, records: WorkspaceRecord[], scopeId: string): Set<string>
 export function boardCollectionsForScope(workspace: Workspace, records: WorkspaceRecord[], collections: Collection[], scopeId: string): Collection[]

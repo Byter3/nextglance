@@ -297,7 +297,7 @@ for(const reason of ['watermark','account','cancelled','corrupt']) test(`warm re
 
 test('late account denial withdraws early access and fences simultaneous bulk discovery',async t=>{
   const access=deferred(),bulk=deferred();let discovery,read
-  const f=fixture({sourceRead:async input=>{read=input;return bulk.promise},nativeClient:{readSourceAccess:async input=>{discovery=input;input.onCollections({sources:['calendar'],collections:[{id:'calendar',source:'calendar',title:'Calendar'}]});return access.promise}}})
+  const f=fixture({settings:{caldavMinutes:0,deckMinutes:60,wifiOnly:false},sourceRead:async input=>{read=input;return bulk.promise},nativeClient:{readSourceAccess:async input=>{discovery=input;input.onCollections({sources:['calendar'],collections:[{id:'calendar',source:'calendar',title:'Calendar'}]});return access.promise}}})
   t.after(()=>{access.resolve({errors:[]});bulk.resolve({records:[],collections:[],statuses:[]});f.api.dispose()})
   f.advance(61*60_000)
   await f.api.getState();await f.api.resumeSync('open');await flush()
@@ -311,7 +311,7 @@ test('late account denial withdraws early access and fences simultaneous bulk di
 
 test('bulk denial prevents an older independent-access callback recertifying that scope',async t=>{
   const access=deferred(),bulk=deferred();let discovery,read
-  const f=fixture({sourceRead:async input=>{read=input;return bulk.promise},nativeClient:{readSourceAccess:async input=>{discovery=input;return access.promise}}})
+  const f=fixture({settings:{caldavMinutes:0,deckMinutes:60,wifiOnly:false},sourceRead:async input=>{read=input;return bulk.promise},nativeClient:{readSourceAccess:async input=>{discovery=input;return access.promise}}})
   t.after(()=>{access.resolve({errors:[]});bulk.resolve({records:[],collections:[],statuses:[]});f.api.dispose()})
   f.advance(61*60_000)
   await f.api.getState();await f.api.resumeSync('open');await flush()
@@ -618,6 +618,57 @@ test('open/resume signals coalesce planner pulls and due refresh retains all uns
   assert.deepEqual(after.statuses.find(status => status.source === 'deck'), before.statuses.find(status => status.source === 'deck'))
   await f.api.resumeSync('timer'); await flush(); assert.equal(f.counts().plannerReads, 1)
   f.advance(31_000); await f.api.resumeSync('resume'); await flush(); assert.equal(f.counts().plannerReads, 2)
+})
+
+test('due content owns its discovery and a pending lightweight check coalesces repeated focus', async t => {
+  const permission = deferred(), checked = []
+  const settings = {caldavMinutes: 15, deckMinutes: 0, wifiOnly: false}
+  const f = fixture({savedLaunch: false, settings, nativeClient: {readSourceAccess: async input => {checked.push(input.sources); return permission.promise}}})
+  t.after(() => {permission.resolve({errors: []}); f.api.dispose()})
+  const saved = f.values.get(cacheKey(A))
+  for (const status of saved.statuses.filter(status => ['tasks', 'calendar'].includes(status.source))) status.lastSyncedAt = new Date(start - 20 * 60_000).toISOString()
+  await f.api.getState(); await flush()
+  await f.api.resumeSync('open'); await flush()
+  assert.deepEqual(f.counts().nativeReads, [['tasks', 'calendar']])
+  assert.deepEqual(checked, [['deck']], 'manual-only Deck still gets a fresh permission check')
+  f.advance(31_000)
+  await Promise.all([f.api.resumeSync('resume'), f.api.resumeSync('online')]); await flush()
+  assert.deepEqual(checked, [['deck']], 'no second check while entry permission work is pending')
+  assert.equal(f.counts().plannerReads, 1)
+})
+
+test('Calendar history catch-up still verifies Tasks access without refreshing its content', async t => {
+  const checked = []
+  const settings = {caldavMinutes: 60, deckMinutes: 0, wifiOnly: false, calendarHistoryDays: 90}
+  const f = fixture({settings, nativeClient: {readSourceAccess: async input => {checked.push(input.sources); return {errors: []}}}})
+  t.after(() => f.api.dispose())
+  await f.api.getState(); await flush(); await f.api.resumeSync('open'); await flush()
+  assert.deepEqual(f.counts().nativeReads, [['calendar']])
+  assert.deepEqual(checked, [['tasks', 'deck']])
+})
+
+test('leaving before the planner debounce retains the edit and uploads once on return', async t => {
+  let uploads = 0, meta = {workspace: createEmptyState().workspace, revision: 0, metadata: {ready: true}, deviceState: {}, storage: {syncStatus: 'synced'}}
+  const f = fixture({makeMetadataStore: () => ({
+    load: async () => clone(meta), getState: () => clone(meta),
+    saveWorkspace: async workspace => {meta.workspace = clone(workspace); meta.revision++; meta.storage.syncStatus = 'pending'},
+    sync: async () => {uploads++; meta.storage.syncStatus = 'synced'},
+    reconcileRecords: async records => ({...clone(meta), records: clone(records), remap: new Map()}),
+  })})
+  t.after(() => f.api.dispose())
+  await f.api.getState(); await flush()
+  const before = await f.api.getState()
+  const saved = await f.api.saveWorkspace({...before.workspace, name: 'Local edit'}, before.revision)
+  assert.equal(saved.storage.syncStatus, 'pending')
+  const scheduled = [...f.callbacks.values()].find(timer => timer.delay === 1_200)
+  assert.ok(scheduled)
+  await f.api.setAppActive(false)
+  assert.ok(![...f.callbacks.values()].some(timer => timer.delay === 1_200))
+  scheduled.callback(); await flush()
+  assert.equal(uploads, 0); assert.equal((await f.api.getState()).storage.syncStatus, 'pending')
+  await f.api.setAppActive(true); await f.api.resumeSync('resume'); await flush()
+  assert.equal(uploads, 1); assert.equal((await f.api.getState()).workspace.name, 'Local edit')
+  assert.equal((await f.api.getState()).storage.syncStatus, 'synced')
 })
 
 test('source progress uses lightweight subscribers, throttles updates and deadline clears activity', async t => {

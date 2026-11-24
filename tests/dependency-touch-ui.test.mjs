@@ -7,6 +7,8 @@ import {fileURLToPath} from 'node:url'
 import {createRequire} from 'node:module'
 import {mkdir} from 'node:fs/promises'
 import {plannerFixture} from './fixtures.mjs'
+import {statusSourceKey} from '@nextspace/core/status-mapping.mjs'
+import {scopePreferenceStorageKey} from '@nextspace/core/scope-preferences.mjs'
 
 test('phone/tablet dependency removal uses canonical native or planner ownership and exact capabilities',async()=>{
   const operations=['setDeckDependency','moveCard','setCardCompleted','updateTaskStatus','updateRecordAppearance','createDeckLabel']
@@ -14,13 +16,17 @@ test('phone/tablet dependency removal uses canonical native or planner ownership
   fixture.nativeOperations=operations;fixture.nativeWriteSources=['deck','tasks'];fixture.metadata={ready:true}
   fixture.statuses=fixture.statuses.map(status=>({...status,state:'error'}))
   fixture.workspace.planner.view='list';fixture.workspace.appearance.mode='dark'
+  fixture.workspace.planner.scopeId='space-work'
+  const todo=statusSourceKey('tasks','tasks-work','NEEDS-ACTION')
+  fixture.workspace.planner.statusMapping={columns:[{id:'todo',title:'Global to do',color:'#448855'}],assignments:{[todo]:'todo'}}
+  fixture.workspace.spaces[0].statusMapping={columns:[{id:'review',title:'Space review',color:'#123456'}],assignments:{[todo]:'review'}}
   const base=fixture.records.find(record=>record.id==='card-mine')
   fixture.records=[
     {...base,id:'prior',title:'Prepare draft',nativeDependencies:[],readonly:true},
     {...base,id:'middle',title:'Review draft',nativeDependencies:['prior']},
     {...base,id:'later',title:'Publish draft',nativeDependencies:['middle']},
     {...fixture.records.find(record=>record.id==='task-today'),id:'task-before',title:'Check details'},
-    {...fixture.records.find(record=>record.id==='task-today'),id:'task-after',title:'File receipt'},
+    {...fixture.records.find(record=>record.id==='task-today'),id:'task-after',title:'File receipt',status:'IN-PROCESS'},
   ]
   fixture.workspace.relations=[
     {id:'mixed-before',fromId:'middle',toId:'task-before',type:'depends_on'},
@@ -37,7 +43,8 @@ test('phone/tablet dependency removal uses canonical native or planner ownership
     for(const viewport of [{width:480,height:920},{width:900,height:1200}]){
       const page=await browser.newPage({viewport,hasTouch:true});page.setDefaultTimeout(15000)
       const errors=[];page.on('pageerror',error=>errors.push(error.message))
-      await page.addInitScript(fixture=>{
+      await page.addInitScript(({fixture,preferencesKey})=>{
+        localStorage.setItem(preferencesKey,JSON.stringify({version:2,scopes:{'space-work':{view:'list',pages:{list:{assignment:'all'}}}}}))
         const state=structuredClone(fixture),read=async()=>structuredClone(state)
         window.__writes=[];window.__rejectNative=false;window.__rejectPlanner=false
         window.workspaceApi={getState:read,refresh:read,resumeSync:async()=>{},openExternal:async()=>{},
@@ -60,7 +67,7 @@ test('phone/tablet dependency removal uses canonical native or planner ownership
           updateRecordAppearance:async input=>{window.__writes.push({operation:'updateRecordAppearance',...input});Object.assign(state.records.find(item=>item.id===input.id),input);return read()},
           createDeckLabel:async input=>{window.__writes.push({operation:'createDeckLabel',...input});const label={id:'17',title:input.title,color:input.color};state.collections.find(item=>item.id===input.collectionId).labels=[label];return {label}},
         }
-      },fixture)
+      },{fixture,preferencesKey:scopePreferenceStorageKey(fixture.connection)})
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/dependencies`)
       const inspector=page.getByRole('complementary',{name:'Item details'})
       const open=async title=>{
@@ -70,6 +77,15 @@ test('phone/tablet dependency removal uses canonical native or planner ownership
       }
       const remove=title=>inspector.getByRole('button',{name:'Remove dependency '+title,exact:true})
       await open('Review draft')
+      const badge=(direction,title)=>inspector.locator(`.dependency-group[data-direction="${direction}"] .dependency-tile`).filter({hasText:title}).locator('.dependency-status')
+      const incoming=badge('incoming','Check details'),outgoing=badge('outgoing','File receipt')
+      await incoming.waitFor();await outgoing.waitFor()
+      assert.equal(await incoming.innerText(),'Space review')
+      assert.equal(await incoming.evaluate(element=>getComputedStyle(element).backgroundColor),'rgb(18, 52, 86)')
+      assert.equal(await incoming.evaluate(element=>getComputedStyle(element).color),'rgb(255, 255, 255)')
+      assert.equal(await outgoing.innerText(),'Unmapped')
+      assert.equal(await outgoing.evaluate(element=>getComputedStyle(element).backgroundColor),'rgb(139, 147, 159)')
+      assert.equal(await badge('incoming','Prepare draft').count(),0)
       assert.equal(await remove('Prepare draft').isEnabled(),true,'Read-only prerequisite does not block writable dependent')
       assert.equal(await remove('Publish draft').isEnabled(),true)
       // A rejected native operation restores the real link and never creates a

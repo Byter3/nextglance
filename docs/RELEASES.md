@@ -4,6 +4,30 @@ These are dated records of local builds, not public download links. Artifact pat
 
 Packages listed here are local development artifacts. Outputs stay in `win/release/`, `android/release/` and `web/release/`, outside source control. The reviewed source is published in [Byter3/nextglance](https://github.com/Byter3/nextglance); source publication does not publish these binary packages. Application/account/storage identities remain unchanged.
 
+## 0.6.32 — Android
+
+Built on **2026-11-24** for SYNC-18 with versionCode `34`. Foreground and background sync share one Files request slot, duplicate foreground source discovery is coalesced, and queued automatic planner uploads stop when NextGlance goes inactive. **Settings & connection → Use direct connection** switches the saved Files account to direct Nextcloud authorization for the same user. Windows and Nextcloud remain at 0.6.31.
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `android/release/NextGlance-0.6.32-Android-debug.apk` | 13,259,939 bytes | `33ca8ad4936fdb6f1068a25c6f661a12caff5219c99a0bfaf19fe53bee8614a0` |
+
+Verified the package ID, version, matching 0.6.31 signing certificate, and the packaged foreground and headless assets. All 222 native JVM tests and 895 Android JavaScript tests passed. The shared vectors and focused regressions passed 1,402 checks. All 816 frozen source files matched after packaging and the 31 prior APKs retained their checksums. Physical Android and live-server acceptance remain open.
+
+## 0.6.31 — Windows, Android and Nextcloud
+
+Built on **2026-11-23** for HISTORY-03, VIEW-19 and EDIT-21. Windows file version is `0.6.31.33`, Android versionCode is `33`, and the Nextcloud app version is `0.6.31`. See the [release notes](RELEASE-NOTES-0.6.31.md).
+
+| Package | Size | SHA-256 |
+| --- | ---: | --- |
+| `win/release/NextGlance-0.6.31-Windows.exe` | 101,276,192 bytes | `997584fc21a9cf5adcf940a9d61a70f0326d5e24891df9b9fd9efc274a382065` |
+| `android/release/NextGlance-0.6.31-Android-debug.apk` | 13,255,467 bytes | `96a38453c3c557cc589905898910b82e66158d6bd1a86acf9dcc1bdd0f15f052` |
+| `web/release/NextGlance-0.6.31-Nextcloud.tar.gz` | 2,052,254 bytes | `d31ce58716fe75ba5f22b727d2c03903bccf8e549415acdfadcac2f1748c31d2` |
+
+The Windows shortcut target `win/release/NextGlance-Latest.exe` matches the versioned EXE. Both the unpacked and portable launch checks passed. The Android APK retains its signing identity, matches the built assets and passed 217 JVM tests. The Nextcloud archive contains matching production assets and 494 matching source files. The embedded session browser fixture passed.
+
+The shared suite passed 969 tests, and the three client suites passed 1,902 JavaScript tests. The scoped dependency layout also passed the phone and tablet touch browser fixture. All 816 frozen source files matched after packaging. The prior 41 Windows EXEs, 30 Android APKs and 22 Nextcloud archives and checksums retained their hashes. Live Deck and physical-device acceptance remain open.
+
 ## 0.6.30 — Windows, Android and Nextcloud
 
 Built on **2026-11-23** for SYNC-17, PERF-19, PERF-20 and EDIT-20. Windows file version is `0.6.30.32`, Android versionCode is `32`, and the Nextcloud app version is `0.6.30`. See the [release notes](RELEASE-NOTES-0.6.30.md).

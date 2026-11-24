@@ -8,9 +8,12 @@ export function isConnectionAuthorized(connection) {
 /** A startup prompt never initiates external authorization or runs on background updates. */
 export function connectionEntry({connection, mobileHost=false, nativeFilesAvailable=false, initialStartup=false}={}) {
   const nativeFiles=mobileHost===true&&nativeFilesAvailable===true
+  const method=nativeFiles?connection?.authorizationMethod:undefined
   return {
     promptReconnect:Boolean(mobileHost&&initialStartup&&connection?.serverUrl&&connection?.username&&!isConnectionAuthorized(connection)),
     primary:nativeFiles?'files':'browser',
     browserLabel:nativeFiles?'Sign in using browser':'Sign in with Nextcloud',
+    ...(method==='files'?{methodLabel:'Nextcloud Files connection'}:method==='direct'?{methodLabel:'Direct connection to Nextcloud'}:{}),
+    ...(method==='files'&&connection.serverUrl&&connection.username&&!connection.recoveryOnly?{canSwitchDirect:true}:{}),
   }
 }

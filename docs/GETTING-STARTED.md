@@ -1,10 +1,12 @@
 # NextGlance: a practical guide
 
-Updated for **0.6.17**, 17 November 2026. Screenshots show the actual interface with generated, fictional test data—no personal accounts or calendars.
+Covers **Android 0.6.32** and **Windows and Nextcloud 0.6.31**. Screenshots show the interface with fictional test data.
 
 ## Start here
 
 On **Windows or Android**, open **Settings & connection** and connect your Nextcloud account. Android offers **Continue with Nextcloud Files** or browser sign-in. The **Nextcloud Web app** uses your existing Nextcloud login and needs a connection; there is no separate sign-in or offline mode.
+
+On Android 0.6.32 and later, switch a saved Nextcloud Files connection through **Settings & connection → Use direct connection**. Sign in to your server in the browser with the same Nextcloud user. NextGlance keeps your account, saved data, and background sync settings. Foreground and background sync then connect directly to your server.
 
 **My overview** brings your accessible sources together. Its filters still apply. If an item seems missing, check source visibility, assignments and status filters. To organize this overview without making a Space, use **My overview → ⋯ → Group sources**.
 
@@ -50,6 +52,8 @@ Enable **Group linked tasks** in the Board toolbar (or its menu on smaller scree
 
 Under **Board → Filters → Completed items**, choose how long completed tasks and cards stay visible. The default is 14 days. You can set another number of days, hide completed items, or show them all.
 
+**Timeline → Filters → Completed items** has the same 14-day default and remembers its own setting.
+
 ![Board shows linked tasks stacked around Deck cards, including an expanded stack and a clearly crossed-out completed task.](images/guide/05-board-linked-tasks.png)
 
 Tasks peek out from behind the card until you hover or select it; the stack then expands so you can read them. Completed tasks are crossed out. Completed Deck cards stay visible; archived cards are hidden. Completed tasks linked to a visible card remain visible even when other completed tasks are hidden. On touch, hold the card before dragging it—the card follows your finger and highlights its destination.
@@ -62,7 +66,8 @@ Tasks peek out from behind the card until you hover or select it; the stack then
 - **Dates and bookings:** **Edit dates** changes a task/card’s work range. On Windows/Android, **Schedule in calendar** creates a linked booking with an editable title, description, location and reminder (15 minutes before by default). On Web, create the event first, then **Link existing event**. Moving a booking does not automatically move the work deadline.
 - **Events:** open an event to edit its details or use **Delete event**. Supported invitations offer attendee controls or Accept/Tentative/Decline. Restricted recurring/delegated edits open in Nextcloud.
 - **Tasks** — Open a task and choose **Delete task** in the inspector. Verify the task and list in the confirmation. Linked items stay available. For recurring or shared tasks that are read-only here, use Nextcloud Tasks.
-- **Dependencies:** **Waits for** lists prerequisites; **Needed by** lists dependent work. In a Deck card, **Link task**, **Create task** and **From checklist** connect native tasks. Checklist conversion reuses existing matches and saved retries; the original checklist and task completion remain separate.
+- **Dependencies** — **Waits for** lists prerequisites and **Needed by** lists dependent work. Linked task rows show the current Space's unified status label and color. In a Deck card, **Link task**, **Create task** and **From checklist** connect native tasks. Checklist conversion reuses existing matches and saved retries.
+- **Attachments** — Use the **×** next to a shared file in a Deck card to remove the attachment link. The file stays in Nextcloud Files or Notes.
 - **Statuses and filters:** **Map statuses** customizes the current Space; **Use default** restores inheritance. **Filters → Unified statuses** limits the current page. Each page has independent filters, synchronized across devices—including My overview.
 - **Find linked work:** use **Jump to** beside a linked task or event. Board/List offer Calendar or Timeline as the destination.
 

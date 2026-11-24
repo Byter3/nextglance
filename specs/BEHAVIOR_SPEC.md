@@ -6,6 +6,34 @@ Status: authoritative shared behavior baseline, established 2026-11-11 from the 
 
 The owner-selected product name is **NextGlance**, with that exact capitalization. Use it in visible application names, headings, window titles and current product documentation. This is a display-name change, not a storage/account/protocol migration. Existing `@nextspace/*` package names, native application IDs, credential namespaces, local account-profile location, `/Workspace/Nextspace/`, serialized `nextspace-*` format markers and historical artifact names remain technical identifiers until a separately specified migration. Never silently create a new account profile or cloud metadata directory because the display name changed. Do not bump product/schema/protocol versions or publish as part of naming.
 
+### RELEASE-32. Android Files transport isolation and direct sign-in (2026-11-24)
+
+Package verified SYNC-18 changes as Android **0.6.32/versionCode 34**. Keep prior APKs, signing, application, account and storage identities. This is a local Android package. Windows and the Nextcloud app remain at 0.6.31.
+
+### SYNC-18. Android Files transport isolation and direct sign-in (2026-11-24)
+
+Android foreground and background Files SSO network calls share one bounded native execution slot. A timed-out or cancelled call keeps that slot until the provider call and response stream actually exit. Abandoned queued work cannot start after its deadline or account/lifecycle guard expires. Use a short bounded cooldown after a provider timeout or confirmed transport failure and distinguish it from an HTTP response, an authorization denial and a user cancellation. Recoverable Files interruptions are shown in the cloud indicator, which opens Settings. Existing planner conflict, permission and local recovery notices retain priority. Do not retry a native write automatically when its result is uncertain. The direct HTTP transport and browser authorization retain their independent capacity. Device crash attribution requires device evidence.
+
+On foreground entry, each due bulk refresh supplies permission discovery for the sources it reads. Separate lightweight discovery checks only sources not covered by the bulk read and coalesces repeated entry checks. Independent discovery still checks saved sources whose automatic content refresh is off. Pending local planner edits survive lifecycle transitions. After the app goes inactive, cancel active planner reads and queued automatic uploads. A new automatic planner pass requires foreground eligibility at execution time. Native background jobs stay read-only. Do not enqueue a second shared refresh after a managed Android host already completed its post-authorization refresh.
+
+Keep Files sign-in available and existing selections in place. Android Settings shows whether the current connection uses Files or direct HTTP. A saved Files account with a valid identity exposes **Use direct connection** both when its authorization works and when it needs reconnection. This action starts the existing Nextcloud server browser flow for the selected canonical server and user, without disconnecting first. Enforce that expectation before storing the issued app password. Cancelling, denial, or authorizing a different account leaves the prior selection and data in place. A successful same-account switch retains the account key, caches, acknowledged edits, draft and planner state, then rearms saved background sync settings. The transport label is local Android presentation information. Credentials stay in native protected storage. Never switch automatically or use Files to carry requests once direct authorization is selected. Windows and the Nextcloud-hosted app keep their connection behavior.
+
+### HISTORY-03. Completed items on Timeline (2026-11-23)
+
+Standalone Timeline filters expose the same completion-age options as Board under HISTORY-01. Default to 14 days. Show All, Hide completed and valid values from 0 through 36,500 use the existing inclusive cutoff, unknown completion time and native completion rules. Store Timeline's choice independently of Board as a device-local presentation preference. Keep the separate cancelled-task toggle. Use the same completed-item visibility when checking whether a jump to Timeline can reveal a linked item. Keep Overview, Calendar, List, widgets, and existing view preference synchronization unchanged.
+
+### VIEW-19. Task status in dependency rows (2026-11-23)
+
+Both directions of the inspector's Dependencies section show a loaded linked task's unified status label and column color. Use the active scope's effective mapping and the established neutral Unmapped state. Keep existing link, jump and remove controls and the presentation of missing records and Deck card links. The indicator has readable text in addition to color and never writes a status.
+
+### EDIT-21. Safely detach Deck file shares (2026-11-23)
+
+After checking card write authority and freshly identifying a single native `file` attachment on that card, unlink it through Deck's v1.1 typed `attachments/file/{attachmentId}` member route. Preserve the original Files/Notes content and other shares. Use the typed member route for attachment links without an immutable Files ID. Require fresh attachment readback before claiming a removal; if the typed route cannot confirm it, keep the attachment visible with a clear retryable error. Never send a Files DELETE, use a legacy untyped attachment mutation, or detach a `deck_file` through this flow. Keep the original permission and account guards. On Android allow only the exact typed file-detach route as a Deck attachment DELETE.
+
+### RELEASE-31. Timeline, dependencies and Deck attachments (2026-11-23)
+
+Build the verified HISTORY-03, VIEW-19 and EDIT-21 changes as **0.6.31/build 33** on all clients. Use Windows file version **0.6.31.33**, Android versionCode **33**, and Nextcloud app version **0.6.31**. Keep prior versioned artifacts, signing and technical identities, and update the permanent Windows shortcut target. This release packages local artifacts.
+
 ### RELEASE-30. Planner synchronization, Timeline and Tasks (2026-11-23)
 
 Package the verified SYNC-17, PERF-19, PERF-20 and EDIT-20 changes at **0.6.30/build 32**. Windows uses file version **0.6.30.32**, Android uses versionCode **32**, and the Nextcloud app uses version **0.6.30**. Preserve signing, application, account and storage identities and prior versioned artifacts. Refresh the stable Windows executable. Push privacy-reviewed source to the existing GitHub repository after package verification. Keep binary artifacts local.

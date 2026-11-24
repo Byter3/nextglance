@@ -6,7 +6,8 @@ This is an **early development project**, licensed **AGPL-3.0-or-later** for pro
 
 - **Using the app:** [short illustrated guide](docs/GETTING-STARTED.md).
 - **Android home screen:** [illustrated widget examples](docs/WIDGET-EXAMPLES.md).
-- **Version 0.6.30** · [Release notes](docs/RELEASE-NOTES-0.6.30.md) and [local packages and checksums](docs/RELEASES.md#0630--windows-android-and-nextcloud).
+- **Android 0.6.32** · [Release notes](docs/RELEASE-NOTES-0.6.32.md) and [local package and checksum](docs/RELEASES.md#0632--android).
+- **Windows and Nextcloud 0.6.31** · [Release notes](docs/RELEASE-NOTES-0.6.31.md) and [local packages and checksums](docs/RELEASES.md#0631--windows-android-and-nextcloud).
 - **Development:** [architecture](docs/PLATFORM-ARCHITECTURE.md), [verification](docs/VERIFICATION.md), [Windows](win/README.md), [Android](android/README.md), [Nextcloud app](web/README.md), [manual server installation](web/DEPLOYMENT.md).
 - **Behavior authority:** [specification](specs/BEHAVIOR_SPEC.md), [feature parity](specs/FEATURE_PARITY.md), [shared test vectors](specs/TEST_VECTORS.json). Read [AGENTS.md](AGENTS.md) before changing clients.
 

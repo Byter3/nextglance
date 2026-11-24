@@ -9,6 +9,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Rule;
 import org.junit.Test;
@@ -65,6 +66,54 @@ public class NativeDeadlineTest {
             assertEquals("TIMEOUT", failure.code); assertTrue(cancelled.get()); assertEquals(0, lane.getQueue().size());
             release.countDown(); assertEquals("next", lane.submit(() -> "next").get(1, TimeUnit.SECONDS)); assertFalse(ran.get());
         } finally { release.countDown(); lane.shutdownNow(); }
+    }
+
+    @Test public void filesTimeoutPausesRequestsAndKeepsTheSlotUntilTheProviderReturns() throws Exception {
+        ThreadPoolExecutor provider = NativeDeadline.executor("fixture-files", 1, 2);
+        ThreadPoolExecutor callers = NativeDeadline.executor("fixture-files-caller", 1, 1);
+        CountDownLatch started = new CountDownLatch(1), release = new CountDownLatch(1);
+        AtomicLong clock = new AtomicLong();
+        AtomicBoolean obsolete = new AtomicBoolean();
+        NativeDeadline.FilesLane files = new NativeDeadline.FilesLane(provider, clock::get);
+        try {
+            Future<String> first = callers.submit(() -> assertThrows(NativeLoginFlow.Failure.class, () -> files.run(() -> {
+                started.countDown(); uninterruptibly(release); return true;
+            }, () -> {}, 450)).code);
+            assertTrue(started.await(2, TimeUnit.SECONDS));
+            assertEquals("TIMEOUT", first.get(2, TimeUnit.SECONDS));
+            assertEquals("FILES_TRANSPORT", assertThrows(NativeLoginFlow.Failure.class, () -> files.run(() -> false, () -> {}, 100)).code);
+            assertEquals("direct", NativeDeadline.run(NativeDeadline.Lane.FOREGROUND, () -> "direct", () -> {}, 1000));
+            assertEquals("authorized", NativeDeadline.run(NativeDeadline.Lane.AUTHORIZATION, () -> "authorized", () -> {}, 1000));
+
+            clock.addAndGet(TimeUnit.SECONDS.toNanos(31));
+            assertEquals("TIMEOUT", assertThrows(NativeLoginFlow.Failure.class, () -> files.run(() -> {
+                obsolete.set(true); return false;
+            }, () -> {}, 50)).code);
+            assertEquals(0, provider.getQueue().size());
+            release.countDown();
+            assertEquals("ready", files.run(() -> "ready", () -> {}, 1000));
+            assertFalse(obsolete.get());
+            assertEquals(1, provider.getLargestPoolSize());
+        } finally { release.countDown(); callers.shutdownNow(); provider.shutdownNow(); }
+    }
+
+    @Test public void filesFailureCoolingIsSeparateFromHttpAndCancellation() throws Exception {
+        ThreadPoolExecutor provider = NativeDeadline.executor("fixture-files-health", 1, 2);
+        AtomicLong clock = new AtomicLong();
+        NativeDeadline.FilesLane files = new NativeDeadline.FilesLane(provider, clock::get);
+        try {
+            assertEquals(Integer.valueOf(401), files.run(() -> 401, () -> {}, 1000));
+            assertEquals("CANCELLED", assertThrows(NativeLoginFlow.Failure.class, () -> files.run(() -> {
+                throw NativeSyncPolicy.failure("CANCELLED", "Cancelled fixture request.");
+            }, () -> {}, 1000)).code);
+            assertEquals(Integer.valueOf(503), files.run(() -> 503, () -> {}, 1000));
+            assertEquals("FILES_TRANSPORT", assertThrows(NativeLoginFlow.Failure.class, () -> files.run(() -> {
+                throw NativeDeadline.filesUnavailable();
+            }, () -> {}, 1000)).code);
+            assertEquals("FILES_TRANSPORT", assertThrows(NativeLoginFlow.Failure.class, () -> files.run(() -> 200, () -> {}, 1000)).code);
+            clock.addAndGet(TimeUnit.SECONDS.toNanos(30));
+            assertEquals(Integer.valueOf(200), files.run(() -> 200, () -> {}, 1000));
+        } finally { provider.shutdownNow(); }
     }
 
     @Test public void saturatedQueueRejectsWithoutClaimingAuthorizationWasLost() throws Exception {

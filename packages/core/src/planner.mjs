@@ -2,7 +2,7 @@
 import { normalizeStatusMapping, mappedBoardColumns, effectiveStatusMapping, filterUnifiedStatuses } from './status-mapping.mjs'
 import { normalizeArrangements } from './planning-order.mjs'
 import { organizationMembership, organizationSourcePool } from './organization-tags.mjs'
-import { boardCompletionVisible } from './history.mjs'
+import { normalizeCompletedDays, workCompletionVisible } from './history.mjs'
 const SOURCES = ['tasks', 'calendar', 'deck', 'notes', 'collectives']
 const VIEWS = ['overview', 'calendar', 'timeline', 'board', 'list']
 const ASSOCIATIONS = new Set(['for_event', 'scheduled_during', 'reference'])
@@ -335,8 +335,10 @@ export function selectPlanner(state, overrides = {}) {
   const workspace = state.workspace
   const settings = selectionSettings(workspace, overrides)
   const now = overrides.now && validDate(overrides.now) ? new Date(overrides.now) : new Date()
-  const filterCompletion = records => settings.view === 'board' && overrides.boardCompletedDays !== undefined
-    ? records.filter(record=>boardCompletionVisible(record,overrides.boardCompletedDays,+now,settings.showCompleted))
+  const completionHistory = (settings.view === 'board' || settings.view === 'timeline') && Object.hasOwn(overrides, 'completedDays')
+  const completedDays = completionHistory ? normalizeCompletedDays(overrides.completedDays) : settings.view === 'board' ? overrides.boardCompletedDays : undefined
+  const filterCompletion = records => completedDays !== undefined
+    ? records.filter(record=>workCompletionVisible(record,completedDays,+now,settings.showCompleted))
     : filterCompletedWork(records,relations,settings.view,settings.showCompleted)
   const today = localDay(now)
   const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)

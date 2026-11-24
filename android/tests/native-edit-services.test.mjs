@@ -46,7 +46,10 @@ async function fixture({isNative = false, metadataReady = true} = {}) {
     if(url===`${dav}files/tester/Notes`||url===`${dav}files/tester/Notes/brief.md`)return multi(row(`${dav}files/tester/Notes/brief.md`,'<oc:fileid>7</oc:fileid><d:displayname>brief.md</d:displayname>'))
     if(url===`${base}/ocs/v2.php/apps/files_sharing/api/v1/shares?format=json`&&input.method==='POST'){f.attachments=[{id:4,type:'file',data:'brief.md',extendedData:{fileid:7,path:'/Notes/brief.md'}}];f.card={...f.card,lastModified:f.card.lastModified+1,attachmentCount:1};return Response.json({ocs:{meta:{statuscode:200},data:{id:4}}})}
     if(url.includes('/deck/api/v1.1/')&&url.includes('/attachments')){
-      if(input.method==='DELETE'){f.attachments=[];f.card={...f.card,lastModified:f.card.lastModified+1,attachmentCount:0};return new Response(null,{status:204})}
+      if(input.method==='DELETE'){
+        assert.equal(url,`${cards.replace('/api/v1.0/','/api/v1.1/')}/attachments/file/4`)
+        f.attachments=[];f.card={...f.card,lastModified:f.card.lastModified+1,attachmentCount:0};return new Response(null,{status:204})
+      }
       return Response.json(f.attachments)
     }
     if(url===dav)return multi(row(dav,`<d:current-user-principal><d:href>${principal}</d:href></d:current-user-principal>`))

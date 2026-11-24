@@ -6,7 +6,9 @@ The visible product name is **NextGlance**. Preserve the existing Android applic
 
 ## Scope and current milestone
 
-RELEASE-30 packages **0.6.30/versionCode32** after SYNC-17, PERF-19, PERF-20 and EDIT-20 verification and source freeze. Preserve existing app, account, storage and signing identities and prior APKs. Keep packages local.
+RELEASE-32 packages Android **0.6.32/versionCode34** with SYNC-18 after focused checks and source freeze. Preserve the existing app, account, storage and signing identities and prior APKs. Keep the APK local.
+
+RELEASE-31 packages **0.6.31/versionCode33** after HISTORY-03, VIEW-19 and EDIT-21 verification and source freeze. Preserve existing app, account, storage and signing identities and prior APKs. Keep packages local.
 
 RELEASE-28 at **0.6.28/versionCode30** packaged EDIT-19 exact-member Calendar revision verification. Preserve that APK and the shared Calendar fix.
 

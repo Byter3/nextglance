@@ -17,7 +17,7 @@ Browser memory can speed repeated reads while the page is open. Losing connectio
 
 Calendar starts with the recent period. Navigating to older or later dates loads that period on demand, including the edges of a month grid. These requests read Calendar only; they do not reload Tasks or Deck or download the intervening years. The page retains its recent data and one additional date range in memory. A failed or incomplete read remains retryable. Refresh and session expiry invalidate that extra coverage.
 
-Board filters can hide completed Tasks and Deck cards after a chosen number of days, with 14 days as the default. Choose All to retain completed work or 0 to hide it. This local display preference does not delete records.
+Board and Timeline filters can hide completed Tasks and Deck cards after a chosen number of days. Both default to 14 days and remember their settings independently in the browser. Choose All to retain completed work or 0 to hide it.
 
 Settings & connection → Appearance lets you choose which weekdays receive weekend shading. Saturday and Sunday are the defaults. This small appearance preference is saved in the browser for every Space and page; no planner records or offline content are stored with it.
 

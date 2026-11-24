@@ -39,7 +39,7 @@ export interface MobileWorkspaceApi extends WorkspaceApi {
 }
 interface SsoAccount { name: string; serverUrl: string; username: string }
 interface HostCapabilities {davReadMode: 'report'|'propfind-get'; nativeEdits?: 'notes-dates-scheduling'}
-interface HostAccountResult {account: SsoAccount|null; capabilities?: HostCapabilities}
+interface HostAccountResult {account: SsoAccount|null; capabilities?: HostCapabilities; authorizationMethod?: 'files'|'direct'}
 interface SsoPlugin {
   cacheFile(options:Record<string,unknown>):Promise<Record<string,unknown>>
   chooseAttachment(options:{accountName:string}):Promise<unknown>
@@ -47,8 +47,8 @@ interface SsoPlugin {
   saveDiagnostics(options:{report:string}):Promise<{saved:boolean;cancelled?:boolean;name?:string}>
   exportPlanner(options:{document:string}):Promise<{exported:boolean}>
   copyDiagnostics(options:{report:string}):Promise<{copied:boolean}>
-  beginLogin(options: {serverUrl: string}): Promise<{flowId: string; loginUrl: string}>
-  pollLogin(options: {flowId: string}): Promise<{pending: true}|{pending: false; account: SsoAccount; capabilities?: HostCapabilities}>
+  beginLogin(options: {serverUrl: string; expectedAccount?: SsoAccount}): Promise<{flowId: string; loginUrl: string}>
+  pollLogin(options: {flowId: string}): Promise<{pending: true}|({pending: false} & HostAccountResult)>
   cancelLogin(options: {flowId?: string}): Promise<HostAccountResult>
   getAccount(): Promise<HostAccountResult & {reconnectRequired?: boolean; restoreError?: string; recoveryOnly?: boolean}>
   getSavedAccount(): Promise<HostAccountResult>

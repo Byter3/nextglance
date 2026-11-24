@@ -64,8 +64,8 @@ function relativePath(account, target) {
 export function checkNativeWrite(account, target, method, headers, body) {
   const path = relativePath(account, target), query = new URL(target).search
   const share=method==='POST'&&path==='ocs/v2.php/apps/files_sharing/api/v1/shares'&&query==='?format=json'
-  const detach=method==='DELETE'&&/^index\.php\/apps\/deck\/api\/v1\.1\/boards\/[1-9]\d*\/stacks\/[1-9]\d*\/cards\/[1-9]\d*\/attachments\/[1-9]\d*$/.test(path)&&query==='?type=file'
-  if(query&&!share&&!detach)throw fail('Unsupported native query parameters.')
+  const detach=method==='DELETE'&&/^index\.php\/apps\/deck\/api\/v1\.1\/boards\/[1-9]\d*\/stacks\/[1-9]\d*\/cards\/[1-9]\d*\/attachments\/file\/[1-9]\d*$/.test(path)
+  if(query&&!share)throw fail('Unsupported native query parameters.')
   if (body != null && (typeof body !== 'string' || bytes(body) > MAX_BODY)) throw fail('The native write exceeds its body limit.', 'LIMIT')
 
   const deckCard = /^index\.php\/apps\/deck\/api\/v1\.0\/boards\/[1-9]\d*\/stacks\/[1-9]\d*\/cards\/[1-9]\d*\//

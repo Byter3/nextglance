@@ -91,18 +91,68 @@ test('Attaching a renamed note resolves its stable file id and creates only a na
 
 test('Attachment removal detaches the native file share, never the file or a legacy upload', async()=>{
   let attached=true;
+  const attachmentList='/index.php/apps/deck/api/v1.1/boards/2/stacks/3/cards/7/attachments';
+  const filePath='/remote.php/dav/files/alex/Notes/New/Renamed%20note.md';
+  const original='# Preserve this source note';
+  const legacy={id:9,type:'deck_file',data:'legacy.txt'};
   const {client,calls}=fixture((url,options)=>{
     if(url.pathname.endsWith('/cards/7'))return reply({id:7,stackId:3});
-    if(url.pathname.endsWith('/attachments/20')){assert.equal(options.method,'DELETE');assert.equal(url.searchParams.get('type'),'file');attached=false;return reply('',204)}
-    if(url.pathname.endsWith('/attachments'))return reply(attached?[attachment]:[]);
+    if(url.pathname===`${attachmentList}/file/20`){assert.equal(options.method,'DELETE');assert.equal(url.search,'');assert.equal(options.body,undefined);attached=false;return reply('',204)}
+    if(url.pathname===attachmentList){assert.equal(options.headers['Cache-Control'],'no-cache');return reply(attached?[attachment,legacy]:[legacy])}
+    if(url.pathname===filePath){assert.equal(options.method,'GET');return reply(original)}
     throw Error('Unexpected request');
   });
-  assert.deepEqual(await client.removeDeckAttachment({attachmentId:'20'},card),{attachments:[]});
+  assert.equal((await client.request(`${server}${filePath}`,{method:'GET'})).body,original);
+  const detached=await client.removeDeckAttachment({attachmentId:'20'},card);
+  assert.deepEqual(detached.attachments.map(item=>item.id),['9']);
+  assert.equal(detached.attachments[0].url,`${server}${attachmentList}/deck_file/9`);
+  assert.equal((await client.request(`${server}${filePath}`,{method:'GET'})).body,original);
+  await client.removeDeckAttachment({attachmentId:'20'},card);
   assert.equal(calls.filter(call=>call.method==='DELETE').length,1);
   assert.ok(!calls.some(call=>call.method==='DELETE'&&call.url.includes('/dav/files/')));
-  const legacy=fixture(url=>url.pathname.endsWith('/cards/7')?reply({id:7,stackId:3}):reply([{id:9,type:'deck_file',data:'legacy.txt'}]));
-  await assert.rejects(legacy.client.removeDeckAttachment({attachmentId:'9'},card),/legacy attachment/);
-  assert.ok(!legacy.calls.some(call=>call.method==='DELETE'));
+  await assert.rejects(client.removeDeckAttachment({attachmentId:'9'},card),/legacy attachment/);
+  assert.equal(calls.filter(call=>call.method==='DELETE').length,1);
+});
+
+test('Deck attachment removal preserves the link when the typed API refuses or cannot confirm it',async()=>{
+  for (const [status, code, reads] of [[204,'UNAVAILABLE',2],[404,'UNAVAILABLE',1],[403,'PERMISSION',1]]) {
+    const {client,calls}=fixture((url,options)=>{
+      if(url.pathname.endsWith('/cards/7'))return reply({id:7,stackId:3});
+      if(url.pathname.endsWith('/attachments'))return reply([attachment]);
+      assert.match(url.pathname,/\/attachments\/file\/20$/);
+      assert.equal(options.method,'DELETE');
+      return reply('',status);
+    });
+    await assert.rejects(client.removeDeckAttachment({attachmentId:'20'},card),{code});
+    assert.equal((await client.readDeckAttachments(card,{cached:true})).attachments[0].id,'20');
+    assert.equal(calls.filter(call=>call.url.endsWith('/attachments')).length,reads);
+    assert.equal(calls.filter(call=>call.method==='DELETE').length,1);
+  }
+});
+
+test('A collision between file share and legacy attachment IDs cannot trigger a detach',async()=>{
+  const {client,calls}=fixture(url=>url.pathname.endsWith('/cards/7')?reply({id:7,stackId:3}):reply([attachment,{id:20,type:'deck_file',data:'legacy.txt'}]));
+  await assert.rejects(client.removeDeckAttachment({attachmentId:'20'},card),{code:'CONFLICT'});
+  assert.ok(calls.every(call=>call.method!=='DELETE'));
+});
+
+test('Detach requires its own fresh readback even when another read updates the attachment cache',async()=>{
+  let releaseVerification, verificationStarted, readCount=0;
+  const waitForVerification=new Promise(resolve=>{verificationStarted=resolve;});
+  const verification=new Promise(resolve=>{releaseVerification=resolve;});
+  const {client}=fixture(async(url,options)=>{
+    if(url.pathname.endsWith('/cards/7'))return reply({id:7,stackId:3});
+    if(options.method==='DELETE')return reply('',204);
+    if(++readCount===1)return reply([attachment]);
+    if(readCount===2){verificationStarted();await verification;return reply([attachment]);}
+    return reply([]);
+  });
+  const removal=client.removeDeckAttachment({attachmentId:'20'},card);
+  await waitForVerification;
+  try {assert.deepEqual(await client.readDeckAttachments(card),{attachments:[]});}
+  finally {releaseVerification();}
+  await assert.rejects(removal,{code:'UNAVAILABLE'});
+  assert.deepEqual(await client.readDeckAttachments(card,{cached:true}),{attachments:[]});
 });
 
 test('Permission denial, missing file identity and folders cannot produce a Deck share', async()=>{

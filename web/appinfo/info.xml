@@ -5,7 +5,7 @@
     <name>NextGlance</name>
     <summary>Your Nextcloud planner in one view</summary>
     <description>Bring native calendars, tasks, Deck cards and notes together using your existing Nextcloud session and planner organization.</description>
-    <version>0.6.30</version>
+    <version>0.6.31</version>
     <licence>AGPL-3.0-or-later</licence>
     <author>NextGlance contributors</author>
     <namespace>Nextglance</namespace>

@@ -39,6 +39,19 @@ test('planner consistency failures and reviewable overlaps have distinct safe di
   }
 })
 
+test('Files provider failures retain their classification without copying bridge details', async () => {
+  const client = new NextcloudClient({serverUrl:'https://cloud.example.test', username:'fixture'}, {
+    authentication:'delegated', fetch:async()=>{throw fail('FILES_TRANSPORT')},
+  })
+  await assert.rejects(client.request('https://cloud.example.test/status.php'), error => {
+    assert.equal(error.code, 'FILES_TRANSPORT')
+    assert.doesNotMatch(error.message, /Host-private/)
+    return true
+  })
+  assert.deepEqual(syncDiagnostic(fail('FILES_TRANSPORT'), 'planner-read'), {errorCode:'FILES_TRANSPORT',errorStage:'planner-read'})
+  assert.match(plannerFailureMessage(fail('FILES_TRANSPORT'), 'planner-read'), /direct connection in Settings/)
+})
+
 test('native lifecycle cancellation crosses request, discovery, optional branding and reader boundaries', async () => {
   const request = fixture()
   await assert.rejects(request.request('https://fixture.invalid/nc/status.php'), {code: 'CANCELLED'})

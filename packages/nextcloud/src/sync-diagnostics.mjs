@@ -1,5 +1,5 @@
 /** Safe, portable sync diagnostics. Never persist arbitrary bridge error text. */
-const codes = new Set(['AUTH', 'PERMISSION', 'NETWORK', 'TIMEOUT', 'LIMIT', 'FORMAT', 'NEXTCLOUD', 'UNAVAILABLE', 'REDIRECT', 'SECURITY', 'STORAGE', 'CONFLICT', 'PLANNER_OVERLAP', 'PLANNER_READ_CHANGED', 'PLANNER_WRITE_CHANGED', 'ETAG_UNAVAILABLE', 'STORAGE_LAYOUT', 'LEGACY_CHANGED', 'FOLDER_MISSING', 'FOLDER_CONFLICT', 'FOLDER_FORMAT', 'CACHE_UNREADABLE', 'CACHE_KEY', 'CACHE_GENERATION', 'CACHE_FORMAT', 'CACHE_LIMIT', 'CACHE_REMOVE_FAILED', 'METADATA_FORMAT'])
+const codes = new Set(['AUTH', 'PERMISSION', 'NETWORK', 'TIMEOUT', 'FILES_TRANSPORT', 'LIMIT', 'FORMAT', 'NEXTCLOUD', 'UNAVAILABLE', 'REDIRECT', 'SECURITY', 'STORAGE', 'CONFLICT', 'PLANNER_OVERLAP', 'PLANNER_READ_CHANGED', 'PLANNER_WRITE_CHANGED', 'ETAG_UNAVAILABLE', 'STORAGE_LAYOUT', 'LEGACY_CHANGED', 'FOLDER_MISSING', 'FOLDER_CONFLICT', 'FOLDER_FORMAT', 'CACHE_UNREADABLE', 'CACHE_KEY', 'CACHE_GENERATION', 'CACHE_FORMAT', 'CACHE_LIMIT', 'CACHE_REMOVE_FAILED', 'METADATA_FORMAT'])
 const stages = new Set(['authorization', 'discovery', 'source-read', 'planner-read', 'planner-write', 'local-cache'])
 const readChanged = 'Nextcloud could not confirm a consistent version of the planner files during the read. Retry planner sync.'
 const writeChanged = 'Nextcloud could not confirm the planner version for saving. Retry planner sync.'
@@ -15,6 +15,7 @@ export function plannerFailureMessage(error, stage) {
     PERMISSION: 'Nextcloud denied access to the planner folder. Check its permissions.',
     NETWORK: 'The planner request could not reach Nextcloud. Check the connection and retry.',
     TIMEOUT: 'The planner request timed out. Retry when the connection is available.',
+    FILES_TRANSPORT: 'The Nextcloud Files connection was interrupted. Retry shortly or use a direct connection in Settings.',
     LIMIT: 'Planner sync exceeded a response or storage limit. Check the planner files before retrying.',
     FORMAT: 'Nextcloud returned an invalid planner response. Retry or inspect the planner files.',
     NEXTCLOUD: 'Nextcloud could not complete the planner request. Retry and check the server if it persists.',

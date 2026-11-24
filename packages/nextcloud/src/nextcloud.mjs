@@ -267,6 +267,7 @@ async function request(fetcher, serverUrl, target, options = {}) {
     return { status: response.status, headers: response.headers, body };
   } catch (error) {
     checkActive();
+    if (error?.code === 'FILES_TRANSPORT') throw fail('The Nextcloud Files connection was interrupted. Retry shortly or use a direct connection in Settings.', 'FILES_TRANSPORT');
     if (error?.code && ['NEXTCLOUD', 'VALIDATION', 'SECURITY', 'REDIRECT', 'LIMIT', 'CANCELLED', 'TIMEOUT'].includes(error.code)) throw error;
     throw fail(controller.signal.aborted ? 'The Nextcloud request timed out. Please try again.' : 'Could not reach Nextcloud. Check the server address, network, and certificate.', controller.signal.aborted ? 'TIMEOUT' : 'NETWORK');
   } finally { clearTimeout(timeout); }
@@ -1825,25 +1826,28 @@ export class NextcloudClient {
 
   attachmentUrl(record) { return this.deckCardUrl(record).replace('/api/v1.0/', '/api/v1.1/') + '/attachments'; }
 
+  attachmentMemberUrl(record, type, id) { return `${this.attachmentUrl(record)}/${encode(type)}/${encode(id)}`; }
+
   normalizeDeckAttachments(raw, record) {
     if (!Array.isArray(raw)) throw fail('Deck returned an unexpected attachment list.', 'FORMAT');
     return raw.filter(item => item && nativeNumber(item.id) && !item.deletedAt && ['file', 'deck_file'].includes(item.type)).map(item => {
       const extra = item.extendedData || {}, fileId = nativeNumber(extra.fileid) ? String(extra.fileid) : undefined;
       let path;
       try { if (extra.path) path = cloudFilePath(extra.path); } catch { /* Do not expose an unsafe path. */ }
-      return {id: String(item.id), type: item.type, name: String(item.data || extra.data || 'Attachment').slice(0, 1000), ...(fileId ? {fileId} : {}), ...(path ? {path} : {}), url: fileId ? this.url(`index.php/f/${encode(fileId)}`) : `${this.attachmentUrl(record)}/${encode(item.id)}?type=${encode(item.type)}`, ...(Number.isFinite(Number(extra.filesize)) ? {size: Number(extra.filesize)} : {}), mimeType: String(extra.mimetype || '')};
+      return {id: String(item.id), type: item.type, name: String(item.data || extra.data || 'Attachment').slice(0, 1000), ...(fileId ? {fileId} : {}), ...(path ? {path} : {}), url: fileId ? this.url(`index.php/f/${encode(fileId)}`) : this.attachmentMemberUrl(record, item.type, item.id), ...(Number.isFinite(Number(extra.filesize)) ? {size: Number(extra.filesize)} : {}), mimeType: String(extra.mimetype || '')};
     });
   }
 
-  async readDeckAttachments(record, { cached = false, context } = {}) {
+  async readDeckAttachments(record, { cached = false, context, useCurrentResponse = false } = {}) {
     const key = String(record.remote?.nativeId), version = `${record.remote?.lastModified ?? ''}:${record.remote?.snapshot?.attachmentCount ?? ''}`;
     const previous = this.#deckAttachments.get(key);
     if (cached && previous?.version === version && this.#now().getTime() - previous.readAt < 120000) return {attachments: structuredClone(previous.attachments)};
     const epoch = (this.#attachmentReads.get(key) ?? 0) + 1;
     this.#attachmentReads.set(key, epoch);
-    let attachments = this.normalizeDeckAttachments(jsonBody(assertStatus(await this.sourceRequest(context, this.attachmentUrl(record)))), record);
+    const options = cached ? {} : {headers: {'Cache-Control': 'no-cache'}};
+    let attachments = this.normalizeDeckAttachments(jsonBody(assertStatus(await this.sourceRequest(context, this.attachmentUrl(record), options))), record);
     if (this.#attachmentReads.get(key) === epoch) this.#deckAttachments.set(key, {version, attachments, readAt: this.#now().getTime()});
-    else attachments = this.#deckAttachments.get(key)?.attachments ?? attachments;
+    else if (!useCurrentResponse) attachments = this.#deckAttachments.get(key)?.attachments ?? attachments;
     return {attachments};
   }
 
@@ -1885,14 +1889,17 @@ export class NextcloudClient {
   async removeDeckAttachment({ attachmentId }, record) {
     if (!nativeNumber(attachmentId)) throw fail('Choose a valid Deck attachment.', 'VALIDATION');
     await this.assertDeckAttachmentWritable(record);
-    const current = await this.readDeckAttachments(record);
-    const attachment = current.attachments.find(item => item.id === String(attachmentId));
-    if (!attachment) return current;
-    // Only detach native file shares. Never delete a legacy deck_file's contents.
+    const current = await this.readDeckAttachments(record, {useCurrentResponse: true});
+    const matches = current.attachments.filter(item => item.id === String(attachmentId));
+    if (!matches.length) return current;
+    if (matches.length !== 1) throw fail('Deck returned multiple attachments for this ID. Open the card in Deck to unlink the file.', 'CONFLICT');
+    const [attachment] = matches;
     if (attachment.type !== 'file') throw fail('Remove this legacy attachment in Deck.', 'VALIDATION');
-    assertStatus(await this.request(`${this.attachmentUrl(record)}/${encode(attachment.id)}?type=file`, {method: 'DELETE'}));
-    const verified = await this.readDeckAttachments(record);
-    if (verified.attachments.some(item => item.id === attachment.id)) throw fail('Deck has not confirmed detaching this file yet. Refresh attachments before trying again.', 'UNAVAILABLE');
+    const response = await this.request(this.attachmentMemberUrl(record, 'file', attachment.id), {method: 'DELETE'});
+    if ([404, 405, 501].includes(response.status)) throw fail('The Deck server could not unlink this file. Refresh attachments and retry, or unlink it in Deck.', 'UNAVAILABLE', response.status);
+    assertStatus(response);
+    const verified = await this.readDeckAttachments(record, {useCurrentResponse: true});
+    if (verified.attachments.some(item => item.type === 'file' && item.id === attachment.id)) throw fail('Deck has not confirmed detaching this file yet. Refresh attachments before trying again.', 'UNAVAILABLE');
     return verified;
   }
 

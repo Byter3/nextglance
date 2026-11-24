@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 import {validateWorkspace} from '@nextspace/core/planner-schema.mjs'
 import {reconcileIdentities,projectNativeIdentities,promoteNativeIdentities} from '@nextspace/core/identity.mjs'
 import {taskStatusProgress, nativeStatus} from '@nextspace/core/status-mapping.mjs'
-import {isClosed, allRelations, canAddRelation, scopeRecordIds, boardColumns, boardCollectionsForScope, localDay, dayItems, filterCompletedWork} from '@nextspace/core/planner.mjs'
+import {isClosed, allRelations, canAddRelation, scopeRecordIds, boardColumns, boardCollectionsForScope, localDay, dayItems, filterCompletedWork, createEmptyState, selectPlanner} from '@nextspace/core/planner.mjs'
 import {dependencyCandidates} from '@nextspace/core/relation-picker.mjs'
 import {calendarContentEquivalent,calendarDeletePreflight} from '@nextspace/nextcloud-client/calendar-representation.mjs'
 import {normalizeEventDetails,normalizeEventReminders,linkedEventDescription,newEventDetails} from '@nextspace/core/event-details.mjs'
@@ -56,12 +56,18 @@ import {restoreUnscheduledPresentation,changeUnscheduledPresentation,unscheduled
 import {createRelationPickerIndex} from '@nextspace/core/relation-picker.mjs'
 import {mergeDavDelta} from '@nextspace/nextcloud-client/dav-delta-policy.mjs'
 import {isWeekendDateKey,normalizeWeekendMask,setWeekendDay} from '@nextspace/core/weekend-days.mjs'
-import {boardCompletionVisible,normalizeBoardCompletedDays,normalizeCalendarHistoryDays,normalizeCalendarWindow} from '@nextspace/core/history.mjs'
+import {workCompletionVisible,normalizeCompletedDays,normalizeCalendarHistoryDays,normalizeCalendarWindow} from '@nextspace/core/history.mjs'
 const output = value => ({output: value})
 const operations = new Map([
   ['identity.nativeCatalog',{fields:['promote'],run:(state,input)=>{const {records,workspace}=(input.promote?promoteNativeIdentities:projectNativeIdentities)(state.workspace,state.records,()=>{throw Error('Portable identities must not allocate a random ID')});return output({ids:records.map(record=>record.id),registered:workspace.identities.map(identity=>identity.id)})}}],
-  ['history.boardDays',{fields:[],run:state=>output(normalizeBoardCompletedDays(state.value))}],
-  ['history.boardRows',{fields:[],run:state=>output(state.records.filter(record=>boardCompletionVisible(record,state.days,Date.parse(state.now),state.showCancelled)).map(record=>record.id))}],
+  ['history.boardDays',{fields:[],run:state=>output(normalizeCompletedDays(state.value))}],
+  ['history.boardRows',{fields:[],run:state=>output(state.records.filter(record=>workCompletionVisible(record,state.days,Date.parse(state.now),state.showCancelled)).map(record=>record.id))}],
+  ['history.plannerRows',{fields:[],run:state=>{
+    const planner=createEmptyState()
+    planner.records=state.records
+    planner.workspace.relations=state.relations||[]
+    return output(selectPlanner(planner,{...state.options,completedDays:state.savedDays}).records.map(record=>record.id).sort())
+  }}],
   ['history.calendarDays',{fields:[],run:state=>output(normalizeCalendarHistoryDays(state.value))}],
   ['history.window',{fields:[],run:state=>output(normalizeCalendarWindow(state.value))}],
   ['history.davWindow',{fields:[],run:state=>{const {from,to}=davProjectionWindow(Date.parse(state.now),state.options);return output({from:new Date(from).toISOString(),to:new Date(to).toISOString()})}}],
@@ -85,7 +91,7 @@ const operations = new Map([
   ['planning.unscheduledPresentation',{fields:['events'],run:(state,input)=>{const presentation=input.events.reduce(changeUnscheduledPresentation,restoreUnscheduledPresentation(state.saved,state.options));return output({state:presentation,visible:unscheduledTrayVisible(presentation,state.recordCount,state.disabled)})}}],
   ['planning.unscheduledRows',{fields:['hideUnscheduled'],run:(state,input)=>output(timelineRowRecords(state.records,new Set(unscheduledRecords(state.records,state.plans,state.relations).map(record=>record.id)),input.hideUnscheduled).map(record=>record.id))}],
   ['dependency.indexedEligibility',{fields:[],run:state=>output(createRelationPickerIndex(state.records,state.relations).eligibility(state.record,state.target,state.mode,state.direction))}],
-  ['dependency.groups',{fields:[],run:state=>{const groups=dependencyGroups(state.recordId,state.records,state.relations);return output(Object.fromEntries(Object.entries(groups).map(([direction,links])=>[direction,links.map(link=>({id:link.id,recordId:link.record?.id??null}))])))}}],
+  ['dependency.groups',{fields:[],run:state=>{const groups=dependencyGroups(state.recordId,state.records,state.relations,state.statusMapping);return output(Object.fromEntries(Object.entries(groups).map(([direction,links])=>[direction,links.map(({id,record,status})=>({id,recordId:record?.id??null,...(status?{status}:{})}))])))}}],
   ['linked.navigation',{fields:[],run:state=>output(linkedNavigation(state))}],
   ['cardTasks.label',{fields:[],run:state=>output(normalizeTaskLabel(state.value))}],
   ['cardTasks.options',{fields:[],run:state=>output(taskCreationOptions(state))}],

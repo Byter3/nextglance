@@ -16,6 +16,68 @@
     {"id":"history-board-cutoff","behavior":"Board completion date, inclusive cutoff, missing date and cancelled control","specRef":"HISTORY-01","initialState":{"days":14,"now":"2026-11-23T12:00:00Z","records":[{"id":"expired-card","kind":"card","completed":true,"completedAt":"2026-11-09T11:59:59Z","updatedAt":"2026-11-23T11:00:00Z"},{"id":"cutoff-task","kind":"task","completed":true,"completedAt":"2026-11-09T12:00:00Z"},{"id":"unknown-card","kind":"card","completed":true},{"id":"open","kind":"task","completed":false},{"id":"cancelled","kind":"task","status":"CANCELLED"}]},"input":{"operation":"history.boardRows"},"expected":{"output":["cutoff-task","unknown-card","open"]}},
     {"id":"history-board-hide","behavior":"Zero hides completed work including legacy entries without timestamps","specRef":"HISTORY-01","initialState":{"days":0,"now":"2026-11-23T12:00:00Z","showCancelled":true,"records":[{"id":"done","kind":"card","completed":true},{"id":"cancelled","kind":"task","status":"CANCELLED"},{"id":"open","kind":"task"}]},"input":{"operation":"history.boardRows"},"expected":{"output":["cancelled","open"]}},
     {"id":"history-board-all","behavior":"Show all ignores age while cancelled tasks remain separate","specRef":"HISTORY-01","initialState":{"days":null,"now":"2026-11-23T12:00:00Z","records":[{"id":"old-task","kind":"task","completed":true,"completedAt":"2020-01-01T00:00:00Z"},{"id":"cancelled","kind":"task","status":"CANCELLED"}]},"input":{"operation":"history.boardRows"},"expected":{"output":["old-task"]}},
+    {
+      "id":"history-timeline-default-inclusive",
+      "behavior":"Timeline defaults to 14 days, keeps the exact cutoff and unknown dates, and preserves linked Calendar events",
+      "specRef":"HISTORY-03",
+      "initialState":{
+        "options":{"view":"timeline","assignment":"all","now":"2026-11-23T12:00:00Z"},
+        "records":[
+          {"id":"expired-card","kind":"card","source":"deck","title":"Completed earlier","completed":true,"completedAt":"2026-11-09T11:59:59Z","updatedAt":"2026-11-23T11:00:00Z"},
+          {"id":"cutoff-task","kind":"task","source":"tasks","title":"Completed on the cutoff","completed":true,"completedAt":"2026-11-09T12:00:00Z"},
+          {"id":"unknown-card","kind":"card","source":"deck","title":"Undated completion","completed":true},
+          {"id":"open","kind":"task","source":"tasks","title":"Draft"},
+          {"id":"cancelled","kind":"task","source":"tasks","title":"Cancelled","status":"CANCELLED"},
+          {"id":"booking","kind":"event","source":"calendar","title":"Studio booking","start":"2026-11-23T13:00:00Z"}
+        ],
+        "relations":[{"id":"booking-link","type":"scheduled_during","fromId":"expired-card","toId":"booking"}]
+      },
+      "input":{"operation":"history.plannerRows"},
+      "expected":{"output":["booking","cutoff-task","open","unknown-card"]}
+    },
+    {
+      "id":"history-timeline-zero",
+      "behavior":"Timeline Hide completed keeps open and explicitly visible cancelled work",
+      "specRef":"HISTORY-03",
+      "initialState":{
+        "savedDays":0,
+        "options":{"view":"timeline","assignment":"all","showCompleted":true,"now":"2026-11-23T12:00:00Z"},
+        "records":[
+          {"id":"done","kind":"card","source":"deck","title":"Finished","completed":true},
+          {"id":"cancelled","kind":"task","source":"tasks","title":"Cancelled","status":"CANCELLED"},
+          {"id":"open","kind":"task","source":"tasks","title":"Draft"}
+        ]
+      },
+      "input":{"operation":"history.plannerRows"},
+      "expected":{"output":["cancelled","open"]}
+    },
+    {
+      "id":"history-timeline-all",
+      "behavior":"Timeline Show all retains work completed at any age and keeps cancelled items independent",
+      "specRef":"HISTORY-03",
+      "initialState":{
+        "savedDays":null,
+        "options":{"view":"timeline","assignment":"all","now":"2026-11-23T12:00:00Z"},
+        "records":[
+          {"id":"old-task","kind":"task","source":"tasks","title":"Earlier task","completed":true,"completedAt":"2020-01-01T00:00:00Z"},
+          {"id":"cancelled","kind":"task","source":"tasks","title":"Cancelled","status":"CANCELLED"}
+        ]
+      },
+      "input":{"operation":"history.plannerRows"},
+      "expected":{"output":["old-task"]}
+    },
+    {
+      "id":"history-other-views-unchanged",
+      "behavior":"The age policy applies to Board and Timeline only",
+      "specRef":"HISTORY-03",
+      "initialState":{
+        "savedDays":0,
+        "options":{"view":"overview","assignment":"all","showCompleted":true,"now":"2026-11-23T12:00:00Z"},
+        "records":[{"id":"old-task","kind":"task","source":"tasks","title":"Earlier task","completed":true,"completedAt":"2020-01-01T00:00:00Z"}]
+      },
+      "input":{"operation":"history.plannerRows"},
+      "expected":{"output":["old-task"]}
+    },
     {"id":"history-calendar-default","behavior":"Missing native history choice defaults to all history","specRef":"HISTORY-01","initialState":{},"input":{"operation":"history.calendarDays"},"expected":{"output":null}},
     {"id":"history-calendar-zero","behavior":"Zero days of history is a saved native choice","specRef":"HISTORY-01","initialState":{"value":0},"input":{"operation":"history.calendarDays"},"expected":{"output":0}},
     {"id":"history-dav-all","behavior":"All history lifts the past cutoff and retains forward coverage","specRef":"HISTORY-01","initialState":{"now":"2026-11-23T12:00:00Z","options":{"calendarHistoryDays":null}},"input":{"operation":"history.davWindow"},"expected":{"output":{"from":"0001-01-01T00:00:00.000Z","to":"2027-02-22T00:00:00.000Z"}}},
@@ -114,6 +176,7 @@
     {"id":"picker-index-cycle","behavior":"Indexed eligibility preserves global cycle rejection","specRef":"PERF-18","initialState":{"record":{"id":"a","kind":"task"},"target":{"id":"b","kind":"card"},"mode":"dependency","direction":"incoming","records":[{"id":"a","kind":"task"},{"id":"b","kind":"card"}],"relations":[{"id":"edge","type":"depends_on","fromId":"b","toId":"a"}]},"input":{"operation":"dependency.indexedEligibility"},"expected":{"output":{"ok":false,"message":"Would create a dependency cycle."}}},
     {"id":"dependency-unified-work-kinds","behavior":"Cards and tasks share one directional dependency projection","specRef":"EDIT-17","initialState":{"recordId":"main","records":[{"id":"main","kind":"card"},{"id":"task-in","kind":"task"},{"id":"card-in","kind":"card"},{"id":"task-out","kind":"task"},{"id":"card-out","kind":"card"}],"relations":[{"id":"a","type":"depends_on","fromId":"main","toId":"task-in"},{"id":"b","type":"depends_on","fromId":"main","toId":"card-in"},{"id":"c","type":"depends_on","fromId":"task-out","toId":"main"},{"id":"d","type":"depends_on","fromId":"card-out","toId":"main"},{"id":"ignore","type":"related","fromId":"main","toId":"task-in"}]},"input":{"operation":"dependency.groups"},"expected":{"output":{"incoming":[{"id":"a","recordId":"task-in"},{"id":"b","recordId":"card-in"}],"outgoing":[{"id":"c","recordId":"task-out"},{"id":"d","recordId":"card-out"}]}}},
     {"id":"dependency-unavailable-peer","behavior":"An unavailable dependency stays visible while unrelated edges are excluded","specRef":"EDIT-17","initialState":{"recordId":"main","records":[{"id":"main","kind":"task"}],"relations":[{"id":"missing","type":"depends_on","fromId":"main","toId":"not-loaded"},{"id":"unrelated","type":"depends_on","fromId":"other","toId":"elsewhere"}]},"input":{"operation":"dependency.groups"},"expected":{"output":{"incoming":[{"id":"missing","recordId":null}],"outgoing":[]}}},
+    {"id":"dependency-task-unified-status","behavior":"Both directions project a loaded task's unified status and leave cards and unavailable peers without a badge","specRef":"VIEW-19","initialState":{"recordId":"main","records":[{"id":"first","kind":"task","source":"tasks","collectionId":"studio","status":"IN-PROCESS"},{"id":"last","kind":"task","source":"tasks","collectionId":"studio","status":"COMPLETED"},{"id":"card","kind":"card","source":"deck","collectionId":"board","completed":true}],"relations":[{"id":"incoming","type":"depends_on","fromId":"main","toId":"first"},{"id":"outgoing","type":"depends_on","fromId":"last","toId":"main"},{"id":"card-link","type":"depends_on","fromId":"main","toId":"card"},{"id":"missing-link","type":"depends_on","fromId":"absent","toId":"main"}],"statusMapping":{"columns":[{"id":"review","title":"In review","color":"#2563eb"}],"assignments":{"[\"tasks\",\"studio\",\"IN-PROCESS\"]":"review"}}},"input":{"operation":"dependency.groups"},"expected":{"output":{"incoming":[{"id":"incoming","recordId":"first","status":{"id":"review","title":"In review","color":"#2563eb"}},{"id":"card-link","recordId":"card"}],"outgoing":[{"id":"outgoing","recordId":"last","status":{"id":"$unmapped","title":"Unmapped","color":"#8b939f"}},{"id":"missing-link","recordId":null}]}}},
     {"id":"linked-jump-current-calendar","behavior":"Explicit jump keeps the current date view and selects the target date","specRef":"NAV-02","initialState":{"recordId":"event","records":[{"id":"event","kind":"event","start":"2026-11-17T09:00:00Z"}],"visibleIds":["event"],"currentView":"calendar"},"input":{"operation":"linked.navigation"},"expected":{"output":{"ok":true,"view":"calendar","date":"2026-11-17T09:00:00Z","unscheduled":false}}},
     {"id":"linked-jump-board-choice","behavior":"Board jump uses the explicit destination without inventing dates","specRef":"NAV-02","initialState":{"recordId":"task","records":[{"id":"task","kind":"task"}],"visibleIds":["task"],"currentView":"board","destination":"timeline"},"input":{"operation":"linked.navigation"},"expected":{"output":{"ok":true,"view":"timeline","unscheduled":true}}},
     {"id":"linked-jump-filtered-target","behavior":"Jump explains filtering rather than silently resetting scope","specRef":"NAV-02","initialState":{"recordId":"task","records":[{"id":"task","kind":"task"}],"visibleIds":[],"currentView":"overview"},"input":{"operation":"linked.navigation"},"expected":{"output":{"ok":false,"message":"This item is outside this view’s sources or hidden by its filters. Adjust the Space or filters to reveal it."}}},
@@ -2256,6 +2319,46 @@
           "browserLabel": "Sign in with Nextcloud"
         }
       }
+    },
+    {
+      "id": "auth-files-account-offers-direct-switch",
+      "behavior": "A saved Files connection can authorize its existing account directly without disconnecting",
+      "specRef": "SYNC-18",
+      "initialState": {"mobileHost":true,"nativeFilesAvailable":true,"connection":{"connected":true,"serverUrl":"https://cloud.example.test","username":"fixture","authorizationMethod":"files"}},
+      "input": {"operation":"auth.entry"},
+      "expected": {"output":{"promptReconnect":false,"primary":"files","browserLabel":"Sign in using browser","methodLabel":"Nextcloud Files connection","canSwitchDirect":true}}
+    },
+    {
+      "id": "auth-expired-files-account-offers-direct-switch",
+      "behavior": "A valid saved Files account can switch directly even when Files authorization needs reconnection",
+      "specRef": "SYNC-18",
+      "initialState": {"mobileHost":true,"nativeFilesAvailable":true,"initialStartup":true,"connection":{"connected":false,"reconnectRequired":true,"serverUrl":"https://cloud.example.test","username":"fixture","authorizationMethod":"files"}},
+      "input": {"operation":"auth.entry"},
+      "expected": {"output":{"promptReconnect":true,"primary":"files","browserLabel":"Sign in using browser","methodLabel":"Nextcloud Files connection","canSwitchDirect":true}}
+    },
+    {
+      "id": "auth-direct-account-reports-independent-method",
+      "behavior": "An installed direct connection displays its own method and needs no switch action",
+      "specRef": "SYNC-18",
+      "initialState": {"mobileHost":true,"nativeFilesAvailable":true,"connection":{"connected":true,"serverUrl":"https://cloud.example.test","username":"fixture","authorizationMethod":"direct"}},
+      "input": {"operation":"auth.entry"},
+      "expected": {"output":{"promptReconnect":false,"primary":"files","browserLabel":"Sign in using browser","methodLabel":"Direct connection to Nextcloud"}}
+    },
+    {
+      "id": "sync-files-provider-opens-connection-options",
+      "behavior": "A Files transport interruption offers connection options without demanding new credentials",
+      "specRef": "SYNC-18",
+      "initialState": {"connection":{"connected":true,"serverUrl":"https://cloud.example.test","username":"fixture","authorizationMethod":"files"},"statuses":[{"source":"tasks","state":"error","errorCode":"FILES_TRANSPORT"}]},
+      "input": {"operation":"sync.notice"},
+      "expected": {"output":{"kind":"connection","tone":"warning","message":"The Nextcloud Files connection was interrupted. Saved data is available.","action":"details","actionLabel":"Connection options"}}
+    },
+    {
+      "id": "sync-files-provider-interruption-stays-in-indicator",
+      "behavior": "A recoverable Files interruption uses the cloud indicator",
+      "specRef": "SYNC-18",
+      "initialState": {"connection":{"connected":true,"serverUrl":"https://cloud.example.test","username":"fixture","authorizationMethod":"files"},"statuses":[{"source":"tasks","state":"error","errorCode":"FILES_TRANSPORT"}]},
+      "input": {"operation":"sync.noticePresentation"},
+      "expected": {"output":"indicator"}
     },
     {
       "id": "auth-native-saved-unauthorized-startup",

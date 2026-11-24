@@ -65,19 +65,34 @@ export function createMobileController({native, cache, openExternal, widgets, ti
   const cancelPlanner = () => { plannerPass?.cancel(); metadata?.cancelSync?.(); if (syncState().plannerSyncing) syncState().plannerSyncing = false }
   const cancelSourceReads = (code = 'CANCELLED') => { ++sourceReadGeneration; ++sourceAccessGeneration; activePass?.cancel(code); resumePass?.cancel(); delete syncState().activity }
   const authAvailable = () => { if (!hostAvailable || typeof native.beginLogin !== 'function') throw problem('Nextcloud sign-in is unavailable in this host. Start the trusted Android preview or use the Android app.', 'UNAVAILABLE') }
+  const methodFor = value => isNative && (value === 'files' || value === 'direct') ? value : undefined
+  const withAuthorizationMethod = ({authorizationMethod, ...connection}, value) => {
+    const method = methodFor(value)
+    return method ? {...connection, authorizationMethod: method} : connection
+  }
   const adoptAuthorization = async result => {
     if (!result?.account) return false
     const selected = checkedAccount(result.account)
     cancelSourceReads()
     const epoch = ++generation; refreshPending = null; clearCloudTimer()
     if (sameAccount(selected, account) && !syncState().restoring) {
+      if (methodFor(result.authorizationMethod) !== state.connection.authorizationMethod) nativeWriteSources.clear()
       updateTransport(result.capabilities)
-      state.connection = {...state.connection, reconnectRequired: false, recoveryOnly: false, restoreError: undefined}
-    } else await setAccount(selected, epoch, result.capabilities, {readDenials:result.readDenials})
+      state.connection = withAuthorizationMethod({...state.connection, reconnectRequired: false, recoveryOnly: false, restoreError: undefined}, result.authorizationMethod)
+    } else await setAccount(selected, epoch, result.capabilities, {readDenials:result.readDenials, authorizationMethod:result.authorizationMethod})
     authorized = true
     deferredEntry = false; pendingOnline = false
     delete syncState().foregroundError
-    lastForegroundEntry = now()
+    lastForegroundEntry = appActive ? now() : -Infinity
+    // Native selection cancels the old jobs. Restore the hydrated policy even
+    // if no new app entry occurs after completing browser authorization.
+    if (isNative && typeof native.configureSync === 'function') {
+      const active = account
+      syncState().background = {...syncState().background, scheduled: false}
+      void Promise.resolve(hydrationPending).then(() => {
+        if (!disposed && epoch === generation && active === account) return configureBackground(active, epoch)
+      }).catch(() => {})
+    }
     void gate.run(() => syncMetadata({automatic: true})).catch(() => {})
     return true
   }
@@ -133,10 +148,12 @@ export function createMobileController({native, cache, openExternal, widgets, ti
   })
   const scheduleCloudSync = () => {
     clearCloudTimer()
-    if (disposed || !account || !metadata || state.storage.syncStatus === 'conflict' || state.connection.recoveryOnly || state.connection.reconnectRequired) return
-    cloudTimer = timers.setTimeout(() => {
+    if (disposed || !appActive || !account || !metadata || state.storage.syncStatus === 'conflict' || state.connection.recoveryOnly || state.connection.reconnectRequired) return
+    const active = account, epoch = generation
+    const timer = cloudTimer = timers.setTimeout(() => {
+      if (cloudTimer !== timer) return
       cloudTimer = undefined
-      void gate.run(() => syncMetadata({automatic: true})).catch(() => {})
+      void gate.run(() => appActive && account === active && generation === epoch ? syncMetadata({automatic: true}) : undefined).catch(() => {})
     }, METADATA_DEBOUNCE_MS)
     cloudTimer?.unref?.()
   }
@@ -153,7 +170,7 @@ export function createMobileController({native, cache, openExternal, widgets, ti
     if (restoredDavCheckpoint) client.primeDavState?.({accountKey: cacheKey(account), records: state.records, collections: state.collections, checkpoint: restoredDavCheckpoint})
     if (clientTransport) clientTransport.current = client
   }
-  const setAccount = async (next, epoch = generation, nextCapabilities, {launch = false, readDenials} = {}) => {
+  const setAccount = async (next, epoch = generation, nextCapabilities, {launch = false, readDenials, authorizationMethod} = {}) => {
     if (epoch !== generation) return
     const active = checkedAccount(next)
     clearCloudTimer()
@@ -182,7 +199,7 @@ export function createMobileController({native, cache, openExternal, widgets, ti
     syncState().restoring = Boolean(account)
     if (!account) return
     state.mode = 'live'
-    state.connection = {connected: false, serverUrl: active.serverUrl, username: active.username}
+    state.connection = withAuthorizationMethod({connected: false, serverUrl: active.serverUrl, username: active.username}, authorizationMethod)
     state.theme = launchHints?.read?.(cacheKey(active))
     if (launch) try {
       const checkpointStarted = performanceNow()
@@ -306,13 +323,14 @@ export function createMobileController({native, cache, openExternal, widgets, ti
   }
   async function syncMetadata({automatic = false} = {}) {
     await initialize()
+    if (disposed || automatic && !appActive) return snapshot()
     if (syncPending) return syncPending
     if (!hostAvailable || !account || !metadata) return unavailable()
     if (state.connection.recoveryOnly || state.connection.reconnectRequired || automatic && state.storage.syncStatus === 'conflict') return snapshot()
     clearCloudTimer()
     const active = account, store = metadata, epoch = generation
     let valid = true, stage = 'local-cache', deadline, cancel
-    const current = () => valid && !disposed && epoch === generation && account === active && metadata === store
+    const current = () => valid && !disposed && (!automatic || appActive) && epoch === generation && account === active && metadata === store
     const stopped = new Promise((_, reject) => {
       cancel = () => { valid = false; reject(problem('Planner synchronization was cancelled.', 'CANCELLED')) }
       deadline = timers.setTimeout(() => { valid = false; store.cancelSync?.(); reject(Object.assign(problem('Planner synchronization reached its two-minute time limit. Local changes are preserved; retry planner sync.', 'TIMEOUT'), {syncStage: stage})) }, 120_000)
@@ -361,7 +379,7 @@ export function createMobileController({native, cache, openExternal, widgets, ti
     try {
       const savedOnly = typeof native.getSavedAccount === 'function'
       const restored = savedOnly ? await native.getSavedAccount() : await native.getAccount()
-      await setAccount(restored.account, generation, restored.capabilities, {launch: savedOnly,readDenials:restored.readDenials})
+      await setAccount(restored.account, generation, restored.capabilities, {launch: savedOnly,readDenials:restored.readDenials,authorizationMethod:restored.authorizationMethod})
       if (!account) launchHints?.clear?.()
       authorized = !savedOnly && Boolean(account) && !restored.reconnectRequired && !restored.recoveryOnly
       if (restored.reconnectRequired) state.connection = {...state.connection, connected: false, reconnectRequired: true, restoreError: 'Nextcloud authorization is unavailable. Saved data is preserved; continue with Nextcloud to reconnect.'}
@@ -384,12 +402,12 @@ export function createMobileController({native, cache, openExternal, widgets, ti
           }
           const selected = checkedAccount(restored.account)
           if (!sameAccount(selected, active)) {
-            await setAccount(selected, ++generation, restored.capabilities,{readDenials:restored.readDenials})
+            await setAccount(selected, ++generation, restored.capabilities,{readDenials:restored.readDenials,authorizationMethod:restored.authorizationMethod})
             authorized = true; emit(); return false
           }
           updateTransport(restored.capabilities); authorized = true
           delete syncState().foregroundError
-          state.connection = {...state.connection, reconnectRequired: false, recoveryOnly: false, restoreError: undefined}
+          state.connection = withAuthorizationMethod({...state.connection, reconnectRequired: false, recoveryOnly: false, restoreError: undefined}, restored.authorizationMethod)
           return true
         } finally {timers.clearTimeout(timeout)}
       })()
@@ -478,18 +496,19 @@ export function createMobileController({native, cache, openExternal, widgets, ti
     diagnostics.record({kind:'source',stage:'discovery',durationMs:Math.max(0,now()-startTime),count:discovery.collections.length,success:true})
     emit()
   }
-  async function verifySourceAccess(isCurrent) {
+  async function verifySourceAccess(selected, isCurrent, stopped) {
     if (typeof client?.readSourceAccess !== 'function') return
     const active=account,epoch=generation,readingClient=client,started=now(),accessEpoch=sourceAccessGeneration
     let valid=true, timer
     const current=()=>valid&&accessEpoch===sourceAccessGeneration&&isCurrent()&&account===active&&epoch===generation&&client===readingClient&&!state.connection.reconnectRequired
     try {
-      const result=await Promise.race([readingClient.readSourceAccess({sources:independentAccessSources,isActive:current,onCollections:value=>adoptCollections(value,independentAccessSources,current,started)}),new Promise((_,reject)=>{timer=timers.setTimeout(()=>reject(problem('Checking source access timed out. Cached items remain available.','TIMEOUT')),30_000);timer?.unref?.()})])
+      if (!current()) return
+      const result=await Promise.race([readingClient.readSourceAccess({sources:selected,isActive:current,onCollections:value=>adoptCollections(value,selected,current,started)}),stopped,new Promise((_,reject)=>{timer=timers.setTimeout(()=>reject(problem('Checking source access timed out. Cached items remain available.','TIMEOUT')),30_000);timer?.unref?.()})])
       if (!current()) return
       for(const error of result?.errors||[]) {
         if(error.code==='AUTH'){await deniedAuthentication({active,epoch},problem('Nextcloud denied authorization.','AUTH'));return}
         if(error.code==='IDENTITY'){requireReconnection({active,epoch},'Nextcloud returned a different account. Reconnect to verify the selected account; saved data is preserved.');return}
-        if(!independentAccessSources.includes(error.source))continue
+        if(!selected.includes(error.source))continue
         if(error.permissionDenied||error.code==='PERMISSION') {
           nativeWriteSources.delete(error.source)
           state=applyReadDenials(state,[{source:error.source,code:'PERMISSION',collection:null}],active.serverUrl)
@@ -502,11 +521,11 @@ export function createMobileController({native, cache, openExternal, widgets, ti
       emit()
     } finally {valid=false;timers.clearTimeout(timer)}
   }
-  async function refresh(selected = sources, {verified = false} = {}) {
+  async function refresh(selected = sources, {verified = false, isCurrent = () => true} = {}) {
     await initialize()
     await hydrationPending
     if (!Array.isArray(selected) || !selected.length || selected.some(source => !sources.includes(source)) || new Set(selected).size !== selected.length) throw problem('Choose valid sources to refresh.', 'VALIDATION')
-    if (disposed || !hostAvailable || !account) return snapshot()
+    if (disposed || !hostAvailable || !account || !isCurrent()) return snapshot()
     if (refreshPending) {
       for (const source of selected) if (!activePass?.sources.includes(source)) requestedSources.add(source)
       return refreshPending
@@ -599,7 +618,7 @@ export function createMobileController({native, cache, openExternal, widgets, ti
         certifySources(result.statuses)
         const connected = nativeWriteSources.size>0||statuses.some(status => status.state === 'connected')
         lastReconciliation = undefined
-        state = {...state, records, collections, statuses, connection: {connected, serverUrl: active.serverUrl, username: active.username, ...(!connected ? {restoreError: statuses.some(status => status.errorCode === 'AUTH') ? 'Nextcloud authorization expired. Reconnect to refresh your sources.' : 'Sources could not be refreshed. Open Details to review the cause and retry.'} : {})}, ...(Object.hasOwn(result, 'theme') ? {theme: normalizeTheme(result.theme)} : {})}
+        state = {...state, records, collections, statuses, connection: withAuthorizationMethod({connected, serverUrl: active.serverUrl, username: active.username, ...(!connected ? {restoreError: statuses.some(status => status.errorCode === 'AUTH') ? 'Nextcloud authorization expired. Reconnect to refresh your sources.' : 'Sources could not be refreshed. Open Details to review the cause and retry.'} : {})}, state.connection.authorizationMethod), ...(Object.hasOwn(result, 'theme') ? {theme: normalizeTheme(result.theme)} : {})}
         onProgress({stage: 'local-cache'})
         if (metadata && state.metadata.ready) await Promise.race([reconcileMetadata(metadata, active, epoch, currentRead, stopped), stopped])
         if (!currentRead()) return snapshot()
@@ -645,7 +664,8 @@ export function createMobileController({native, cache, openExternal, widgets, ti
       if (refreshPending === operation) refreshPending = null
       if (requestedSources.size && appActive && epoch === generation && account === active) {
         const queued = [...requestedSources]; requestedSources.clear()
-        void gate.run(() => refresh(queued)).catch(() => {})
+        const isCurrent = () => appActive && epoch === generation && account === active && readGeneration === sourceReadGeneration
+        void gate.run(() => refresh(queued, {isCurrent})).catch(() => {})
       }
     }
   }
@@ -919,7 +939,7 @@ export function createMobileController({native, cache, openExternal, widgets, ti
     if (entering) {lastForegroundEntry = now(); deferredEntry = true}
     const entryWork = entering || reason === 'online' && deferredEntry
     const active = account, epoch = generation, foregroundGeneration = sourceReadGeneration
-    const currentEntry = () => appActive && epoch === generation && account === active && sourceReadGeneration === foregroundGeneration
+    const currentEntry = () => !disposed && appActive && epoch === generation && account === active && sourceReadGeneration === foregroundGeneration
     let cancel
     const stopped = new Promise((_, reject) => {cancel = () => reject(problem('Foreground checking was cancelled.', 'CANCELLED'))})
     const pass = resumePass = {cancel}
@@ -944,7 +964,7 @@ export function createMobileController({native, cache, openExternal, widgets, ti
         if (!entryWork && !dueSources(scheduling).length) return
         const network = await wait(boundedLocal(networkStatus(), 'Network availability could not be checked.'))
         const policy = syncState().restoring && entryWork ? settings : syncState().settings
-        if (!network.connected || policy.wifiOnly && network.connectionType !== 'wifi') return
+        if (!currentEntry() || !network.connected || policy.wifiOnly && network.connectionType !== 'wifi') return
         checkStage = 'authorization'
         syncState().activity = {sources: [], stage: 'authorization', startedAt: stamp(), lastProgressAt: stamp(), completed: 0, message: 'Checking Nextcloud authorization.'}
         emitSync()
@@ -953,11 +973,13 @@ export function createMobileController({native, cache, openExternal, widgets, ti
         const selected = dueSources(scheduling)
         delete syncState().activity; delete syncState().foregroundError; emitSync()
         if (entryWork) {deferredEntry = false; pendingOnline = false}
-        if (entryWork) void gate.run(() => syncMetadata({automatic: true})).catch(() => {})
-        if (entryWork) void gate.run(()=>verifySourceAccess(currentEntry)).catch(error=>{
+        if (entryWork) void gate.run(() => currentEntry() ? syncMetadata({automatic: true}) : undefined).catch(() => {})
+        const accessSources = entryWork ? scheduling.independentAccessSources.filter(source => !selected.includes(source) && !activePass?.sources.includes(source)) : []
+        const access = accessSources.length ? gate.run(() => verifySourceAccess(accessSources, currentEntry, stopped)).catch(error => {
           if(currentEntry()&&error?.code!=='CANCELLED')diagnostics.record({kind:'source',stage:'discovery',code:error?.code||'UNKNOWN',success:false})
-        })
-        if (selected.length) await wait(gate.run(() => refresh(selected, {verified: true})))
+        }) : undefined
+        const reading = selected.length ? gate.run(() => refresh(selected, {verified: true, isCurrent: currentEntry})) : undefined
+        await wait(Promise.all([access, reading]))
       } catch (error) {
         if (epoch !== generation || account !== active || !appActive || error?.code === 'CANCELLED') return
         if (expiredAuthorization({active, epoch}, error)) return
@@ -1030,7 +1052,7 @@ export function createMobileController({native, cache, openExternal, widgets, ti
     setAppActive: async active => {
       if (typeof active !== 'boolean') throw problem('Invalid app activity state.', 'VALIDATION')
       appActive = active
-      if (!active) {deferredEntry=false;pendingOnline=false;pendingEntry=false;backgroundReadPending=true;cancelSourceReads(); diagnostics.stop('background'); cancelPlanner(); requestedSources.clear(); lastForegroundEntry = -Infinity; emitSync()}
+      if (!active) {deferredEntry=false;pendingOnline=false;pendingEntry=false;backgroundReadPending=true;clearCloudTimer();cancelSourceReads(); diagnostics.stop('background'); cancelPlanner(); requestedSources.clear(); lastForegroundEntry = -Infinity; emitSync()}
     },
     setSyncSettings: settings => gate.run(()=>changeSettings(async () => {
       const checked = validateSyncSettings(settings)
@@ -1364,12 +1386,15 @@ export function createMobileController({native, cache, openExternal, widgets, ti
       await saveLaunch(account, epoch)
       return snapshot()
     }),
-    beginLogin: async serverUrl => {
+    beginLogin: async (serverUrl, options) => {
       authAvailable(); await initialize()
       serverUrl = normalizeServerUrl(serverUrl)
+      const sameAccountOnly = options?.sameAccount === true
+      if (sameAccountOnly && (!isNative || !account || serverUrl !== account.serverUrl)) throw problem('Open Settings to switch the current Nextcloud account’s connection.', 'VALIDATION')
+      const expectedAccount = sameAccountOnly ? account : null
       const epoch = ++loginEpoch
       currentFlow = null
-      const result = await native.beginLogin({serverUrl})
+      const result = await native.beginLogin({serverUrl, ...(expectedAccount ? {expectedAccount} : {})})
       if (epoch !== loginEpoch) { await native.cancelLogin({flowId: result?.flowId}); throw problem('This sign-in was cancelled or replaced.', 'CANCELLED') }
       if (!result || typeof result.flowId !== 'string' || !/^[A-Za-z0-9-]{1,128}$/.test(result.flowId) || typeof result.loginUrl !== 'string') throw problem('Nextcloud returned an invalid sign-in flow.', 'FORMAT')
       let loginUrl, server
@@ -1378,30 +1403,33 @@ export function createMobileController({native, cache, openExternal, widgets, ti
       if (loginUrl.origin !== server.origin || loginUrl.username || loginUrl.password || loginUrl.hash || !['https:', 'http:'].includes(loginUrl.protocol) || loginUrl.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(loginUrl.hostname)) {
         await native.cancelLogin({flowId: result.flowId}); throw problem('Nextcloud returned an unsafe sign-in URL.', 'SECURITY')
       }
-      currentFlow = result.flowId
+      currentFlow = {id: result.flowId, expectedAccount}
       try { await openExternal(loginUrl.href) }
       catch (error) { currentFlow = null; await native.cancelLogin({flowId: result.flowId}); throw error }
       return {flowId: result.flowId, loginUrl: loginUrl.href}
     },
     pollLogin: async flowId => {
       authAvailable(); await initialize()
-      if (flowId !== currentFlow) throw problem('This sign-in flow is no longer active.', 'CANCELLED')
+      const flow = currentFlow
+      if (!flow || flowId !== flow.id) throw problem('This sign-in flow is no longer active.', 'CANCELLED')
       cancelSourceReads()
       let result, adopted = false
       await gate.transition(async () => {
-        if (flowId !== currentFlow) throw problem('This sign-in flow is no longer active.', 'CANCELLED')
+        if (flow !== currentFlow) throw problem('This sign-in flow is no longer active.', 'CANCELLED')
         result = await native.pollLogin({flowId})
         if (result?.pending === true) return
         if (result?.pending !== false || !result.account) throw problem('Nextcloud returned an invalid authorization result.', 'FORMAT')
+        if (flow.expectedAccount && !sameAccount(checkedAccount(result.account), flow.expectedAccount)) throw problem('The browser signed in as a different Nextcloud user. Sign in as your current account to switch its connection.', 'AUTH')
         adopted = await adoptAuthorization(result)
-        if (currentFlow === flowId) currentFlow = null
+        if (currentFlow === flow) currentFlow = null
       })
       if (result.pending) return {pending: true}
       return {pending: false, state: adopted ? await gate.run(refresh) : snapshot()}
     },
     cancelLogin: async flowId => {
       authAvailable(); await initialize()
-      if (!flowId || flowId === currentFlow) { ++loginEpoch; currentFlow = null }
+      const flow = !flowId || currentFlow?.id === flowId ? currentFlow : null
+      if (!flowId || flow) { ++loginEpoch; currentFlow = null }
       // Invalidate natively before waiting for a polling barrier. A committed response
       // still returns its selected account, matching the shared cancellation contract.
       const result = await native.cancelLogin(flowId ? {flowId} : {})
@@ -1409,7 +1437,8 @@ export function createMobileController({native, cache, openExternal, widgets, ti
       let adopted = false
       await gate.transition(async () => {
         const nextCapabilities = transportCapabilities(result?.capabilities)
-        if (result?.account && !result.reconnectRequired && !result.recoveryOnly && (!sameAccount(checkedAccount(result.account), account) || state.connection.reconnectRequired || state.connection.recoveryOnly || nextCapabilities.davReadMode !== capabilities.davReadMode || nextCapabilities.nativeEdits !== capabilities.nativeEdits)) adopted = await adoptAuthorization(result)
+        if (result?.account && flow?.expectedAccount && !sameAccount(checkedAccount(result.account), flow.expectedAccount)) throw problem('The browser signed in as a different Nextcloud user. Your current account remains selected.', 'AUTH')
+        if (result?.account && !result.reconnectRequired && !result.recoveryOnly && (!sameAccount(checkedAccount(result.account), account) || state.connection.reconnectRequired || state.connection.recoveryOnly || methodFor(result.authorizationMethod) !== state.connection.authorizationMethod || nextCapabilities.davReadMode !== capabilities.davReadMode || nextCapabilities.nativeEdits !== capabilities.nativeEdits)) adopted = await adoptAuthorization(result)
       })
       return adopted ? gate.run(refresh) : snapshot()
     },

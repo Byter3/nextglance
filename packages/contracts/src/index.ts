@@ -110,7 +110,7 @@ export interface State {
   statuses: {source: Source; state: 'connected'|'error'|'unavailable'|'demo'; count: number; cached?:boolean; permissionDenied?:boolean; message?: string; lastSyncedAt?: string; metadataStale?: boolean; errorCode?: string; errorStage?: string}[]
   theme?: NextcloudTheme
   pendingSchedules?: (ScheduleRequest & {created?: boolean})[]
-  connection: {connected: boolean; serverUrl?: string; username?: string; reconnectRequired?: boolean; restoreError?: string; recoveryOnly?: boolean}
+  connection: {connected: boolean; serverUrl?: string; username?: string; reconnectRequired?: boolean; restoreError?: string; recoveryOnly?: boolean; authorizationMethod?: 'files'|'direct'}
   storage: {localPath?: string; remotePath?: string; syncStatus: string; message?: string; lastSyncedAt?: string; errorCode?: string; errorStage?: string}
 }
 export interface PlannerModel {
@@ -145,7 +145,7 @@ export interface WorkspaceApi {
   setAppActive?(active:boolean):Promise<void>
   subscribeSync?(listener:(sync:DeviceSync)=>void):()=>void
   saveWorkspace(workspace: Workspace, expectedRevision: number, expectedAccount?: {serverUrl: string; username: string}, options?: {coalesceLaunch?: boolean}): Promise<{workspace: Workspace; revision: number; storage: State['storage']}>
-  beginLogin(serverUrl: string): Promise<{flowId: string; loginUrl: string}>
+  beginLogin(serverUrl: string, options?: {sameAccount?: true}): Promise<{flowId: string; loginUrl: string}>
   pollLogin(flowId: string): Promise<{pending: true}|{pending: false; state: State}>
   cancelLogin(flowId: string): Promise<State>
   connect(input: {serverUrl: string; username: string; appPassword: string}): Promise<State>

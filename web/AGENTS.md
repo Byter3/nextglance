@@ -2,6 +2,8 @@
 
 ## Current authorization — WEB-01 (2026-11-14)
 
+RELEASE-31 authorizes final local 0.6.31 assets and archive after HISTORY-03, VIEW-19 and EDIT-21 verification and source freeze. Preserve Nextcloud session behavior, app identity and prior archives.
+
 RELEASE-30 authorizes final local 0.6.30 assets and archive after EDIT-20 and PERF-19 verification and source freeze. Preserve the Nextcloud session, app identity and prior archives. Reviewed source may be pushed to the existing repository. Package uploads and server deployment remain outside this release.
 
 RELEASE-29 authorizes final local 0.6.29 assets and archive after BOARD-07 fast checks and source freeze. Preserve the Nextcloud session, app identity and prior archives. Reviewed source may be pushed to the existing GitHub repository. Package uploads and server deployment remain outside this release.

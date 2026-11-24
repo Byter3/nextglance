@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createMobileController, cacheKey} from '../src/controller.mjs'
+import {createMobileController, cacheKey, syncSettingsKey} from '../src/controller.mjs'
 
 const A = {name:'old-provider-key',serverUrl:'https://cloud.example/nc',username:'a'}
 const B = {name:'nextspace-direct:new-user',serverUrl:A.serverUrl,username:'b'}
@@ -36,6 +36,60 @@ test('trusted browser host authorizes without Files or exposing credentials',asy
   assert.equal(result.pending,false);assert.equal(result.state.connection.username,'b')
   assert.deepEqual(result.state.records.map(record=>record.id),['b'])
   assert.ok(!JSON.stringify(result).includes('appPassword'))
+})
+
+test('a direct switch keeps the account key and re-arms the saved Android background policy',async t=>{
+  const f=fixture();t.after(()=>f.api.dispose())
+  let method='files'
+  const configured=[], started=[]
+  const settings={caldavMinutes:30,deckMinutes:0,wifiOnly:true}
+  f.values.set(syncSettingsKey(A),settings)
+  f.native.getSavedAccount=f.native.getAccount=async()=>({account:A,authorizationMethod:method})
+  f.native.configureSync=async args=>{configured.push(args);return {background:{supported:true,scheduled:true}}}
+  f.native.beginLogin=async args=>{started.push(args);return {flowId:'flow-1',loginUrl:A.serverUrl+'/login/flow'}}
+  f.native.pollLogin=async()=>{method='direct';return {pending:false,account:A,authorizationMethod:method,capabilities:{davReadMode:'report'}}}
+  const before=await f.api.refresh()
+  assert.equal(before.connection.authorizationMethod,'files')
+  assert.equal(before.records[0].id,'a')
+  await f.api.beginLogin(A.serverUrl,{sameAccount:true})
+  assert.deepEqual(started,[{serverUrl:A.serverUrl,expectedAccount:A}])
+  const result=await f.api.pollLogin('flow-1')
+  await tick()
+  assert.equal(result.state.connection.authorizationMethod,'direct')
+  assert.equal(result.state.connection.username,A.username)
+  assert.equal(result.state.records[0].id,'a')
+  assert.ok(f.values.has(cacheKey(A)))
+  assert.deepEqual(configured,[{accountName:A.name,settings}])
+  assert.equal((await f.api.getState()).deviceSync.background.scheduled,true)
+})
+
+test('an explicit direct switch cannot adopt authorization for another account',async t=>{
+  const f=fixture();t.after(()=>f.api.dispose())
+  f.native.getAccount=async()=>({account:A,authorizationMethod:'files'})
+  const before=await f.api.refresh(), saved=structuredClone(f.values.get(cacheKey(A)))
+  f.native.pollLogin=async()=>({pending:false,account:B,authorizationMethod:'direct'})
+  await f.api.beginLogin(A.serverUrl,{sameAccount:true})
+  await assert.rejects(f.api.pollLogin('flow-1'),{code:'AUTH'})
+  assert.deepEqual((await f.api.getState()).connection,before.connection)
+  assert.deepEqual(f.values.get(cacheKey(A)),saved)
+  assert.deepEqual(f.calls.read,['a'])
+})
+
+test('a saved Files account can start a guarded direct switch while Files authorization is unavailable',async t=>{
+  const f=fixture();t.after(()=>f.api.dispose())
+  const files={account:A,authorizationMethod:'files'}
+  f.native.getAccount=async()=>files
+  const before=await f.api.refresh()
+  f.native.getAccount=async()=>({...files,reconnectRequired:true})
+  const reconnecting=await f.api.refresh()
+  assert.equal(reconnecting.connection.reconnectRequired,true)
+  assert.equal(reconnecting.connection.authorizationMethod,'files')
+  assert.deepEqual(reconnecting.records.map(record=>record.id),before.records.map(record=>record.id))
+  const started=await f.api.beginLogin(A.serverUrl,{sameAccount:true})
+  f.native.pollLogin=async()=>({pending:true})
+  assert.deepEqual(await f.api.pollLogin(started.flowId),{pending:true})
+  assert.deepEqual((await f.api.cancelLogin(started.flowId)).connection,reconnecting.connection)
+  assert.deepEqual(f.calls.read,['a'])
 })
 
 test('cancelling a pending replacement preserves the current account and cache',async()=>{

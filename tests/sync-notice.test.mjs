@@ -24,7 +24,7 @@ test('a running retry retains known source failures without adding generic dupli
   assert.equal(syncNotice({connection,statuses:[failure('calendar','CANCELLED')]}),null)
 })
 test('planner conflicts take priority over source warnings and offer review, not blind retry',()=>{
-  const result=syncNotice({connection,storage:{syncStatus:'conflict',errorCode:'FOLDER_CONFLICT'},statuses:[failure('calendar','LIMIT')]})
+  const result=syncNotice({connection,storage:{syncStatus:'conflict',errorCode:'FOLDER_CONFLICT'},statuses:[failure('calendar','LIMIT'),failure('tasks','FILES_TRANSPORT')]})
   assert.equal(result.kind,'planner')
   assert.equal(result.action,'details')
   assert.equal(result.message,'Planner sync has a conflict. Local changes are preserved.')
